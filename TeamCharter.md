@@ -51,6 +51,6 @@
 
 ## 9. Підписи
 - [х] Євгеній (GitHub: @ZhekaOst)
-- [ ] Артем   (GitHub: @solartevik07)
+- [x] Артем   (GitHub: @solartevik07)
 - [ ] Богдан  (GitHub: @dekoy19)
 - [ ] Данііл  (GitHub: @megatr4n)
