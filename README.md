@@ -1,6 +1,10 @@
 # Baraholka NaUKMA
 
-## Команда
+[![CI](https://github.com/ukma-fin-ssdm-2026/Next-Gen/actions/workflows/ci.yml/badge.svg)](https://github.com/ukma-fin-ssdm-2026/Next-Gen/actions/workflows/ci.yml)
+
+Командний проєкт з курсу SSDM 2026.
+
+## Команда 
 
 - Repo Maintainer — Артем Солодкий
 - Documentation Lead — Остапенко Євгеній
