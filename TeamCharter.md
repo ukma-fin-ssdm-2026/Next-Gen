@@ -53,4 +53,4 @@
 - [x] Євгеній (GitHub: @ZhekaOst)
 - [x] Артем   (GitHub: @solartevik07)
 - [ ] Богдан  (GitHub: @dekoy19)
-- [ ] Данііл  (GitHub: @megatr4n)
+- [x] Данііл  (GitHub: @megatr4n)
