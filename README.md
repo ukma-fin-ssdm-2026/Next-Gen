@@ -1,5 +1,6 @@
 # NextGen
 
+[![CI](https://github.com/ukma-fin-ssdm-2026/Next-Gen/actions/workflows/ci.yml/badge.svg)](https://github.com/ukma-fin-ssdm-2026/Next-Gen/actions/workflows/ci.yml)
 Team project for SSDM 2026.
 
 ## Team
