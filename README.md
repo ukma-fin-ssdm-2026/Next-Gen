@@ -1,6 +1,5 @@
-# Baraholka NaUKMA
-
 [![CI](https://github.com/ukma-fin-ssdm-2026/Next-Gen/actions/workflows/ci.yml/badge.svg)](https://github.com/ukma-fin-ssdm-2026/Next-Gen/actions/workflows/ci.yml)
+# Baraholka NaUKMA
 
 Командний проєкт з курсу SSDM 2026.
 
@@ -25,3 +24,4 @@
 - `docs/...` — зміни в документації
 - `ci/...` — зміни, пов'язані з CI/CD
 - `loom/lab__` - відео до лабораторних
+- `loom-videos - файли з посиланням на відео до лабораторних
