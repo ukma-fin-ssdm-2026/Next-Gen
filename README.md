@@ -1,6 +1,4 @@
 # Baraholka NaUKMA
-## by Next-Gen
-
 
 ## Команда
 
