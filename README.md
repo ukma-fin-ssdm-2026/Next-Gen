@@ -1,16 +1,24 @@
-# NextGen
+# Baraholka NaUKMA
+## by Next-Gen
 
-Team project for SSDM 2026.
 
-## Team
-- Repo Maintainer - Artem Solodkyi  
-- Documentation Lead - Ostapenko Yevhenii
-- Issue Tracker Lead - Solonyna Bohdan 
-- CI Maintainer - Chernyavskyi Daniil
+## Команда
 
-## Branching Strategy - GitHub flow
+- Repo Maintainer — Артем Солодкий
+- Documentation Lead — Остапенко Євгеній
+- Issue Tracker Lead — Солонина Богдан
+- CI Maintainer — Чернявський Данііл
 
-- `main` contains stable code.
-- New work is done in separate branches.
-- Changes are merged into `main` through Pull Requests.
-- Direct pushes to `main` are restricted.
+## Стратегія роботи з гілками — GitHub Flow
+
+- `main` містить стабільну версію проєкту.
+- Нова робота виконується в окремих гілках.
+- Зміни додаються до `main` через Pull Request.
+- Прямі push у `main` обмежені.
+
+### Назви гілок
+
+- `feature/...` — нова функціональність
+- `fix/...` — виправлення помилок
+- `docs/...` — зміни в документації
+- `ci/...` — зміни, пов'язані з CI/CD
