@@ -22,4 +22,19 @@ package "Server Tier (FastAPI Monolith)" {
 package "Data Tier" {
     database "PostgreSQL" as DB <<Database>>
 }
+
+' Connections
+SPA ..> RestAPI : "HTTP/HTTPS\n(JSON, JWT)"
+RestAPI - Router
+
+Router --> AuthService
+Router --> ListingService
+Router --> ModerationService
+
+AuthService --> DAL
+ListingService --> DAL
+ModerationService --> DAL
+
+DAL ..> DB : "TCP/IP\n(SQL)"
+
 @enduml
