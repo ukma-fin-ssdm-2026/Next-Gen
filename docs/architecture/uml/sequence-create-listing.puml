@@ -1,5 +1,5 @@
 @startuml
-title Baraholka NaUKMA - Sequence Diagram: Створення оголошення (UC-001)
+title Створення оголошення (UC-001)
 
 skinparam shadowing false
 skinparam sequenceMessageAlign center
@@ -7,62 +7,62 @@ skinparam responseMessageBelowArrow true
 
 actor "Продавець" as User
 participant "React SPA" as SPA
-participant "API Router" as Router
+participant "FastAPI" as API
 participant "Auth Service" as Auth
-participant "Listing Service" as Listing
-participant "Сховище зображень" as Storage
+participant "Listing Service" as LS
 database "PostgreSQL" as DB
+participant "Image Storage" as IMG
 
-User -> SPA: Заповнює форму та тисне "Опублікувати"
+User -> SPA: Заповнює форму\nта тисне "Опублікувати"
 activate SPA
 
-SPA -> Router: POST /api/v1/listings\n(Authorization: Bearer <token>)
-activate Router
+SPA -> API: POST /api/v1/listings\nAuthorization: Bearer <token>
+activate API
 
-Router -> Auth: validate_token(token)
+API -> Auth: validate_token(token)
 activate Auth
 
-alt Недійсний або прострочений токен
-    Auth --> Router: Token invalid / expired
-    Router --> SPA: 401 Unauthorized
-    SPA --> User: Перенаправлення на сторінку входу
-else Валідний токен
-    Auth --> Router: UserPayload (user_id, role)
-    deactivate Auth
+alt Токен невалідний
+    Auth --> API: error
+    API --> SPA: 401 Unauthorized
+    SPA --> User: Перенаправлення на вхід
+else Токен валідний
+    Auth --> API: user_id, role
+end
+deactivate Auth
 
-    Router -> Listing: create_listing(user_id, listing_data, image)
-    activate Listing
+API -> LS: create_listing(user_id, data, image)
+activate LS
 
-    Listing -> DB: check_user_active(user_id)
+LS -> DB: get_user(user_id)
+activate DB
+DB --> LS: User
+deactivate DB
+
+alt Користувач заблокований
+    LS --> API: error
+    API --> SPA: 403 Forbidden
+    SPA --> User: Акаунт заблоковано
+else Користувач активний
+    LS -> IMG: upload(image_file)
+    activate IMG
+    IMG --> LS: image_url
+    deactivate IMG
+
+    LS -> DB: save(listing, image_url)
     activate DB
-    DB --> Listing: is_blocked = false
+    note right of DB: BEGIN / INSERT listing\nINSERT image / COMMIT
+    DB --> LS: Listing
     deactivate DB
 
-    alt Обліковий запис заблоковано
-        Listing --> Router: 403 Forbidden
-        Router --> SPA: 403 Forbidden
-        SPA --> User: Повідомлення про блокування
-    else Користувач активний
-        Listing -> Storage: upload_image(image_file)
-        activate Storage
-        Storage --> Listing: image_url
-        deactivate Storage
-
-        Listing -> DB: save_listing(listing_data, image_url)
-        activate DB
-        note over DB: Транзакційне збереження\nListing та ListingImage (ACID)
-        DB --> Listing: Listing record
-        deactivate DB
-
-        Listing --> Router: 201 Created (ListingDTO)
-        deactivate Listing
-
-        Router --> SPA: 201 Created (JSON)
-        SPA --> User: Повідомлення про успіх та перегляд оголошення
-    end
+    LS --> API: ListingDTO
 end
+deactivate LS
 
-deactivate Router
+API --> SPA: 201 Created
+deactivate API
+
+SPA --> User: Оголошення опубліковано
 deactivate SPA
 
 @enduml
