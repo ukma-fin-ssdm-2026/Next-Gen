@@ -1,0 +1,65 @@
+@startuml
+title Baraholka NaUKMA - Deployment Diagram
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+actor "Відвідувач / користувач /\nадміністратор" as user
+
+rectangle "Недовірене середовище клієнта" #FFF2CC {
+  node "Пристрій користувача" as client {
+    artifact "Веббраузер" as browser
+    component "React SPA" as frontend
+
+    browser -- frontend : виконує
+  }
+}
+
+cloud "Інтернет" as internet
+
+rectangle "Серверна зона застосунку" #D5E8D4 {
+  node "Сервер застосунку" as app_server {
+    component "FastAPI backend\n(модульний моноліт)" as backend
+  }
+}
+
+rectangle "Зона даних" #DAE8FC {
+  database "PostgreSQL" as database
+  node "Сховище зображень\n(провайдер не визначений)" as image_storage
+}
+
+user --> browser : використовує
+frontend --> internet : HTTPS
+internet --> backend : REST API / JSON\nHTTPS
+backend --> database : SQL\nзахищене з'єднання
+backend --> image_storage : API сховища\nHTTPS
+
+note top of internet
+  Межа довіри TB-1:
+  клієнтська зона ↔ серверна зона
+end note
+
+note bottom of app_server
+  Межа довіри TB-2:
+  серверна зона ↔ зона даних
+end note
+
+note right of frontend
+  Інтерфейс не є межею безпеки.
+  Авторизацію та валідацію
+  повторно виконує backend.
+end note
+
+note right of image_storage
+  Зберігає файли фотографій.
+  PostgreSQL зберігає image_url
+  та метадані ListingImage.
+end note
+
+legend left
+  |= Позначення |= Значення |
+  | TB-1 | Дані надходять із недовіреного клієнта |
+  | TB-2 | Доступ до постійних даних і файлів |
+endlegend
+
+@enduml
