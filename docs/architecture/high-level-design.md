@@ -25,3 +25,13 @@
 
 3. **Сховище даних (Database)**
    - **PostgreSQL Database:** Реляційна база даних, яка забезпечує ACID-властивості для надійного зберігання сутностей (`User`, `Listing`, `Favorite` тощо).
+
+## Інтерфейси між компонентами
+
+- **React SPA ↔ FastAPI Server:** 
+  - Протокол: `HTTP/HTTPS`.
+  - Формат даних: `JSON` по REST.
+  - Безпека: Передача JWT-токена в заголовку `Authorization: Bearer <token>`.
+- **FastAPI Server ↔ PostgreSQL Database:**
+  - Протокол: `TCP/IP` (PostgreSQL Wire Protocol).
+  - Інтерфейс: SQL-запити, що генеруються ORM-рівнем.
