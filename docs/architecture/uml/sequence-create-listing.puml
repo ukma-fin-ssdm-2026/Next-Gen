@@ -1,0 +1,102 @@
+@startuml
+title Baraholka NaUKMA - Sequence Diagram: Створення оголошення (UC-001)
+
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam roundcorner 5
+
+actor "Продавець\n(User)" as User
+participant "React SPA\n(Frontend)" as SPA
+
+box "FastAPI Backend (Моноліт)" #F4F6F9
+    participant "API Router" as Router
+    participant "Auth Service" as Auth
+    participant "Listing Service" as Service
+    participant "Data Access Layer\n(ORM)" as DAL
+end box
+
+participant "Сховище зображень\n(Image Storage)" as Storage
+database "PostgreSQL" as DB
+
+== 1. Ініціація та відправка форми оголошення ==
+User -> SPA: Заповнює форму (назва, опис, ціна,\nкатегорія, стан, контакт, фото) та тисне "Опублікувати"
+activate SPA
+
+SPA -> Router: POST /api/v1/listings\nHeader: Authorization: Bearer <JWT>\nBody: multipart/form-data
+activate Router
+
+== 2. Автентифікація та валідація токена (NFR SEC-002) ==
+Router -> Auth: validate_token(jwt)
+activate Auth
+
+alt Токен відсутній або невалідний
+    Auth --> Router: 401 Unauthorized (Invalid / Expired Token)
+    Router --> SPA: 401 Unauthorized
+    SPA --> User: Перенаправлення на сторінку входу
+end
+
+Auth --> Router: TokenPayload (user_id, email, role="USER")
+deactivate Auth
+
+== 3. Обробка бізнес-логіки та перевірка облікового запису ==
+Router -> Service: create_listing(user_id, listing_data, image_file)
+activate Service
+
+Service -> DAL: get_user_by_id(user_id)
+activate DAL
+DAL -> DB: SELECT * FROM users WHERE user_id = :user_id
+activate DB
+DB --> DAL: User record
+deactivate DB
+DAL --> Service: User
+deactivate DAL
+
+alt Користувач заблокований (User.is_blocked == true)
+    Service --> Router: 403 Forbidden ("Обліковий запис заблоковано")
+    Router --> SPA: 403 Forbidden
+    SPA --> User: Повідомлення про блокування акаунта
+end
+
+Service -> DAL: get_category_by_id(category_id)
+activate DAL
+DAL -> DB: SELECT * FROM categories WHERE category_id = :cat_id
+activate DB
+DB --> DAL: Category record (is_active = true)
+deactivate DB
+DAL --> Service: Category
+deactivate DAL
+
+== 4. Завантаження фотографії до сховища ==
+Service -> Storage: upload_image(file_bytes, filename)
+activate Storage
+note over Storage
+  Збереження файлу зображення
+  та генерація публічного URL
+end note
+Storage --> Service: image_url
+deactivate Storage
+
+== 5. Транзакційне збереження оголошення в БД (NFR REL-001) ==
+Service -> DAL: save_listing_with_image(listing_data, image_url)
+activate DAL
+DAL -> DB: BEGIN TRANSACTION
+activate DB
+DAL -> DB: INSERT INTO listings (listing_id, seller_id, category_id, title,\ndescription, price, contact, condition, status)\nVALUES (...)
+DAL -> DB: INSERT INTO listing_images (image_id, listing_id, image_url, is_primary)\nVALUES (...)
+DAL -> DB: COMMIT
+DB --> DAL: Success (Transaction committed)
+deactivate DB
+DAL --> Service: ListingEntity
+deactivate DAL
+
+Service --> Router: ListingResponseDTO (id, title, status="ACTIVE", image_url, ...)
+deactivate Service
+
+Router --> SPA: 201 Created (JSON з даними створеного оголошення)
+deactivate Router
+
+SPA --> User: Відображення картки оголошення в каталозі\nта сповіщення про успішну публікацію
+deactivate SPA
+
+@enduml
