@@ -48,8 +48,9 @@ entity "ListingImage" as image {
 entity "ModerationAction" as moderation {
   * moderation_action_id : UUID <<PK>>
   --
-  * listing_id : UUID <<FK>>
   * moderator_id : UUID <<FK>>
+  listing_id : UUID <<FK, nullable>>
+  target_user_id : UUID <<FK, nullable>>
   * action_type : enum
   * reason : text
   * created_at : datetime
@@ -66,7 +67,8 @@ user ||--o{ listing : creates
 category ||--o{ listing : categorizes
 listing ||--|{ image : contains
 user ||--o{ moderation : performs
-listing ||--o{ moderation : has history
+user o|--o{ moderation : target user
+listing o|--o{ moderation : target listing
 user ||--o{ favorite : adds
 listing ||--o{ favorite : is_favorited
 
@@ -82,7 +84,11 @@ note right of listing
 end note
 
 note right of moderation
-  action_type: REMOVE | RESTORE
+  action_type: REMOVE_LISTING | RESTORE_LISTING |
+               BLOCK_USER | UNBLOCK_USER
+
+  Exactly one target must be set:
+  listing_id XOR target_user_id
 end note
 
 @enduml
