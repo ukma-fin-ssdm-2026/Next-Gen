@@ -21,6 +21,7 @@ package "Server Tier (FastAPI Monolith)" {
 
 package "Data Tier" {
     database "PostgreSQL" as DB <<Database>>
+    storage "Image Storage\n(Object Storage / S3)" as S3 <<Storage>>
 }
 
 ' Connections
@@ -33,6 +34,7 @@ Router --> ModerationService
 
 AuthService --> DAL
 ListingService --> DAL
+ListingService --> S3 : "Save/Delete Images"
 ModerationService --> DAL
 
 DAL ..> DB : "TCP/IP\n(SQL)"
