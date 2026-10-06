@@ -1,0 +1,53 @@
+openapi: 3.1.0
+info:
+  title: Baraholka NaUKMA API
+  description: REST API для маркетплейсу студентських оголошень Києво-Могилянської
+    академії (Baraholka NaUKMA). Розроблено за підходом Code-First.
+  version: 1.0.0
+paths:
+  /health:
+    get:
+      tags:
+      - System
+      summary: Перевірка працездатності API (Health Check)
+      description: Системний ендпоінт для моніторингу працездатності сервісу, перевірки
+        доступності та конвеєрів CI/CD.
+      operationId: health_check_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+components:
+  schemas:
+    HealthResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+          description: Статус доступності сервісу
+          example: ok
+        app:
+          type: string
+          title: App
+          description: Назва застосунку
+          example: Baraholka NaUKMA API
+        version:
+          type: string
+          title: Version
+          description: Поточна версія API
+          example: 1.0.0
+        timestamp:
+          type: string
+          format: date-time
+          title: Timestamp
+          description: Час серверної перевірки
+      type: object
+      required:
+      - status
+      - app
+      - version
+      - timestamp
+      title: HealthResponse
