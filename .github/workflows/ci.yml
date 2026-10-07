@@ -14,5 +14,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run a simple test
-        run: echo "Hello World - Tests Passed!"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install fastapi pyyaml
+
+      - name: Generate OpenAPI spec
+        run: python scripts/generate_openapi.py
+
+      - name: Check committed spec is up to date
+        run: |
+          if [ -n "$(git status --porcelain -- docs/api/openapi-generated.yaml)" ]; then
+            echo "openapi-generated.yaml застарів. Запустіть python scripts/generate_openapi.py і закомітьте файл."
+            git diff -- docs/api/openapi-generated.yaml
+            exit 1
+          fi
