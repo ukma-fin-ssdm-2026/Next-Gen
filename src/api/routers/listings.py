@@ -61,3 +61,45 @@ def create_listing(listing: ListingCreate):
     )
     MOCK_LISTINGS.append(new_listing)
     return new_listing
+
+@router.get(
+    "/{listing_id}",
+    response_model=ListingResponse,
+    summary="Отримати оголошення за ID",
+    description="Повертає детальну інформацію про конкретне оголошення.",
+)
+def get_listing(listing_id: UUID):
+    for listing in MOCK_LISTINGS:
+        if listing.id == listing_id:
+            return listing
+    raise HTTPException(status_code=404, detail="Оголошення не знайдено")
+
+@router.put(
+    "/{listing_id}",
+    response_model=ListingResponse,
+    summary="Оновити оголошення",
+    description="Оновлює часткову або повну інформацію про оголошення.",
+)
+def update_listing(listing_id: UUID, listing_update: ListingUpdate):
+    for i, listing in enumerate(MOCK_LISTINGS):
+        if listing.id == listing_id:
+            updated_data = listing.dict()
+            update_fields = listing_update.dict(exclude_unset=True)
+            updated_data.update(update_fields)
+            updated_data['updated_at'] = datetime.now()
+            MOCK_LISTINGS[i] = ListingResponse(**updated_data)
+            return MOCK_LISTINGS[i]
+    raise HTTPException(status_code=404, detail="Оголошення не знайдено")
+
+@router.delete(
+    "/{listing_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Видалити оголошення",
+    description="Видаляє оголошення за ID.",
+)
+def delete_listing(listing_id: UUID):
+    for i, listing in enumerate(MOCK_LISTINGS):
+        if listing.id == listing_id:
+            MOCK_LISTINGS.pop(i)
+            return
+    raise HTTPException(status_code=404, detail="Оголошення не знайдено")
