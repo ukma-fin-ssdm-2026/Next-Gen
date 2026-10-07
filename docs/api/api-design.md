@@ -14,14 +14,14 @@
 | `GET` | `/api/v1/listings` | Отримати список оголошень (з пагінацією/фільтрацією) | 200 OK | 422 Unprocessable Entity |
 | `POST` | `/api/v1/listings` | Створити нове оголошення | 201 Created | 400 Bad Request, 422 |
 | `GET` | `/api/v1/listings/{id}` | Отримати деталі конкретного оголошення за ID | 200 OK | 404 Not Found |
-| `PUT` | `/api/v1/listings/{id}` | Повністю або частково оновити дані оголошення | 200 OK | 404 Not Found, 422 |
+| `PATCH` | `/api/v1/listings/{id}` | Частково оновити дані оголошення | 200 OK | 404 Not Found, 422 |
 | `DELETE` | `/api/v1/listings/{id}` | Видалити оголошення | 204 No Content | 404 Not Found |
 
 ## 3. Версіонування
 
 - **Стратегія:** URI Версіонування.
 - **Поточна версія:** `v1`.
-- **Приклад URL:** `https://ukma-fin-ssdm-2026.github.io/Next-Gen/api/v1/listings`
+- **Приклад URL:** `http://localhost:8000/api/v1/listings`
 - **Обґрунтування:** URI версіонування найпростіше реалізувати в коді (через префікси роутерів `APIRouter(prefix="/api/v1")`) та найлегше тестувати клієнтам.
 
 ## 4. Обробка помилок

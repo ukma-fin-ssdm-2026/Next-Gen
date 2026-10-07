@@ -9,9 +9,9 @@ paths:
     get:
       tags:
       - Listings
-      summary: Отримати список оголошень
+      summary: Отримати список оголошень (публічний)
       description: Повертає список оголошень з підтримкою пагінації та фільтрації
-        за категорією.
+        за категорією. Не містить контактних даних.
       operationId: get_listings_api_v1_listings_get
       parameters:
       - name: skip
@@ -54,7 +54,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/ListingResponse'
+                  $ref: '#/components/schemas/ListingPublicResponse'
                 title: Response Get Listings Api V1 Listings Get
         '404':
           description: Not Found
@@ -68,7 +68,7 @@ paths:
       tags:
       - Listings
       summary: Створити оголошення
-      description: Створює нове оголошення. Повертає створений об'єкт.
+      description: Створює нове оголошення. Повертає створений об'єкт разом з контактами.
       operationId: create_listing_api_v1_listings_post
       requestBody:
         required: true
@@ -95,8 +95,8 @@ paths:
     get:
       tags:
       - Listings
-      summary: Отримати оголошення за ID
-      description: Повертає детальну інформацію про конкретне оголошення.
+      summary: Отримати оголошення за ID (публічне)
+      description: Повертає детальну інформацію про конкретне оголошення без контактів.
       operationId: get_listing_api_v1_listings__listing_id__get
       parameters:
       - name: listing_id
@@ -112,7 +112,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListingResponse'
+                $ref: '#/components/schemas/ListingPublicResponse'
         '404':
           description: Not Found
           content:
@@ -121,12 +121,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Validation Error
-    put:
+    patch:
       tags:
       - Listings
-      summary: Оновити оголошення
-      description: Оновлює часткову або повну інформацію про оголошення.
-      operationId: update_listing_api_v1_listings__listing_id__put
+      summary: Частково оновити оголошення
+      description: Оновлює часткову інформацію про оголошення.
+      operationId: update_listing_api_v1_listings__listing_id__patch
       parameters:
       - name: listing_id
         in: path
@@ -279,7 +279,7 @@ components:
       - category_id
       - contact
       title: ListingCreate
-    ListingResponse:
+    ListingPublicResponse:
       properties:
         title:
           type: string
@@ -307,11 +307,6 @@ components:
           title: Category Id
           description: ID категорії
           example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
-        contact:
-          type: string
-          title: Contact
-          description: Контактні дані (пошта або Telegram)
-          example: '@student_ukma'
         id:
           type: string
           format: uuid
@@ -343,12 +338,81 @@ components:
       - description
       - price
       - category_id
-      - contact
       - id
       - user_id
       - status
       - created_at
       - updated_at
+      title: ListingPublicResponse
+    ListingResponse:
+      properties:
+        title:
+          type: string
+          maxLength: 100
+          minLength: 3
+          title: Title
+          description: Назва оголошення
+          example: Худі з логотипом НаУКМА
+        description:
+          type: string
+          maxLength: 2000
+          minLength: 10
+          title: Description
+          description: Детальний опис товару
+          example: Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
+        price:
+          type: number
+          minimum: 0.0
+          title: Price
+          description: Ціна в гривнях
+          example: 150.0
+        category_id:
+          type: string
+          format: uuid
+          title: Category Id
+          description: ID категорії
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Унікальний ідентифікатор оголошення
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+          description: ID автора
+        status:
+          type: string
+          title: Status
+          description: Статус оголошення (ACTIVE, RESERVED, SOLD)
+          example: ACTIVE
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Дата створення
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+          description: Дата останнього оновлення
+        contact:
+          type: string
+          title: Contact
+          description: Контактні дані (пошта або Telegram)
+      type: object
+      required:
+      - title
+      - description
+      - price
+      - category_id
+      - id
+      - user_id
+      - status
+      - created_at
+      - updated_at
+      - contact
       title: ListingResponse
     ListingUpdate:
       properties:
