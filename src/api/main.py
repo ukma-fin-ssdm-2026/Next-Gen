@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field
 # app.include_router(your_router, prefix="/api/v1")
 # ==============================================================================
 
+from src.api.routers import listings
+
 app = FastAPI(
     title="Baraholka NaUKMA API",
     description=(
@@ -24,6 +26,8 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# Версіонування API (API Versioning)
+app.include_router(listings.router, prefix="/api/v1")
 
 class HealthResponse(BaseModel):
     status: str = Field(..., description="Статус доступності сервісу", example="ok")
