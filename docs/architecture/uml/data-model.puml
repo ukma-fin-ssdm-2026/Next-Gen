@@ -1,0 +1,94 @@
+@startuml
+title Baraholka NaUKMA - Data Model
+
+hide methods
+hide stereotypes
+
+entity "User" as user {
+  * user_id : UUID <<PK>>
+  --
+  * email : string <<personal data, unique>>
+  * password_hash : string <<sensitive data>>
+  * display_name : string <<personal data>>
+  * role : enum
+  * is_blocked : boolean
+  * created_at : datetime
+}
+
+entity "Category" as category {
+  * category_id : UUID <<PK>>
+  --
+  * name : string <<unique>>
+  * is_active : boolean
+}
+
+entity "Listing" as listing {
+  * listing_id : UUID <<PK>>
+  --
+  * seller_id : UUID <<FK>>
+  * category_id : UUID <<FK>>
+  * title : string
+  * description : text
+  * price : decimal
+  * contact : string <<personal data>>
+  * condition : enum
+  * status : enum
+  * created_at : datetime
+  * updated_at : datetime
+}
+
+entity "ListingImage" as image {
+  * image_id : UUID <<PK>>
+  --
+  * listing_id : UUID <<FK>>
+  * image_url : string
+  * display_order : integer
+}
+
+entity "ModerationAction" as moderation {
+  * moderation_action_id : UUID <<PK>>
+  --
+  * moderator_id : UUID <<FK>>
+  listing_id : UUID <<FK, nullable>>
+  target_user_id : UUID <<FK, nullable>>
+  * action_type : enum
+  * reason : text
+  * created_at : datetime
+}
+
+entity "Favorite" as favorite {
+  * user_id : UUID <<PK, FK>>
+  * listing_id : UUID <<PK, FK>>
+  --
+  * created_at : datetime
+}
+
+user ||--o{ listing : creates
+category ||--o{ listing : categorizes
+listing ||--|{ image : contains
+user ||--o{ moderation : performs
+user o|--o{ moderation : target user
+listing o|--o{ moderation : target listing
+user ||--o{ favorite : adds
+listing ||--o{ favorite : is_favorited
+
+note right of user
+  role: USER | ADMIN
+  email domain: @ukma.edu.ua
+end note
+
+note right of listing
+  condition: NEW | LIKE_NEW | GOOD | USED
+  status: ACTIVE | WITHDRAWN |
+          REMOVED_BY_MODERATOR
+end note
+
+note right of moderation
+  action_type: REMOVE_LISTING | RESTORE_LISTING |
+               BLOCK_USER | UNBLOCK_USER
+
+  Exactly one target must be set:
+  listing_id XOR target_user_id
+end note
+
+@enduml

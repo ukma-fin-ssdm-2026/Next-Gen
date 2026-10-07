@@ -1,0 +1,70 @@
+@startuml
+title Створення оголошення (UC-001)
+
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+actor "Продавець" as User
+participant "React SPA" as SPA
+participant "FastAPI" as API
+participant "Auth Service" as Auth
+participant "Listing Service" as LS
+database "PostgreSQL" as DB
+participant "Image Storage" as IMG
+
+User -> SPA: Заповнює форму\nта тисне "Опублікувати"
+activate SPA
+
+SPA -> API: POST /api/v1/listings\nAuthorization: Bearer <token>
+activate API
+
+API -> Auth: validate_token(token)
+activate Auth
+
+alt Токен невалідний
+    Auth --> API: error
+    deactivate Auth
+    API --> SPA: 401 Unauthorized
+    SPA --> User: Перенаправлення на вхід
+else Токен валідний
+    Auth --> API: user_id, role
+    deactivate Auth
+
+    API -> LS: create_listing(user_id, data, image)
+    activate LS
+
+    LS -> DB: get_user(user_id)
+    activate DB
+    DB --> LS: User
+    deactivate DB
+
+    alt Користувач заблокований
+        LS --> API: error
+        deactivate LS
+        API --> SPA: 403 Forbidden
+        SPA --> User: Акаунт заблоковано
+    else Користувач активний
+        LS -> IMG: upload(image_file)
+        activate IMG
+        IMG --> LS: image_url
+        deactivate IMG
+
+        LS -> DB: save(listing, image_url)
+        activate DB
+        note right of DB: BEGIN / INSERT listing\nINSERT image / COMMIT
+        DB --> LS: Listing
+        deactivate DB
+
+        LS --> API: ListingDTO
+        deactivate LS
+
+        API --> SPA: 201 Created
+        SPA --> User: Оголошення опубліковано
+    end
+end
+
+deactivate API
+deactivate SPA
+
+@enduml

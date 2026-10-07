@@ -1,0 +1,42 @@
+@startuml
+skinparam componentStyle uml2
+
+title Component Diagram - Baraholka NaUKMA (Monolithic Client-Server)
+
+package "Client Tier" {
+    component "React SPA\n(Frontend)" as SPA <<Browser>>
+}
+
+package "Server Tier (FastAPI Monolith)" {
+    interface "REST API" as RestAPI
+    
+    component "API Router" as Router <<Controller>>
+    
+    component "Auth Service" as AuthService <<Service>>
+    component "Listing Service" as ListingService <<Service>>
+    component "Moderation Service" as ModerationService <<Service>>
+    
+    component "Data Access Layer\n(ORM)" as DAL <<Repository>>
+}
+
+package "Data Tier" {
+    database "PostgreSQL" as DB <<Database>>
+    storage "Image Storage\n(Object Storage / S3)" as S3 <<Storage>>
+}
+
+' Connections
+SPA ..> RestAPI : "HTTP/HTTPS\n(JSON, JWT)"
+RestAPI - Router
+
+Router --> AuthService
+Router --> ListingService
+Router --> ModerationService
+
+AuthService --> DAL
+ListingService --> DAL
+ListingService --> S3 : "Save/Delete Images"
+ModerationService --> DAL
+
+DAL ..> DB : "TCP/IP\n(SQL)"
+
+@enduml

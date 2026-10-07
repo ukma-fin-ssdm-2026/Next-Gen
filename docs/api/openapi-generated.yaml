@@ -1,0 +1,449 @@
+openapi: 3.1.0
+info:
+  title: Baraholka NaUKMA API
+  description: REST API для маркетплейсу студентських оголошень Києво-Могилянської
+    академії (Baraholka NaUKMA). Розроблено за підходом Code-First.
+  version: 1.0.0
+paths:
+  /api/v1/listings:
+    get:
+      tags:
+      - Listings
+      summary: Отримати список оголошень (публічний)
+      description: Повертає список оголошень з підтримкою пагінації та фільтрації
+        за категорією. Не містить контактних даних.
+      operationId: get_listings_api_v1_listings_get
+      parameters:
+      - name: skip
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          description: Кількість пропущених записів (для пагінації)
+          default: 0
+          title: Skip
+        description: Кількість пропущених записів (для пагінації)
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          description: Максимальна кількість записів у відповіді
+          default: 10
+          title: Limit
+        description: Максимальна кількість записів у відповіді
+      - name: category_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Фільтр за ID категорії
+          title: Category Id
+        description: Фільтр за ID категорії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ListingPublicResponse'
+                title: Response Get Listings Api V1 Listings Get
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+    post:
+      tags:
+      - Listings
+      summary: Створити оголошення
+      description: Створює нове оголошення. Повертає створений об'єкт разом з контактами.
+      operationId: create_listing_api_v1_listings_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListingCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+  /api/v1/listings/{listing_id}:
+    get:
+      tags:
+      - Listings
+      summary: Отримати оголошення за ID (публічне)
+      description: Повертає детальну інформацію про конкретне оголошення без контактів.
+      operationId: get_listing_api_v1_listings__listing_id__get
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Listing Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingPublicResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+    patch:
+      tags:
+      - Listings
+      summary: Частково оновити оголошення
+      description: Оновлює часткову інформацію про оголошення.
+      operationId: update_listing_api_v1_listings__listing_id__patch
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Listing Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListingUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+    delete:
+      tags:
+      - Listings
+      summary: Видалити оголошення
+      description: Видаляє оголошення за ID.
+      operationId: delete_listing_api_v1_listings__listing_id__delete
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Listing Id
+      responses:
+        '204':
+          description: Successful Response
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+  /health:
+    get:
+      tags:
+      - System
+      summary: Перевірка працездатності API (Health Check)
+      description: Системний ендпоінт для моніторингу працездатності сервісу, перевірки
+        доступності та конвеєрів CI/CD.
+      operationId: health_check_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+components:
+  schemas:
+    ErrorResponse:
+      properties:
+        detail:
+          type: string
+          title: Detail
+          description: Опис помилки
+          example: Оголошення не знайдено
+      type: object
+      required:
+      - detail
+      title: ErrorResponse
+    HealthResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+          description: Статус доступності сервісу
+          example: ok
+        app:
+          type: string
+          title: App
+          description: Назва застосунку
+          example: Baraholka NaUKMA API
+        version:
+          type: string
+          title: Version
+          description: Поточна версія API
+          example: 1.0.0
+        timestamp:
+          type: string
+          format: date-time
+          title: Timestamp
+          description: Час серверної перевірки
+      type: object
+      required:
+      - status
+      - app
+      - version
+      - timestamp
+      title: HealthResponse
+    ListingCreate:
+      properties:
+        title:
+          type: string
+          maxLength: 100
+          minLength: 3
+          title: Title
+          description: Назва оголошення
+          example: Худі з логотипом НаУКМА
+        description:
+          type: string
+          maxLength: 2000
+          minLength: 10
+          title: Description
+          description: Детальний опис товару
+          example: Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
+        price:
+          type: number
+          minimum: 0.0
+          title: Price
+          description: Ціна в гривнях
+          example: 150.0
+        category_id:
+          type: string
+          format: uuid
+          title: Category Id
+          description: ID категорії
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        contact:
+          type: string
+          title: Contact
+          description: Контактні дані (пошта або Telegram)
+          example: '@student_ukma'
+      type: object
+      required:
+      - title
+      - description
+      - price
+      - category_id
+      - contact
+      title: ListingCreate
+    ListingPublicResponse:
+      properties:
+        title:
+          type: string
+          maxLength: 100
+          minLength: 3
+          title: Title
+          description: Назва оголошення
+          example: Худі з логотипом НаУКМА
+        description:
+          type: string
+          maxLength: 2000
+          minLength: 10
+          title: Description
+          description: Детальний опис товару
+          example: Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
+        price:
+          type: number
+          minimum: 0.0
+          title: Price
+          description: Ціна в гривнях
+          example: 150.0
+        category_id:
+          type: string
+          format: uuid
+          title: Category Id
+          description: ID категорії
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Унікальний ідентифікатор оголошення
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+          description: ID автора
+        status:
+          type: string
+          title: Status
+          description: Статус оголошення (ACTIVE, RESERVED, SOLD)
+          example: ACTIVE
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Дата створення
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+          description: Дата останнього оновлення
+      type: object
+      required:
+      - title
+      - description
+      - price
+      - category_id
+      - id
+      - user_id
+      - status
+      - created_at
+      - updated_at
+      title: ListingPublicResponse
+    ListingResponse:
+      properties:
+        title:
+          type: string
+          maxLength: 100
+          minLength: 3
+          title: Title
+          description: Назва оголошення
+          example: Худі з логотипом НаУКМА
+        description:
+          type: string
+          maxLength: 2000
+          minLength: 10
+          title: Description
+          description: Детальний опис товару
+          example: Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
+        price:
+          type: number
+          minimum: 0.0
+          title: Price
+          description: Ціна в гривнях
+          example: 150.0
+        category_id:
+          type: string
+          format: uuid
+          title: Category Id
+          description: ID категорії
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Унікальний ідентифікатор оголошення
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+          description: ID автора
+        status:
+          type: string
+          title: Status
+          description: Статус оголошення (ACTIVE, RESERVED, SOLD)
+          example: ACTIVE
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Дата створення
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+          description: Дата останнього оновлення
+        contact:
+          type: string
+          title: Contact
+          description: Контактні дані (пошта або Telegram)
+      type: object
+      required:
+      - title
+      - description
+      - price
+      - category_id
+      - id
+      - user_id
+      - status
+      - created_at
+      - updated_at
+      - contact
+      title: ListingResponse
+    ListingUpdate:
+      properties:
+        title:
+          anyOf:
+          - type: string
+            maxLength: 100
+            minLength: 3
+          - type: 'null'
+          title: Title
+          description: Назва оголошення
+        description:
+          anyOf:
+          - type: string
+            maxLength: 2000
+            minLength: 10
+          - type: 'null'
+          title: Description
+          description: Детальний опис товару
+        price:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Price
+          description: Ціна в гривнях
+        contact:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Contact
+          description: Контактні дані (пошта або Telegram)
+      type: object
+      title: ListingUpdate
