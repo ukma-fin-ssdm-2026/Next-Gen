@@ -5,12 +5,12 @@
 
 ## Команда 
 
-| Лабораторна робота | Артем Солодкий | Данііл Чернявський | Євгеній Остапенко | Богдан Солонина |
+| Учасник | Lab 1 — репозиторій | Lab 2 — вимоги | Lab 3 — архітектура | Lab 4 — API |
 |---|---|---|---|---|
-| **Lab 1 — організація репозиторію** | Repo Maintainer | CI Maintainer | Documentation Lead | Issue Tracker Lead |
-| **Lab 2 — інженерія вимог** | Requirements Lead + Functional Requirements Lead | Quality Lead (NFR) | Documentation Lead | Traceability Lead |
-| **Lab 3 — архітектура та проєктування** | Data Model & Threat Modeling Lead | Architecture Lead | Documentation & UML Lead | Traceability Lead |
-| **Lab 4 — проєктування та реалізація API** | Quality Lead | Backend Lead + API Design Lead | Documentation Lead | Integration Lead |
+| **Артем Солодкий** | Repo Maintainer | Requirements Lead + Functional Requirements Lead | Data Model & Threat Modeling Lead | Quality Lead |
+| **Данііл Чернявський** | CI Maintainer | Quality Lead (NFR) | Architecture Lead | Backend Lead + API Design Lead |
+| **Євгеній Остапенко** | Documentation Lead | Documentation Lead | Documentation & UML Lead | Documentation Lead |
+| **Богдан Солонина** | Issue Tracker Lead | Traceability Lead | Traceability Lead | Integration Lead |
 
 Детальний опис відповідальностей наведено в [Командному статуті](TeamCharter.md#2-ролі-та-відповідальності).
 
