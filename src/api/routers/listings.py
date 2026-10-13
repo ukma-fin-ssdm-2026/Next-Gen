@@ -87,7 +87,7 @@ def get_listing(listing_id: UUID):
 
 @router.patch(
     "/{listing_id}",
-    response_model=ListingResponse,
+    response_model=ListingPublicResponse,
     summary="Частково оновити оголошення",
     description="Оновлює часткову інформацію про оголошення.",
 )
