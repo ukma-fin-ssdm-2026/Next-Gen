@@ -5,10 +5,14 @@
 
 ## Команда 
 
-- Repo Maintainer - Артем Солодкий
-- Documentation Lead - Остапенко Євгеній
-- Issue Tracker Lead - Солонина Богдан
-- CI Maintainer - Чернявський Данііл
+| Лабораторна робота | Артем Солодкий | Данііл Чернявський | Євгеній Остапенко | Богдан Солонина |
+|---|---|---|---|---|
+| **Lab 1 — організація репозиторію** | Repo Maintainer | CI Maintainer | Documentation Lead | Issue Tracker Lead |
+| **Lab 2 — інженерія вимог** | Requirements Lead + Functional Requirements Lead | Quality Lead (NFR) | Documentation Lead | Traceability Lead |
+| **Lab 3 — архітектура та проєктування** | Data Model & Threat Modeling Lead | Architecture Lead | Documentation & UML Lead | Traceability Lead |
+| **Lab 4 — проєктування та реалізація API** | Quality Lead | Backend Lead + API Design Lead | Documentation Lead | Integration Lead |
+
+Детальний опис відповідальностей наведено в [Командному статуті](TeamCharter.md#2-ролі-та-відповідальності).
 
 ## Стратегія роботи з гілками - GitHub Flow
 
