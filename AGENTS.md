@@ -14,8 +14,10 @@ documentation in the repository.
 
 Review changes against all applicable sources, in this order:
 
-1. The task for the relevant laboratory at
-   `https://ssdm-2026.cs-courses.org/labs/labNN/labNN.html`.
+1. The exact task page for the relevant laboratory, linked from the
+   "Лабораторні" section at `https://ssdm-2026.cs-courses.org`. Identify the
+   laboratory from the pull request or linked issue and follow the site link;
+   do not guess the page URL.
 2. `docs/requirements/requirements.md`, user stories, use cases, and RTM.
 3. Architecture documents, ADRs, the threat model, and the architecture
    traceability matrix.
