@@ -114,7 +114,22 @@ setup instead of silently skipping the tests.
   grading consequence, and the smallest safe correction.
 - Focus on correctness, security, broken contracts, missing required work, and
   regressions. Do not post style-only comments unless they hide a real defect.
-- Do not invent findings to fill a quota. If no blocking issue is found, say
-  which requirements and checks were verified and state any remaining test gap.
+- Do not invent findings to fill a quota.
+- Finish every review, including a review with no findings, with a concise
+  top-level `Review evidence` summary containing:
+  - the reviewed commit and the inferred laboratory or linked issue;
+  - the exact laboratory page title and URL actually consulted, or an explicit
+    statement that the course website could not be accessed;
+  - the repository requirements, architecture, security, API, and documentation
+    files actually consulted;
+  - the commands, tests, and generated-file checks actually run, with their
+    outcomes, plus any checks that could not be run and the reason;
+  - the applicable laboratory requirements verified, missing, not applicable,
+    or still unverified; and
+  - the final number of P0/P1 findings and any remaining evidence or test gaps.
+- Never claim that a source was consulted or a check passed unless it was
+  actually read or executed. A clean review should say `No blocking issues
+  found` and still include the `Review evidence` summary; it must not formally
+  approve the pull request.
 - A Codex review complements tests, branch protection, and human approval; it
   does not replace them.
