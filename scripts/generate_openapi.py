@@ -13,7 +13,8 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from src.api.main import app
+from src.api.main import app  # noqa: E402
+
 
 def generate_openapi_yaml():
     output_dir = ROOT_DIR / "docs" / "api"
@@ -28,6 +29,7 @@ def generate_openapi_yaml():
         yaml.dump(openapi_schema, f, allow_unicode=True, sort_keys=False)
 
     print(f"[OK] Специфікація OpenAPI успішно згенерована: {output_file}")
+
 
 if __name__ == "__main__":
     generate_openapi_yaml()
