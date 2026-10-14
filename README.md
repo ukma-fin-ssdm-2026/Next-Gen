@@ -5,12 +5,12 @@
 
 ## Команда 
 
-| Учасник | Lab 1 — репозиторій | Lab 2 — вимоги | Lab 3 — архітектура | Lab 4 — API |
-|---|---|---|---|---|
-| **Артем Солодкий** | Repo Maintainer | Requirements Lead + Functional Requirements Lead | Data Model & Threat Modeling Lead | Quality Lead |
-| **Данііл Чернявський** | CI Maintainer | Quality Lead (NFR) | Architecture Lead | Backend Lead + API Design Lead |
-| **Євгеній Остапенко** | Documentation Lead | Documentation Lead | Documentation & UML Lead | Documentation Lead |
-| **Богдан Солонина** | Issue Tracker Lead | Traceability Lead | Traceability Lead | Integration Lead |
+| Учасник | Lab 1 — репозиторій | Lab 2 — вимоги | Lab 3 — архітектура | Lab 4 — API | Lab 5 — якість коду |
+|---|---|---|---|---|---|
+| **Артем Солодкий** | Repo Maintainer | Requirements Lead + Functional Requirements Lead | Data Model & Threat Modeling Lead | Quality Lead | Code Reviewer |
+| **Данііл Чернявський** | CI Maintainer | Quality Lead (NFR) | Architecture Lead | Backend Lead + API Design Lead | Quality & Prototype Lead |
+| **Євгеній Остапенко** | Documentation Lead | Documentation Lead | Documentation & UML Lead | Documentation Lead | Documentation Lead |
+| **Богдан Солонина** | Issue Tracker Lead | Traceability Lead | Traceability Lead | Integration Lead | Security Analyst |
 
 Детальний опис відповідальностей наведено в [Командному статуті](TeamCharter.md#2-ролі-та-відповідальності).
 
@@ -51,11 +51,18 @@
 - [Згенерована специфікація OpenAPI](docs/api/openapi-generated.yaml) - файл специфікації OpenAPI 3.1 у форматі YAML.
 - **GitHub Pages:** https://ukma-fin-ssdm-2026.github.io/Next-Gen/docs/api/
 
-### Швидкий запуск та автогенерація OpenAPI
+## Якість коду, стандарти та безпека
 
-1. **Встановлення залежностей:**
+- [Політика якості та огляду коду](TeamCharter.md#49-політика-якості-та-огляду-коду-code-quality--review-policy) - стандарти PEP 8, конвенції іменування, правила коментування, критерії peer review та оновлений Definition of Done.
+- [Статичний аналіз та аналіз безпеки](docs/code-quality/static-analysis.md) - результати перевірки Bandit, аналіз загрози TM-05 (STRIDE), усунення витоку контактів (SA-01) з регресійним тестом та фіксація прийнятого ризику (SA-02).
+- [Звіт командного огляду коду](docs/code-quality/review-report.md) - результати рецензування кодової бази іншої команди за 5 критеріями.
+- [Прогрес реалізації компонентів](docs/code-quality/progress.md) - стан розробки базової структури коду та мінімального прототипу системи.
+
+### Швидкий запуск та перевірки якості коду
+
+1. **Встановлення залежностей розробки та тестування:**
    ```bash
-   pip install fastapi pyyaml uvicorn
+   pip install fastapi pyyaml uvicorn bandit flake8 black pytest httpx
    ```
 
 2. **Автогенерація специфікації OpenAPI з коду:**
@@ -64,7 +71,17 @@
    ```
    *Специфікація автоматично зчитується з FastAPI-застосунку (`src/api/main.py`) та зберігається у `docs/api/openapi-generated.yaml`.*
 
-3. **Локальний запуск API сервера:**
+3. **Запуск аналізатора безпеки (Bandit):**
+   ```bash
+   python -m bandit -r src scripts -v
+   ```
+
+4. **Запуск автоматизованих та регресійних тестів:**
+   ```bash
+   python -m pytest -q
+   ```
+
+5. **Локальний запуск API сервера:**
    ```bash
    uvicorn src.api.main:app --reload --port 8000
    ```
