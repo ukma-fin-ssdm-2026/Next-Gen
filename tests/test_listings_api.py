@@ -102,3 +102,15 @@ def test_delete_marks_withdrawn_and_hides_from_public(client: TestClient) -> Non
     list_res = client.get("/api/v1/listings")
     ids = {item["id"] for item in list_res.json()}
     assert str(SEED_LISTING_ID) not in ids
+
+
+def test_filter_by_price_range_api(client: TestClient) -> None:
+    res = client.get(
+        "/api/v1/listings", params={"min_price": 100.0, "max_price": 200.0}
+    )
+    assert res.status_code == 200
+    assert len(res.json()) == 1
+
+    res_empty = client.get("/api/v1/listings", params={"min_price": 200.0})
+    assert res_empty.status_code == 200
+    assert len(res_empty.json()) == 0

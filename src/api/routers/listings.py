@@ -76,8 +76,9 @@ def _raise_domain(exc: Exception) -> None:
     response_model=list[ListingPublicResponse],
     summary="Отримати список оголошень (публічний)",
     description=(
-        "Повертає активні оголошення з пагінацією, фільтром категорії та текстовим "
-        "пошуком. Контакт продавця не включається."
+        "Повертає активні оголошення з пагінацією, фільтром категорії, діапазоном "
+        "ціни та текстовим пошуком (FR-006, FR-007, FR-008). "
+        "Контакт продавця не включається."
     ),
     responses={
         422: {"description": "Validation Error"},
@@ -93,6 +94,8 @@ def get_listings(
         max_length=100,
         description="Пошук за назвою та описом",
     ),
+    min_price: Optional[float] = Query(None, ge=0, description="Мінімальна ціна"),
+    max_price: Optional[float] = Query(None, ge=0, description="Максимальна ціна"),
     service: ListingService = Depends(get_listing_service),
 ) -> list[ListingPublicResponse]:
     items = service.list_public(
@@ -100,6 +103,8 @@ def get_listings(
         limit=limit,
         category_id=category_id,
         query=q,
+        min_price=min_price,
+        max_price=max_price,
     )
     return [_to_public(item) for item in items]
 

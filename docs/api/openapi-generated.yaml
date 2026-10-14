@@ -10,8 +10,8 @@ paths:
       tags:
       - Listings
       summary: Отримати список оголошень (публічний)
-      description: Повертає активні оголошення з пагінацією, фільтром категорії та
-        текстовим пошуком. Контакт продавця не включається.
+      description: Повертає активні оголошення з пагінацією, фільтром категорії, діапазоном
+        ціни та текстовим пошуком (FR-006, FR-007, FR-008). Контакт продавця не включається.
       operationId: get_listings_api_v1_listings_get
       parameters:
       - name: skip
@@ -58,6 +58,28 @@ paths:
           description: Пошук за назвою та описом
           title: Q
         description: Пошук за назвою та описом
+      - name: min_price
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: number
+            minimum: 0
+          - type: 'null'
+          description: Мінімальна ціна
+          title: Min Price
+        description: Мінімальна ціна
+      - name: max_price
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: number
+            minimum: 0
+          - type: 'null'
+          description: Максимальна ціна
+          title: Max Price
+        description: Максимальна ціна
       responses:
         '200':
           description: Successful Response

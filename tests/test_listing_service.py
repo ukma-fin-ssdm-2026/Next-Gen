@@ -66,3 +66,15 @@ def test_delete_marks_withdrawn_and_preserves_data(
     assert SEED_LISTING_ID not in {item.id for item in items}
     with pytest.raises(ListingNotFoundError):
         listing_service.get_public(SEED_LISTING_ID)
+
+
+def test_filter_by_price_range(listing_service: ListingService) -> None:
+    matched = listing_service.list_public(min_price=100.0, max_price=200.0)
+    assert len(matched) == 1
+    assert matched[0].id == SEED_LISTING_ID
+
+    empty_high = listing_service.list_public(min_price=200.0)
+    assert len(empty_high) == 0
+
+    empty_low = listing_service.list_public(max_price=100.0)
+    assert len(empty_low) == 0

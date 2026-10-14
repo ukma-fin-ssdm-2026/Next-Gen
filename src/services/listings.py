@@ -23,6 +23,8 @@ class ListingService:
         limit: int = 10,
         category_id: UUID | None = None,
         query: str | None = None,
+        min_price: float | None = None,
+        max_price: float | None = None,
     ) -> list[Listing]:
         """Каталог активних оголошень (FR-006, FR-007, FR-008)."""
         items = [item for item in self._repository.list_all() if item.is_public()]
@@ -36,6 +38,10 @@ class ListingService:
                 if needle in item.title.casefold()
                 or needle in item.description.casefold()
             ]
+        if min_price is not None:
+            items = [item for item in items if item.price >= min_price]
+        if max_price is not None:
+            items = [item for item in items if item.price <= max_price]
         items.sort(key=lambda item: item.created_at, reverse=True)
         return items[skip : skip + limit]
 
