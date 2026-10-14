@@ -1,0 +1,78 @@
+"""HTTP-тести каталогу та контролів безпеки TM-02 / TM-05."""
+
+from uuid import uuid4
+
+from fastapi.testclient import TestClient
+
+from src.domain.listings import SEED_CATEGORY_ID, SEED_LISTING_ID, SEED_OWNER_ID
+
+
+def test_health(client: TestClient) -> None:
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
+def test_public_list_omits_contact(client: TestClient) -> None:
+    response = client.get("/api/v1/listings")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload
+    for item in payload:
+        assert "contact" not in item
+        assert item["status"] == "ACTIVE"
+
+
+def test_public_detail_omits_contact(client: TestClient) -> None:
+    response = client.get(f"/api/v1/listings/{SEED_LISTING_ID}")
+    assert response.status_code == 200
+    assert "contact" not in response.json()
+
+
+def test_withdrawn_listing_not_in_catalog(client: TestClient) -> None:
+    response = client.get("/api/v1/listings")
+    ids = {item["id"] for item in response.json()}
+    assert str(SEED_LISTING_ID) in ids
+    assert "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" not in ids
+
+
+def test_search_query(client: TestClient) -> None:
+    response = client.get("/api/v1/listings", params={"q": "худі"})
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
+def test_create_without_actor_is_401(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/listings",
+        json={
+            "title": "Конспект з алгебри",
+            "description": "Друкований конспект, майже не користувався.",
+            "price": 80,
+            "category_id": str(SEED_CATEGORY_ID),
+            "contact": "@someone",
+        },
+    )
+    assert response.status_code == 401
+
+
+def test_patch_foreign_listing_is_403(client: TestClient) -> None:
+    response = client.patch(
+        f"/api/v1/listings/{SEED_LISTING_ID}",
+        headers={"X-Actor-Id": str(uuid4())},
+        json={"title": "Спроба зламати чуже оголошення"},
+    )
+    assert response.status_code == 403
+    assert "contact" not in response.json() or "detail" in response.json()
+
+
+def test_owner_patch_updates_title_and_hides_contact(client: TestClient) -> None:
+    response = client.patch(
+        f"/api/v1/listings/{SEED_LISTING_ID}",
+        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
+        json={"title": "Худі НаУКМА, розмір M"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert "contact" not in body
+    assert body["title"] == "Худі НаУКМА, розмір M"

@@ -10,8 +10,8 @@ paths:
       tags:
       - Listings
       summary: Отримати список оголошень (публічний)
-      description: Повертає список оголошень з підтримкою пагінації та фільтрації
-        за категорією. Не містить контактних даних.
+      description: Повертає активні оголошення з пагінацією, фільтром категорії та
+        текстовим пошуком. Контакт продавця не включається.
       operationId: get_listings_api_v1_listings_get
       parameters:
       - name: skip
@@ -20,10 +20,10 @@ paths:
         schema:
           type: integer
           minimum: 0
-          description: Кількість пропущених записів (для пагінації)
+          description: Кількість пропущених записів
           default: 0
           title: Skip
-        description: Кількість пропущених записів (для пагінації)
+        description: Кількість пропущених записів
       - name: limit
         in: query
         required: false
@@ -31,10 +31,10 @@ paths:
           type: integer
           maximum: 100
           minimum: 1
-          description: Максимальна кількість записів у відповіді
+          description: Розмір сторінки
           default: 10
           title: Limit
-        description: Максимальна кількість записів у відповіді
+        description: Розмір сторінки
       - name: category_id
         in: query
         required: false
@@ -43,9 +43,21 @@ paths:
           - type: string
             format: uuid
           - type: 'null'
-          description: Фільтр за ID категорії
+          description: Фільтр за категорією
           title: Category Id
-        description: Фільтр за ID категорії
+        description: Фільтр за категорією
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 100
+          - type: 'null'
+          description: Пошук за назвою та описом
+          title: Q
+        description: Пошук за назвою та описом
       responses:
         '200':
           description: Successful Response
@@ -56,6 +68,18 @@ paths:
                 items:
                   $ref: '#/components/schemas/ListingPublicResponse'
                 title: Response Get Listings Api V1 Listings Get
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not Found
           content:
@@ -68,8 +92,22 @@ paths:
       tags:
       - Listings
       summary: Створити оголошення
-      description: Створює нове оголошення. Повертає створений об'єкт разом з контактами.
+      description: Створює оголошення від імені X-Actor-Id. Повертає об'єкт з контактами.
       operationId: create_listing_api_v1_listings_post
+      parameters:
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+            Сервер не приймає user_id з тіла запиту.
+          title: X-Actor-Id
+        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+          Сервер не приймає user_id з тіла запиту.
       requestBody:
         required: true
         content:
@@ -83,6 +121,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListingResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not Found
           content:
@@ -96,7 +146,7 @@ paths:
       tags:
       - Listings
       summary: Отримати оголошення за ID (публічне)
-      description: Повертає детальну інформацію про конкретне оголошення без контактів.
+      description: Деталі активного оголошення без контактів.
       operationId: get_listing_api_v1_listings__listing_id__get
       parameters:
       - name: listing_id
@@ -113,6 +163,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListingPublicResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not Found
           content:
@@ -125,7 +187,7 @@ paths:
       tags:
       - Listings
       summary: Частково оновити оголошення
-      description: Оновлює часткову інформацію про оголошення.
+      description: Оновлює лише оголошення поточного користувача (заголовок X-Actor-Id).
       operationId: update_listing_api_v1_listings__listing_id__patch
       parameters:
       - name: listing_id
@@ -135,6 +197,19 @@ paths:
           type: string
           format: uuid
           title: Listing Id
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+            Сервер не приймає user_id з тіла запиту.
+          title: X-Actor-Id
+        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+          Сервер не приймає user_id з тіла запиту.
       requestBody:
         required: true
         content:
@@ -148,6 +223,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListingPublicResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not Found
           content:
@@ -160,7 +247,7 @@ paths:
       tags:
       - Listings
       summary: Видалити оголошення
-      description: Видаляє оголошення за ID.
+      description: Видаляє лише власне оголошення.
       operationId: delete_listing_api_v1_listings__listing_id__delete
       parameters:
       - name: listing_id
@@ -170,9 +257,34 @@ paths:
           type: string
           format: uuid
           title: Listing Id
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+            Сервер не приймає user_id з тіла запиту.
+          title: X-Actor-Id
+        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+          Сервер не приймає user_id з тіла запиту.
       responses:
         '204':
           description: Successful Response
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not Found
           content:
@@ -268,6 +380,8 @@ components:
           example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
         contact:
           type: string
+          maxLength: 200
+          minLength: 3
           title: Contact
           description: Контактні дані (пошта або Telegram)
           example: '@student_ukma'
@@ -320,7 +434,7 @@ components:
         status:
           type: string
           title: Status
-          description: Статус оголошення (ACTIVE, RESERVED, SOLD)
+          description: Статус оголошення
           example: ACTIVE
         created_at:
           type: string
@@ -385,7 +499,7 @@ components:
         status:
           type: string
           title: Status
-          description: Статус оголошення (ACTIVE, RESERVED, SOLD)
+          description: Статус оголошення
           example: ACTIVE
         created_at:
           type: string
@@ -423,7 +537,6 @@ components:
             minLength: 3
           - type: 'null'
           title: Title
-          description: Назва оголошення
         description:
           anyOf:
           - type: string
@@ -431,19 +544,18 @@ components:
             minLength: 10
           - type: 'null'
           title: Description
-          description: Детальний опис товару
         price:
           anyOf:
           - type: number
             minimum: 0.0
           - type: 'null'
           title: Price
-          description: Ціна в гривнях
         contact:
           anyOf:
           - type: string
+            maxLength: 200
+            minLength: 3
           - type: 'null'
           title: Contact
-          description: Контактні дані (пошта або Telegram)
       type: object
       title: ListingUpdate
