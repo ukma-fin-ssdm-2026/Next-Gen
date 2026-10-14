@@ -90,10 +90,12 @@ class ListingService:
         listing.updated_at = utc_now()
         return self._repository.save(listing)
 
-    def delete(self, listing_id: UUID, actor_id: UUID | None) -> None:
-        """Видаляє лише власне оголошення."""
-        self._require_owned(listing_id, actor_id)
-        self._repository.delete(listing_id)
+    def delete(self, listing_id: UUID, actor_id: UUID | None) -> Listing:
+        """Знімає оголошення з публікації (переводить у WITHDRAWN, FR-004)."""
+        listing = self._require_owned(listing_id, actor_id)
+        listing.status = ListingStatus.WITHDRAWN
+        listing.updated_at = utc_now()
+        return self._repository.save(listing)
 
     def _require_listing(self, listing_id: UUID) -> Listing:
         listing = self._repository.get(listing_id)

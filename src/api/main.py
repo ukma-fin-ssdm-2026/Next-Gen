@@ -22,13 +22,13 @@ app.include_router(listings.router, prefix="/api/v1")
 
 
 class HealthResponse(BaseModel):
-    status: str = Field(..., description="Статус доступності сервісу", example="ok")
+    status: str = Field(..., description="Статус доступності сервісу", examples=["ok"])
     app: str = Field(
         ...,
         description="Назва застосунку",
-        example="Baraholka NaUKMA API",
+        examples=["Baraholka NaUKMA API"],
     )
-    version: str = Field(..., description="Поточна версія API", example="1.0.0")
+    version: str = Field(..., description="Поточна версія API", examples=["1.0.0"])
     timestamp: datetime = Field(..., description="Час серверної перевірки")
 
 

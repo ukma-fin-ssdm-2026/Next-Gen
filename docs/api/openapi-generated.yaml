@@ -68,24 +68,6 @@ paths:
                 items:
                   $ref: '#/components/schemas/ListingPublicResponse'
                 title: Response Get Listings Api V1 Listings Get
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Not Found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Validation Error
     post:
@@ -127,18 +109,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Not Found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Validation Error
   /api/v1/listings/{listing_id}:
@@ -163,18 +133,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListingPublicResponse'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not Found
           content:
@@ -247,7 +205,8 @@ paths:
       tags:
       - Listings
       summary: Видалити оголошення
-      description: Видаляє лише власне оголошення.
+      description: Знімає оголошення з публікації (переводить у WITHDRAWN, FR-004).
+        Виконується лише власником.
       operationId: delete_listing_api_v1_listings__listing_id__delete
       parameters:
       - name: listing_id
@@ -316,7 +275,8 @@ components:
           type: string
           title: Detail
           description: Опис помилки
-          example: Оголошення не знайдено
+          examples:
+          - Оголошення не знайдено
       type: object
       required:
       - detail
@@ -327,17 +287,20 @@ components:
           type: string
           title: Status
           description: Статус доступності сервісу
-          example: ok
+          examples:
+          - ok
         app:
           type: string
           title: App
           description: Назва застосунку
-          example: Baraholka NaUKMA API
+          examples:
+          - Baraholka NaUKMA API
         version:
           type: string
           title: Version
           description: Поточна версія API
-          example: 1.0.0
+          examples:
+          - 1.0.0
         timestamp:
           type: string
           format: date-time
@@ -358,33 +321,38 @@ components:
           minLength: 3
           title: Title
           description: Назва оголошення
-          example: Худі з логотипом НаУКМА
+          examples:
+          - Худі з логотипом НаУКМА
         description:
           type: string
           maxLength: 2000
           minLength: 10
           title: Description
           description: Детальний опис товару
-          example: Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
+          examples:
+          - Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
         price:
           type: number
           minimum: 0.0
           title: Price
           description: Ціна в гривнях
-          example: 150.0
+          examples:
+          - 150.0
         category_id:
           type: string
           format: uuid
           title: Category Id
           description: ID категорії
-          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+          examples:
+          - 3fa85f64-5717-4562-b3fc-2c963f66afa6
         contact:
           type: string
           maxLength: 200
           minLength: 3
           title: Contact
           description: Контактні дані (пошта або Telegram)
-          example: '@student_ukma'
+          examples:
+          - '@student_ukma'
       type: object
       required:
       - title
@@ -401,26 +369,30 @@ components:
           minLength: 3
           title: Title
           description: Назва оголошення
-          example: Худі з логотипом НаУКМА
+          examples:
+          - Худі з логотипом НаУКМА
         description:
           type: string
           maxLength: 2000
           minLength: 10
           title: Description
           description: Детальний опис товару
-          example: Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
+          examples:
+          - Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
         price:
           type: number
           minimum: 0.0
           title: Price
           description: Ціна в гривнях
-          example: 150.0
+          examples:
+          - 150.0
         category_id:
           type: string
           format: uuid
           title: Category Id
           description: ID категорії
-          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+          examples:
+          - 3fa85f64-5717-4562-b3fc-2c963f66afa6
         id:
           type: string
           format: uuid
@@ -435,7 +407,8 @@ components:
           type: string
           title: Status
           description: Статус оголошення
-          example: ACTIVE
+          examples:
+          - ACTIVE
         created_at:
           type: string
           format: date-time
@@ -466,26 +439,30 @@ components:
           minLength: 3
           title: Title
           description: Назва оголошення
-          example: Худі з логотипом НаУКМА
+          examples:
+          - Худі з логотипом НаУКМА
         description:
           type: string
           maxLength: 2000
           minLength: 10
           title: Description
           description: Детальний опис товару
-          example: Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
+          examples:
+          - Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
         price:
           type: number
           minimum: 0.0
           title: Price
           description: Ціна в гривнях
-          example: 150.0
+          examples:
+          - 150.0
         category_id:
           type: string
           format: uuid
           title: Category Id
           description: ID категорії
-          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+          examples:
+          - 3fa85f64-5717-4562-b3fc-2c963f66afa6
         id:
           type: string
           format: uuid
@@ -500,7 +477,8 @@ components:
           type: string
           title: Status
           description: Статус оголошення
-          example: ACTIVE
+          examples:
+          - ACTIVE
         created_at:
           type: string
           format: date-time

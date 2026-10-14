@@ -76,3 +76,29 @@ def test_owner_patch_updates_title_and_hides_contact(client: TestClient) -> None
     body = response.json()
     assert "contact" not in body
     assert body["title"] == "Худі НаУКМА, розмір M"
+
+
+def test_patch_with_explicit_null_is_422(client: TestClient) -> None:
+    response = client.patch(
+        f"/api/v1/listings/{SEED_LISTING_ID}",
+        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
+        json={"title": None},
+    )
+    assert response.status_code == 422
+
+
+def test_delete_marks_withdrawn_and_hides_from_public(client: TestClient) -> None:
+    response = client.delete(
+        f"/api/v1/listings/{SEED_LISTING_ID}",
+        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
+    )
+    assert response.status_code == 204
+
+    # 404 on direct public retrieval
+    get_res = client.get(f"/api/v1/listings/{SEED_LISTING_ID}")
+    assert get_res.status_code == 404
+
+    # Excluded from public catalog
+    list_res = client.get("/api/v1/listings")
+    ids = {item["id"] for item in list_res.json()}
+    assert str(SEED_LISTING_ID) not in ids

@@ -4,7 +4,11 @@ from uuid import uuid4
 
 import pytest
 
-from src.domain.exceptions import ListingForbiddenError, ListingUnauthorizedError
+from src.domain.exceptions import (
+    ListingForbiddenError,
+    ListingNotFoundError,
+    ListingUnauthorizedError,
+)
 from src.domain.listings import SEED_LISTING_ID, SEED_OWNER_ID, WITHDRAWN_LISTING_ID
 from src.services.listings import ListingService
 
@@ -51,3 +55,14 @@ def test_owner_can_update_title(listing_service: ListingService) -> None:
     )
     assert updated.title == "Худі НаУКМА, розмір M"
     assert updated.user_id == SEED_OWNER_ID
+
+
+def test_delete_marks_withdrawn_and_preserves_data(
+    listing_service: ListingService,
+) -> None:
+    deleted = listing_service.delete(SEED_LISTING_ID, actor_id=SEED_OWNER_ID)
+    assert deleted.status.value == "WITHDRAWN"
+    items = listing_service.list_public()
+    assert SEED_LISTING_ID not in {item.id for item in items}
+    with pytest.raises(ListingNotFoundError):
+        listing_service.get_public(SEED_LISTING_ID)

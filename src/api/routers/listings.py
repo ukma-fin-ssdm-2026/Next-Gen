@@ -24,12 +24,6 @@ from src.services.listings import ListingService
 router = APIRouter(
     prefix="/listings",
     tags=["Listings"],
-    responses={
-        401: {"model": ErrorResponse, "description": "Unauthorized"},
-        403: {"model": ErrorResponse, "description": "Forbidden"},
-        404: {"model": ErrorResponse, "description": "Not Found"},
-        422: {"description": "Validation Error"},
-    },
 )
 
 ActorId = Annotated[
@@ -85,6 +79,9 @@ def _raise_domain(exc: Exception) -> None:
         "Повертає активні оголошення з пагінацією, фільтром категорії та текстовим "
         "пошуком. Контакт продавця не включається."
     ),
+    responses={
+        422: {"description": "Validation Error"},
+    },
 )
 def get_listings(
     skip: int = Query(0, ge=0, description="Кількість пропущених записів"),
@@ -115,6 +112,10 @@ def get_listings(
     description=(
         "Створює оголошення від імені X-Actor-Id. Повертає об'єкт з контактами."
     ),
+    responses={
+        401: {"model": ErrorResponse, "description": "Unauthorized"},
+        422: {"description": "Validation Error"},
+    },
 )
 def create_listing(
     listing: ListingCreate,
@@ -140,6 +141,10 @@ def create_listing(
     response_model=ListingPublicResponse,
     summary="Отримати оголошення за ID (публічне)",
     description="Деталі активного оголошення без контактів.",
+    responses={
+        404: {"model": ErrorResponse, "description": "Not Found"},
+        422: {"description": "Validation Error"},
+    },
 )
 def get_listing(
     listing_id: UUID,
@@ -157,6 +162,12 @@ def get_listing(
     response_model=ListingPublicResponse,
     summary="Частково оновити оголошення",
     description="Оновлює лише оголошення поточного користувача (заголовок X-Actor-Id).",
+    responses={
+        401: {"model": ErrorResponse, "description": "Unauthorized"},
+        403: {"model": ErrorResponse, "description": "Forbidden"},
+        404: {"model": ErrorResponse, "description": "Not Found"},
+        422: {"description": "Validation Error"},
+    },
 )
 def update_listing(
     listing_id: UUID,
@@ -183,7 +194,16 @@ def update_listing(
     "/{listing_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Видалити оголошення",
-    description="Видаляє лише власне оголошення.",
+    description=(
+        "Знімає оголошення з публікації (переводить у WITHDRAWN, FR-004). "
+        "Виконується лише власником."
+    ),
+    responses={
+        401: {"model": ErrorResponse, "description": "Unauthorized"},
+        403: {"model": ErrorResponse, "description": "Forbidden"},
+        404: {"model": ErrorResponse, "description": "Not Found"},
+        422: {"description": "Validation Error"},
+    },
 )
 def delete_listing(
     listing_id: UUID,
