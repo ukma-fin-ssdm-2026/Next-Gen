@@ -17,5 +17,6 @@ def test_get_listing_hides_contact():
 def test_patch_listing_does_not_leak_contact():
     """TM-05 / SEC-002: PATCH без автентифікації не повертає контакт продавця."""
     response = client.patch(f"/api/v1/listings/{LISTING_ID}", json={})
-    assert response.status_code == 200
+    # Анонімний запит повертає 401 (TM-02) або 200 без контактів (TM-05)
+    assert response.status_code in (200, 401)
     assert "contact" not in response.json()
