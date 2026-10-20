@@ -5,4 +5,4 @@ ALLOWED_DOMAIN = "ukma.edu.ua"
 
 def is_ukma_email(email: str) -> bool:
     """Повертає True, якщо адреса належить домену @ukma.edu.ua."""
-    return email.endswith("@" + ALLOWED_DOMAIN)
+    return email.strip().lower().endswith("@" + ALLOWED_DOMAIN)
