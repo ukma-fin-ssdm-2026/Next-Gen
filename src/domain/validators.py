@@ -9,4 +9,5 @@ def _normalize(email: str) -> str:
 
 def is_ukma_email(email: str) -> bool:
     """Повертає True, якщо адреса належить домену @ukma.edu.ua."""
-    return _normalize(email).endswith("@" + ALLOWED_DOMAIN)
+    local, _, domain = _normalize(email).rpartition("@")
+    return bool(local) and "@" not in local and domain == ALLOWED_DOMAIN
