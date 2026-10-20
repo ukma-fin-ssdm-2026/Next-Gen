@@ -35,8 +35,15 @@ jobs:
       - name: Dependency audit (pip-audit)
         run: pip-audit -r requirements.txt
 
-      - name: Tests
-        run: pytest -q
+      - name: Tests with coverage gate (85%)
+        run: pytest -q --cov=src --cov-report=term-missing --cov-report=html --cov-fail-under=85
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: htmlcov
+          path: htmlcov/
 
       - name: Generate OpenAPI spec
         run: python scripts/generate_openapi.py
