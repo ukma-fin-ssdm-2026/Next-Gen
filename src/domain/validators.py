@@ -1,10 +1,12 @@
 """Валідація університетської пошти (FR-001, SEC-001)."""
 
 ALLOWED_DOMAIN = "ukma.edu.ua"
+TELEGRAM_MIN_USERNAME_LEN = 5
+TELEGRAM_MAX_USERNAME_LEN = 32
 
 
-def _normalize(email: str) -> str:
-    return email.strip().lower()
+def _normalize(value: str) -> str:
+    return value.strip().lower()
 
 
 def is_ukma_email(email: str) -> bool:
@@ -15,8 +17,10 @@ def is_ukma_email(email: str) -> bool:
 
 def is_valid_telegram_handle(handle: str) -> bool:
     """Мінімальна валідація префіксу @ та довжини юзернейму."""
-    if not handle.startswith("@"):
+    normalized = handle.strip()
+    if not normalized.startswith("@"):
         return False
-    username = handle[1:]
-    return 5 <= len(username) <= 32
+    username = normalized[1:]
+    return TELEGRAM_MIN_USERNAME_LEN <= len(username) <= TELEGRAM_MAX_USERNAME_LEN
+
 

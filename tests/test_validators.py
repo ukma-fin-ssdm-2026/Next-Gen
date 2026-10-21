@@ -31,10 +31,12 @@ def test_rejects_invalid_email(email):
     [
         "@student",
         "@valid_user",
+        "  @student_ukma  ",
     ],
 )
 def test_accepts_valid_telegram_handle_format(handle):
     assert is_valid_telegram_handle(handle) is True
+
 
 
 @pytest.mark.parametrize(
