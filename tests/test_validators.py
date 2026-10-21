@@ -50,3 +50,18 @@ def test_accepts_valid_telegram_handle_format(handle):
 def test_rejects_telegram_handle_missing_prefix_or_invalid_length(handle):
     assert is_valid_telegram_handle(handle) is False
 
+
+@pytest.mark.parametrize(
+    "handle",
+    [
+        "@user.name",  # крапка недопустима в юзернеймі TG
+        "@user-name",  # дефіс недопустимий
+        "@user name",  # пробіл всередині
+        "@студент",  # кирилиця заборонена
+        "@user!name",  # спецсимволи заборонені
+    ],
+)
+def test_rejects_telegram_handle_invalid_characters(handle):
+    assert is_valid_telegram_handle(handle) is False
+
+
