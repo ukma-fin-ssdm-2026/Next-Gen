@@ -38,7 +38,6 @@ def test_accepts_valid_telegram_handle_format(handle):
     assert is_valid_telegram_handle(handle) is True
 
 
-
 @pytest.mark.parametrize(
     "handle",
     [
@@ -63,5 +62,3 @@ def test_rejects_telegram_handle_missing_prefix_or_invalid_length(handle):
 )
 def test_rejects_telegram_handle_invalid_characters(handle):
     assert is_valid_telegram_handle(handle) is False
-
-
