@@ -64,7 +64,9 @@ def _to_private(listing: Listing) -> ListingResponse:
 
 def _raise_domain(exc: Exception) -> None:
     if isinstance(exc, InvalidPriceRangeError):
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        )
     if isinstance(exc, ListingUnauthorizedError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
     if isinstance(exc, ListingForbiddenError):
