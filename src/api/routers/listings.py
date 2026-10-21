@@ -14,6 +14,7 @@ from src.api.schemas.listings import (
     ListingUpdate,
 )
 from src.domain.exceptions import (
+    InvalidPriceRangeError,
     ListingForbiddenError,
     ListingNotFoundError,
     ListingUnauthorizedError,
@@ -62,6 +63,8 @@ def _to_private(listing: Listing) -> ListingResponse:
 
 
 def _raise_domain(exc: Exception) -> None:
+    if isinstance(exc, InvalidPriceRangeError):
+        raise HTTPException(status_code=422, detail=str(exc))
     if isinstance(exc, ListingUnauthorizedError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
     if isinstance(exc, ListingForbiddenError):
@@ -103,15 +106,18 @@ def get_listings(
     ),
     service: ListingService = Depends(get_listing_service),
 ) -> list[ListingPublicResponse]:
-    items = service.list_public(
-        skip=skip,
-        limit=limit,
-        category_id=category_id,
-        query=q,
-        min_price=min_price,
-        max_price=max_price,
-        sort_order=sort_order,
-    )
+    try:
+        items = service.list_public(
+            skip=skip,
+            limit=limit,
+            category_id=category_id,
+            query=q,
+            min_price=min_price,
+            max_price=max_price,
+            sort_order=sort_order,
+        )
+    except InvalidPriceRangeError as exc:
+        _raise_domain(exc)
     return [_to_public(item) for item in items]
 
 
