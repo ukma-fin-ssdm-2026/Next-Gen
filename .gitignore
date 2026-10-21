@@ -6,7 +6,6 @@ venv/
 .venv/
 .pytest_cache/
 .coverage
-htmlcov/
 *.egg-info/
 .mypy_cache/
 .ruff_cache/
