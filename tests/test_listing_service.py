@@ -16,6 +16,7 @@ from src.domain.listings import (
     SEED_OWNER_ID,
     WITHDRAWN_LISTING_ID,
     Listing,
+    ListingSortOrder,
 )
 from src.repositories.listings import InMemoryListingRepository
 from src.services.listings import ListingService
@@ -109,6 +110,6 @@ def test_public_catalog_can_sort_oldest_first() -> None:
     )
     service = ListingService(InMemoryListingRepository([newer, older]))
 
-    items = service.list_public(sort_order="oldest")
+    items = service.list_public(sort_order=ListingSortOrder.OLDEST)
 
     assert [item.id for item in items] == [older.id, newer.id]
