@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 
 from src.domain.exceptions import (
+    InvalidPriceRangeError,
     ListingForbiddenError,
     ListingNotFoundError,
     ListingUnauthorizedError,
@@ -88,6 +89,16 @@ def test_filter_by_price_range(listing_service: ListingService) -> None:
 
     empty_low = listing_service.list_public(max_price=100.0)
     assert len(empty_low) == 0
+
+
+def test_list_public_rejects_inverted_price_range(
+    listing_service: ListingService,
+) -> None:
+    """Регресійний тест: запит з min_price > max_price відхиляється помилкою."""
+    with pytest.raises(InvalidPriceRangeError) as exc_info:
+        listing_service.list_public(min_price=200.0, max_price=100.0)
+    assert "min_price" in str(exc_info.value)
+    assert "не може перевищувати max_price" in str(exc_info.value)
 
 
 def test_public_catalog_can_sort_oldest_first() -> None:
