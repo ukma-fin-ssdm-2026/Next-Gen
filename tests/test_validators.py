@@ -1,6 +1,6 @@
 import pytest
 
-from src.domain.validators import is_ukma_email
+from src.domain.validators import is_ukma_email, is_valid_telegram_handle
 
 
 @pytest.mark.parametrize(
@@ -24,3 +24,41 @@ def test_accepts_ukma_email(email):
 )
 def test_rejects_invalid_email(email):
     assert is_ukma_email(email) is False
+
+
+@pytest.mark.parametrize(
+    "handle",
+    [
+        "@student",
+        "@valid_user",
+        "  @student_ukma  ",
+    ],
+)
+def test_accepts_valid_telegram_handle_format(handle):
+    assert is_valid_telegram_handle(handle) is True
+
+
+@pytest.mark.parametrize(
+    "handle",
+    [
+        "student",  # пропущено @
+        "@a",  # занадто короткий (< 5 символів після @)
+        "@" + "a" * 33,  # занадто довгий (> 32 символи)
+    ],
+)
+def test_rejects_telegram_handle_missing_prefix_or_invalid_length(handle):
+    assert is_valid_telegram_handle(handle) is False
+
+
+@pytest.mark.parametrize(
+    "handle",
+    [
+        "@user.name",  # крапка недопустима в юзернеймі TG
+        "@user-name",  # дефіс недопустимий
+        "@user name",  # пробіл всередині
+        "@студент",  # кирилиця заборонена
+        "@user!name",  # спецсимволи заборонені
+    ],
+)
+def test_rejects_telegram_handle_invalid_characters(handle):
+    assert is_valid_telegram_handle(handle) is False
