@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from src.domain.exceptions import (
+    InvalidPriceRangeError,
     ListingForbiddenError,
     ListingNotFoundError,
     ListingUnauthorizedError,
@@ -28,6 +29,10 @@ class ListingService:
         sort_order: ListingSortOrder = ListingSortOrder.NEWEST,
     ) -> list[Listing]:
         """Каталог активних оголошень (FR-006, FR-007, FR-008)."""
+        if min_price is not None and max_price is not None and min_price <= max_price:
+            raise InvalidPriceRangeError(
+                f"min_price ({min_price}) не може перевищувати max_price ({max_price})"
+            )
         items = [item for item in self._repository.list_all() if item.is_public()]
         if category_id is not None:
             items = [item for item in items if item.category_id == category_id]
