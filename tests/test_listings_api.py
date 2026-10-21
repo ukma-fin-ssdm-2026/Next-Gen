@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from src.domain.listings import SEED_CATEGORY_ID, SEED_LISTING_ID, SEED_OWNER_ID
+from src.domain.listings import SEED_LISTING_ID, SEED_OWNER_ID
 
 
 def test_health(client: TestClient) -> None:
@@ -42,16 +42,13 @@ def test_search_query(client: TestClient) -> None:
     assert len(response.json()) == 1
 
 
-def test_create_without_actor_is_401(client: TestClient) -> None:
+def test_create_without_actor_is_401(
+    client: TestClient,
+    listing_payload: dict[str, object],
+) -> None:
     response = client.post(
         "/api/v1/listings",
-        json={
-            "title": "Конспект з алгебри",
-            "description": "Друкований конспект, майже не користувався.",
-            "price": 80,
-            "category_id": str(SEED_CATEGORY_ID),
-            "contact": "@someone",
-        },
+        json=listing_payload,
     )
     assert response.status_code == 401
 
@@ -116,17 +113,14 @@ def test_filter_by_price_range_api(client: TestClient) -> None:
     assert len(res_empty.json()) == 0
 
 
-def test_catalog_accepts_oldest_sort_order(client: TestClient) -> None:
+def test_catalog_accepts_oldest_sort_order(
+    client: TestClient,
+    listing_payload: dict[str, object],
+) -> None:
     created = client.post(
         "/api/v1/listings",
         headers={"X-Actor-Id": str(SEED_OWNER_ID)},
-        json={
-            "title": "Новіше оголошення",
-            "description": "Достатньо довгий опис нового оголошення.",
-            "price": 250.0,
-            "category_id": str(SEED_CATEGORY_ID),
-            "contact": "@student",
-        },
+        json=listing_payload,
     )
     assert created.status_code == 201
 

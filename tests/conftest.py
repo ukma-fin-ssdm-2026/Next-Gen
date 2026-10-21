@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from src.api.deps import get_listing_service
 from src.api.main import app
+from src.domain.listings import SEED_CATEGORY_ID
 from src.repositories.listings import InMemoryListingRepository
 from src.services.listings import ListingService
 
@@ -20,3 +21,15 @@ def client(listing_service: ListingService):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def listing_payload() -> dict[str, object]:
+    """Валідне тіло створення оголошення для HTTP-тестів."""
+    return {
+        "title": "Конспект з алгебри",
+        "description": "Друкований конспект, майже не користувався.",
+        "price": 80.0,
+        "category_id": str(SEED_CATEGORY_ID),
+        "contact": "@someone",
+    }
