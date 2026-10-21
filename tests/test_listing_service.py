@@ -38,16 +38,17 @@ def test_search_by_title(listing_service: ListingService) -> None:
 
 
 def test_update_requires_owner(listing_service: ListingService) -> None:
-    with pytest.raises(ListingForbiddenError):
+    with pytest.raises(ListingForbiddenError) as exc_info:
         listing_service.update(
             SEED_LISTING_ID,
             actor_id=uuid4(),
             title="Спроба змінити чуже оголошення",
         )
+    assert str(exc_info.value) == "Немає прав змінювати чуже оголошення"
 
 
 def test_create_requires_actor(listing_service: ListingService) -> None:
-    with pytest.raises(ListingUnauthorizedError):
+    with pytest.raises(ListingUnauthorizedError) as exc_info:
         listing_service.create(
             actor_id=None,
             title="Конспект з алгебри",
@@ -56,6 +57,7 @@ def test_create_requires_actor(listing_service: ListingService) -> None:
             category_id=SEED_LISTING_ID,
             contact="@someone",
         )
+    assert str(exc_info.value) == "Потрібна ідентифікація користувача"
 
 
 def test_owner_can_update_title(listing_service: ListingService) -> None:
@@ -68,15 +70,46 @@ def test_owner_can_update_title(listing_service: ListingService) -> None:
     assert updated.user_id == SEED_OWNER_ID
 
 
+def test_owner_can_update_all_editable_fields(
+    listing_service: ListingService,
+) -> None:
+    original = listing_service.get_public(SEED_LISTING_ID)
+    previous_updated_at = original.updated_at
+
+    updated = listing_service.update(
+        SEED_LISTING_ID,
+        actor_id=SEED_OWNER_ID,
+        title="Оновлене худі",
+        description="Оновлений опис оголошення.",
+        price=175.0,
+        contact="@updated_contact",
+    )
+
+    assert updated.title == "Оновлене худі"
+    assert updated.description == "Оновлений опис оголошення."
+    assert updated.price == 175.0
+    assert updated.contact == "@updated_contact"
+    assert updated.updated_at > previous_updated_at
+
+
 def test_delete_marks_withdrawn_and_preserves_data(
     listing_service: ListingService,
 ) -> None:
+    previous_updated_at = listing_service.get_public(SEED_LISTING_ID).updated_at
     deleted = listing_service.delete(SEED_LISTING_ID, actor_id=SEED_OWNER_ID)
     assert deleted.status.value == "WITHDRAWN"
+    assert deleted.updated_at > previous_updated_at
     items = listing_service.list_public()
     assert SEED_LISTING_ID not in {item.id for item in items}
-    with pytest.raises(ListingNotFoundError):
+    with pytest.raises(ListingNotFoundError) as exc_info:
         listing_service.get_public(SEED_LISTING_ID)
+    assert str(exc_info.value) == "Оголошення не знайдено"
+
+
+def test_get_public_reports_missing_listing(listing_service: ListingService) -> None:
+    with pytest.raises(ListingNotFoundError) as exc_info:
+        listing_service.get_public(uuid4())
+    assert str(exc_info.value) == "Оголошення не знайдено"
 
 
 def test_filter_by_price_range(listing_service: ListingService) -> None:
@@ -90,6 +123,9 @@ def test_filter_by_price_range(listing_service: ListingService) -> None:
     empty_low = listing_service.list_public(max_price=100.0)
     assert len(empty_low) == 0
 
+    exact_boundary = listing_service.list_public(min_price=150.0, max_price=150.0)
+    assert [item.id for item in exact_boundary] == [SEED_LISTING_ID]
+
 
 def test_list_public_rejects_inverted_price_range(
     listing_service: ListingService,
@@ -97,8 +133,62 @@ def test_list_public_rejects_inverted_price_range(
     """Регресійний тест: запит з min_price > max_price відхиляється помилкою."""
     with pytest.raises(InvalidPriceRangeError) as exc_info:
         listing_service.list_public(min_price=200.0, max_price=100.0)
-    assert "min_price" in str(exc_info.value)
-    assert "не може перевищувати max_price" in str(exc_info.value)
+    assert (
+        str(exc_info.value)
+        == "min_price (200.0) не може перевищувати max_price (100.0)"
+    )
+
+
+def test_public_catalog_filters_by_category_and_searches_description() -> None:
+    target_category = uuid4()
+    title_match = Listing(
+        title="Синій рюкзак",
+        description="Без дефектів, майже новий.",
+        price=500.0,
+        category_id=target_category,
+        contact="@title_match",
+        user_id=SEED_OWNER_ID,
+    )
+    description_match = Listing(
+        title="Портфель",
+        description="Зручний синій аксесуар для навчання.",
+        price=400.0,
+        category_id=target_category,
+        contact="@description_match",
+        user_id=SEED_OWNER_ID,
+    )
+    other_category = Listing(
+        title="Синій пенал",
+        description="Канцелярія.",
+        price=100.0,
+        category_id=uuid4(),
+        contact="@other_category",
+        user_id=SEED_OWNER_ID,
+    )
+    service = ListingService(
+        InMemoryListingRepository([title_match, description_match, other_category])
+    )
+
+    items = service.list_public(category_id=target_category, query="синій")
+
+    assert {item.id for item in items} == {title_match.id, description_match.id}
+
+
+def test_public_catalog_uses_default_limit_of_ten() -> None:
+    listings = [
+        Listing(
+            title=f"Оголошення {index}",
+            description="Валідний опис тестового оголошення.",
+            price=float(index),
+            category_id=SEED_CATEGORY_ID,
+            contact="@student",
+            user_id=SEED_OWNER_ID,
+        )
+        for index in range(11)
+    ]
+    service = ListingService(InMemoryListingRepository(listings))
+
+    assert len(service.list_public()) == 10
 
 
 def test_public_catalog_can_sort_oldest_first() -> None:
