@@ -100,6 +100,10 @@ paths:
                 title: Response Get Listings Api V1 Listings Get
         '422':
           description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     post:
       tags:
       - Listings
@@ -141,6 +145,10 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/listings/{listing_id}:
     get:
       tags:
@@ -171,6 +179,10 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     patch:
       tags:
       - Listings
@@ -231,6 +243,10 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     delete:
       tags:
       - Listings
@@ -282,6 +298,10 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /health:
     get:
       tags:
@@ -311,6 +331,18 @@ components:
       required:
       - detail
       title: ErrorResponse
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationErrorDetail'
+          type: array
+          title: Detail
+          description: Список помилок валідації
+      type: object
+      required:
+      - detail
+      title: HTTPValidationError
     HealthResponse:
       properties:
         status:
@@ -574,3 +606,34 @@ components:
           title: Contact
       type: object
       title: ListingUpdate
+    ValidationErrorDetail:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Loc
+          description: Розташування поля помилки
+          examples:
+          - - query
+            - min_price
+        msg:
+          type: string
+          title: Msg
+          description: Повідомлення про помилку
+          examples:
+          - min_price (200.0) не може перевищувати max_price (100.0)
+        type:
+          type: string
+          title: Type
+          description: Тип валідаційної помилки
+          examples:
+          - value_error
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationErrorDetail

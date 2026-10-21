@@ -70,3 +70,27 @@ class ErrorResponse(BaseModel):
     detail: str = Field(
         ..., description="Опис помилки", examples=["Оголошення не знайдено"]
     )
+
+
+class ValidationErrorDetail(BaseModel):
+    loc: list[str | int] = Field(
+        ...,
+        description="Розташування поля помилки",
+        examples=[["query", "min_price"]],
+    )
+    msg: str = Field(
+        ...,
+        description="Повідомлення про помилку",
+        examples=["min_price (200.0) не може перевищувати max_price (100.0)"],
+    )
+    type: str = Field(
+        ...,
+        description="Тип валідаційної помилки",
+        examples=["value_error"],
+    )
+
+
+class HTTPValidationError(BaseModel):
+    detail: list[ValidationErrorDetail] = Field(
+        ..., description="Список помилок валідації"
+    )

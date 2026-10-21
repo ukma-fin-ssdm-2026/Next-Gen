@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from src.api.deps import get_listing_service
 from src.api.schemas.listings import (
     ErrorResponse,
+    HTTPValidationError,
     ListingCreate,
     ListingPublicResponse,
     ListingResponse,
@@ -65,7 +66,14 @@ def _to_private(listing: Listing) -> ListingResponse:
 def _raise_domain(exc: Exception) -> None:
     if isinstance(exc, InvalidPriceRangeError):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=[
+                {
+                    "loc": ["query", "min_price"],
+                    "msg": str(exc),
+                    "type": "value_error",
+                }
+            ],
         )
     if isinstance(exc, ListingUnauthorizedError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
@@ -86,7 +94,10 @@ def _raise_domain(exc: Exception) -> None:
         "Контакт продавця не включається."
     ),
     responses={
-        422: {"description": "Validation Error"},
+        422: {
+            "model": HTTPValidationError,
+            "description": "Validation Error",
+        },
     },
 )
 def get_listings(
@@ -133,7 +144,7 @@ def get_listings(
     ),
     responses={
         401: {"model": ErrorResponse, "description": "Unauthorized"},
-        422: {"description": "Validation Error"},
+        422: {"model": HTTPValidationError, "description": "Validation Error"},
     },
 )
 def create_listing(
@@ -162,7 +173,7 @@ def create_listing(
     description="Деталі активного оголошення без контактів.",
     responses={
         404: {"model": ErrorResponse, "description": "Not Found"},
-        422: {"description": "Validation Error"},
+        422: {"model": HTTPValidationError, "description": "Validation Error"},
     },
 )
 def get_listing(
@@ -185,7 +196,7 @@ def get_listing(
         401: {"model": ErrorResponse, "description": "Unauthorized"},
         403: {"model": ErrorResponse, "description": "Forbidden"},
         404: {"model": ErrorResponse, "description": "Not Found"},
-        422: {"description": "Validation Error"},
+        422: {"model": HTTPValidationError, "description": "Validation Error"},
     },
 )
 def update_listing(
@@ -221,7 +232,7 @@ def update_listing(
         401: {"model": ErrorResponse, "description": "Unauthorized"},
         403: {"model": ErrorResponse, "description": "Forbidden"},
         404: {"model": ErrorResponse, "description": "Not Found"},
-        422: {"description": "Validation Error"},
+        422: {"model": HTTPValidationError, "description": "Validation Error"},
     },
 )
 def delete_listing(

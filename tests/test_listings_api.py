@@ -120,8 +120,12 @@ def test_catalog_rejects_inverted_price_range(client: TestClient) -> None:
         "/api/v1/listings", params={"min_price": 200.0, "max_price": 100.0}
     )
     assert res.status_code == 422
-    assert "min_price" in res.json()["detail"]
-    assert "не може перевищувати max_price" in res.json()["detail"]
+    payload = res.json()
+    assert isinstance(payload["detail"], list)
+    assert payload["detail"][0]["loc"] == ["query", "min_price"]
+    assert "min_price" in payload["detail"][0]["msg"]
+    assert "не може перевищувати max_price" in payload["detail"][0]["msg"]
+    assert payload["detail"][0]["type"] == "value_error"
 
 
 def test_catalog_accepts_oldest_sort_order(
