@@ -114,3 +114,23 @@ def test_filter_by_price_range_api(client: TestClient) -> None:
     res_empty = client.get("/api/v1/listings", params={"min_price": 200.0})
     assert res_empty.status_code == 200
     assert len(res_empty.json()) == 0
+
+
+def test_catalog_accepts_oldest_sort_order(client: TestClient) -> None:
+    created = client.post(
+        "/api/v1/listings",
+        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
+        json={
+            "title": "Новіше оголошення",
+            "description": "Достатньо довгий опис нового оголошення.",
+            "price": 250.0,
+            "category_id": str(SEED_CATEGORY_ID),
+            "contact": "@student",
+        },
+    )
+    assert created.status_code == 201
+
+    response = client.get("/api/v1/listings", params={"sort": "oldest"})
+
+    assert response.status_code == 200
+    assert response.json()[0]["id"] == str(SEED_LISTING_ID)
