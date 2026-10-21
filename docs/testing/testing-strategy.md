@@ -2,38 +2,38 @@
 
 ## 1. Поточний статус тестування (Current Testing Status)
 
-У межах Лабораторної роботи №6 реалізовано комплексну піраміду модульних тестів для ядра студентського маркетплейсу **Baraholka NaUKMA** (модулі [`src/domain/`](file:///src/domain), [`src/services/`](file:///src/services), [`src/repositories/`](file:///src/repositories), [`src/api/routers/`](file:///src/api/routers)).
+У межах Лабораторної роботи №6 реалізовано комплексну піраміду модульних тестів для ядра студентського маркетплейсу **Baraholka NaUKMA** (модулі [`src/domain/`](../../src/domain), [`src/services/`](../../src/services), [`src/repositories/`](../../src/repositories), [`src/api/routers/`](../../src/api/routers)).
 
 - **Стек тестування**: Python 3.12, `pytest` 8.4+, `pytest-cov` 7.1+, `httpx` / FastAPI `TestClient`, `unittest.mock`, `hypothesis` 6.170+.
-- **Обсяг набору тестів**: **34 модульні тести** (у гілці `main`) / **37 тестів** (з урахуванням регресійних та property-based тестів Керівника налагодження), що суттєво перевищує обов'язковий норматив завдання (≥10 тестів для щонайменше 2 модулів).
+- **Обсяг набору тестів**: **37 зібраних тестів** (поточний стан дерева проєкту містить 20 базових тестів, 14 модульних тестів сортування/граничних випадків, 2 регресійні тести валідації цінового діапазону та 1 Hypothesis property-based тест), що суттєво перевищує обов'язковий норматив завдання (≥10 тестів для щонайменше 2 модулів).
 - **Організація тестового набору**:
-  - [`tests/test_validators.py`](file:///tests/test_validators.py): Перевірка доменної валідації назв, цін, категорій та студентських контрактних даних.
-  - [`tests/test_listing_service.py`](file:///tests/test_listing_service.py): Тестування доменної бізнес-логіки створення, редагування, фільтрації, сортування та відкликання оголошень із застосуванням тестових дублерів (In-Memory Repository) та фікстур.
-  - [`tests/test_listings_api.py`](file:///tests/test_listings_api.py): Перевірка HTTP API, кодів відповідей (200, 201, 400, 401, 403, 404, 422), валідації тіла запитів та пагінації.
-  - [`tests/test_security.py`](file:///tests/test_security.py): Валідація інваріантів безпеки FR-010 та SEC-002 (захист контактних даних продавця від анонімного доступу).
-  - [`tests/conftest.py`](file:///tests/conftest.py): Спільні фікстури тестового клієнта, моків авторизації та тестових даних.
+  - [`tests/test_validators.py`](../../tests/test_validators.py): Перевірка доменної валідації назв, цін, категорій та студентських контактних даних.
+  - [`tests/test_listing_service.py`](../../tests/test_listing_service.py): Тестування доменної бізнес-логіки створення, редагування, фільтрації, сортування та відкликання оголошень із застосуванням тестових дублерів (In-Memory Repository) та фікстур.
+  - [`tests/test_listings_api.py`](../../tests/test_listings_api.py): Перевірка HTTP API, кодів відповідей (200, 201, 400, 401, 403, 404, 422), валідації тіла запитів та пагінації.
+  - [`tests/test_security.py`](../../tests/test_security.py): Валідація правила безпеки SEC-002 (маскування та блокування витоку контактних даних продавця у публічних та анонімних відповідях GET/PATCH). Позитивний сценарій авторизованого отримання контактів продавця згідно з вимогами FR-010 наразі є відкритою функціональною та тестовою прогалиною: поточний ендпоінт `GET /api/v1/listings/{id}` завжди повертає `ListingPublicResponse` без поля `contact`. Додавання авторизованого шляху доступу до контактів та відповідного позитивного тесту заплановано в наступній ітерації API.
+  - [`tests/conftest.py`](../../tests/conftest.py): Спільні фікстури тестового клієнта, моків авторизації та тестових даних.
 - **Методологія**: Усі тести побудовано за стандартом **AAA (Arrange – Act – Assert)**. Тести повністю ізольовані, детерміністичні та незалежні від порядку виконання.
 
 ---
 
 ## 2. Підсумок покриття коду (Coverage Summary)
 
-Звіт генеровано інструментом `pytest-cov` та збережено в директорії [`htmlcov/`](file:///htmlcov/index.html).
+Звіт генеровано інструментом `pytest-cov` та збережено в директорії [`htmlcov/`](../../htmlcov/index.html).
 
 - **Загальне покриття коду**: **96%** (221 з 230 виконуваних рядків коду покрито тестами).
 
 ### Деталізація покриття за модулями:
 | Модуль | Рядків (Statements) | Пропущено (Missing) | Покриття (%) |
 | :--- | :---: | :---: | :---: |
-| [`src/api/deps.py`](file:///src/api/deps.py) | 5 | 0 | **100%** |
-| [`src/api/main.py`](file:///src/api/main.py) | 14 | 0 | **100%** |
-| [`src/api/schemas/listings.py`](file:///src/api/schemas/listings.py) | 32 | 0 | **100%** |
-| [`src/domain/exceptions.py`](file:///src/domain/exceptions.py) | 4 | 0 | **100%** |
-| [`src/domain/listings.py`](file:///src/domain/listings.py) | 28 | 0 | **100%** |
-| [`src/domain/validators.py`](file:///src/domain/validators.py) | 6 | 0 | **100%** |
-| [`src/repositories/listings.py`](file:///src/repositories/listings.py) | 27 | 1 | **96%** |
-| [`src/api/routers/listings.py`](file:///src/api/routers/listings.py) | 53 | 3 | **94%** |
-| [`src/services/listings.py`](file:///src/services/listings.py) | 61 | 5 | **92%** |
+| [`src/api/deps.py`](../../src/api/deps.py) | 5 | 0 | **100%** |
+| [`src/api/main.py`](../../src/api/main.py) | 14 | 0 | **100%** |
+| [`src/api/schemas/listings.py`](../../src/api/schemas/listings.py) | 32 | 0 | **100%** |
+| [`src/domain/exceptions.py`](../../src/domain/exceptions.py) | 4 | 0 | **100%** |
+| [`src/domain/listings.py`](../../src/domain/listings.py) | 28 | 0 | **100%** |
+| [`src/domain/validators.py`](../../src/domain/validators.py) | 6 | 0 | **100%** |
+| [`src/repositories/listings.py`](../../src/repositories/listings.py) | 27 | 1 | **96%** |
+| [`src/api/routers/listings.py`](../../src/api/routers/listings.py) | 53 | 3 | **94%** |
+| [`src/services/listings.py`](../../src/services/listings.py) | 61 | 5 | **92%** |
 | **Разом (Total)** | **230** | **9** | **96%** |
 
 ### Аналіз непокритих ділянок коду (Coverage Gaps):
@@ -51,9 +51,9 @@
 1. **Інтеграційні тести (Integration Testing)**:
    - Перехід від `InMemoryListingRepository` до тестування реальної реляційної СУБД (PostgreSQL / SQLite через Testcontainers або ізольовану тестову схему).
    - Перевірка коректності міграцій Alembic, транзакційної ізоляції та генерації зовнішніх ключів.
-   - Тестування інтеграції з S3-сумісним об'єктним сховищем зображень (MinIO) згідно з ADR-003.
+   - Тестування інтеграції зі сховищем зображень згідно з описом компонента Image Storage у [`docs/architecture/high-level-design.md`](../architecture/high-level-design.md) (інтеграційне тестування адаптера об'єктного сховища після фіналізації вибору хмарного чи локального провайдера, що відповідно до [`docs/architecture/threat-model.md`](../architecture/threat-model.md) наразі залишається відкритим рішенням).
 2. **Системні та наскрізні тести (System / End-to-End Testing)**:
-   - Автоматизація повних призначених для користувача шляхів (User Journeys): публікація товару -> повнотекстовий пошук -> авторизація студента -> перегляд контактних даних (SEC-002) -> деактивація.
+   - Автоматизація повних призначених для користувача шляхів (User Journeys): публікація товару -> повнотекстовий пошук -> авторизація студента -> перегляд контактних даних продавця (після усунення прогалини FR-010) -> деактивація.
    - Запуск end-to-end тестів у повноцінному середовищі Docker Compose на етапі передрелізного тестування.
 3. **Приймальні тести (Acceptance / UAT)**:
    - Формалізація користувацьких історій (US-01 – US-08) та варіантів використання (UC-1 – UC-5) у вигляді виконуваних BDD-сценаріїв (Gherkin / `pytest-bdd`).
@@ -67,7 +67,7 @@
   - У наступних ітераціях: фаззинг заголовків JWT-токенів та динамічне DAST-тестування (OWASP ZAP) для захисту ендпоінтів від ін'єкцій та підробки авторства оголошень.
 - **Продуктивність (Performance & Load Testing)**:
   - Стрес-тестування публічного каталогу та фільтрів за допомогою `Locust` або `k6`.
-  - Валідація вимоги NFR-001: latency < 150ms при навантаженні до 100 одночасних запитів/сек.
+  - Валідація точного критерію прийнятності **PERF-001**: час завантаження першої сторінки списку оголошень (з пагінацією до 20 карток) не повинен перевищувати 300 мс при навантаженні до 50 одночасних активних користувачів ([`docs/requirements/requirements.md`](../requirements/requirements.md)). Додатковим суворішим інженерним орієнтиром визначено досягнення latency < 150 мс при навантаженні до 100 запитів/сек.
 - **Тестування на основі властивостей (Property-Based Testing)**:
   - Розширення застосування `hypothesis` для генерації екстремальних юнікод-рядків у заголовках та описах, а також перевірки інваріантів математичних обчислень знижок та комісій.
 
@@ -75,7 +75,7 @@
 
 ## 5. Інтеграція тестів у конвеєр CI/CD
 
-Принцип **Shift-Left Testing** забезпечується наскрізною автоматизацією у [`.github/workflows/ci.yml`](file:///.github/workflows/ci.yml):
+Принцип **Shift-Left Testing** забезпечується наскрізною автоматизацією у [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml):
 1. **Local Pre-commit**: лінтинг і перевірка секретів (`detect-secrets`, `black`, `flake8`).
 2. **GitHub Actions CI (на кожен push та pull request у `main`)**:
    - `black --check src tests scripts` (перевірка форматування)
@@ -91,7 +91,7 @@
 # Бонуси (Bonus Evidence)
 
 ### 1. Ворота покриття в CI (Coverage Gate Policy) — Бонус 0.25 бала
-- **Статус реалізації**: Інтегровано у робочий процес CI ([`.github/workflows/ci.yml`](file:///.github/workflows/ci.yml)).
+- **Статус реалізації**: Інтегровано у робочий процес CI ([`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)).
 - **Команда виконання**:
   ```yaml
   - name: Tests with coverage gate (85%)
@@ -108,7 +108,7 @@
 ---
 
 ### 2. Тести на основі властивостей (Property-Based Testing) — Бонус 0.25 бала
-- **Статус реалізації**: Розроблено у [`tests/test_properties.py`](file:///tests/test_properties.py) (гілка `fix/lab06-debugging-lead`).
+- **Статус реалізації**: Розроблено у [`tests/test_properties.py`](../../tests/test_properties.py).
 - **Використаний інструмент**: Бібліотека `hypothesis` (Python).
 - **Формулювання властивості (Property Invariant)**:
   > *Для будь-яких псевдовипадково згенерованих цін `min_price` та `max_price`, якщо `min_price <= max_price`, каталог повертає виключно ті активні оголошення, ціна яких потрапляє в закритий діапазон `[min_price, max_price]`; якщо ж `min_price > max_price`, система детерміністично відхиляє запит помилкою `InvalidPriceRangeError` незалежно від будь-яких числових значень.*
