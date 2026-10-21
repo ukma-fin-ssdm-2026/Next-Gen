@@ -5,12 +5,12 @@
 
 ## Команда 
 
-| Учасник | Lab 1 — репозиторій | Lab 2 — вимоги | Lab 3 — архітектура | Lab 4 — API | Lab 5 — якість коду |
-|---|---|---|---|---|---|
-| **Артем Солодкий** | Repo Maintainer | Requirements Lead + Functional Requirements Lead | Data Model & Threat Modeling Lead | Quality Lead | Code Reviewer |
-| **Данііл Чернявський** | CI Maintainer | Quality Lead (NFR) | Architecture Lead | Backend Lead + API Design Lead | Quality & Prototype Lead |
-| **Євгеній Остапенко** | Documentation Lead | Documentation Lead | Documentation & UML Lead | Documentation Lead | Documentation Lead |
-| **Богдан Солонина** | Issue Tracker Lead | Traceability Lead | Traceability Lead | Integration Lead | Security Analyst |
+| Учасник | Lab 1 — репозиторій | Lab 2 — вимоги | Lab 3 — архітектура | Lab 4 — API | Lab 5 — якість коду | Lab 6 — тестування |
+|---|---|---|---|---|---|---|
+| **Артем Солодкий** | Repo Maintainer | Requirements Lead + Functional Requirements Lead | Data Model & Threat Modeling Lead | Quality Lead | Code Reviewer | Testing Lead + Test Doubles Lead |
+| **Данііл Чернявський** | CI Maintainer | Quality Lead (NFR) | Architecture Lead | Backend Lead + API Design Lead | Quality & Prototype Lead | Debugging Lead |
+| **Євгеній Остапенко** | Documentation Lead | Documentation Lead | Documentation & UML Lead | Documentation Lead | Documentation Lead | Testing Strategist |
+| **Богдан Солонина** | Issue Tracker Lead | Traceability Lead | Traceability Lead | Integration Lead | Security Analyst | Integration Lead |
 
 Детальний опис відповідальностей наведено в [Командному статуті](TeamCharter.md#2-ролі-та-відповідальності).
 
@@ -58,11 +58,18 @@
 - [Звіт командного огляду коду](docs/code-quality/review-report.md) - результати рецензування кодової бази іншої команди за 5 критеріями.
 - [Прогрес реалізації компонентів](docs/code-quality/progress.md) - стан розробки базової структури коду та мінімального прототипу системи.
 
+## Тестування та налагодження (Лабораторна 6)
+
+- [Стратегія тестування](docs/testing/testing-strategy.md) - комплексна стратегія тестування, аналіз покриття (96%), плани піраміди тестування, ворота якості в CI (поріг 85%) та бонуси.
+- [Журнал налагодження](docs/testing/debugging-log.md) - 5 систематичних кроків відтворення, ізоляції та виправлення логічного дефекту фільтрації цін із регресійними тестами.
+- [Звіт покриття коду](htmlcov/index.html) - інтерактивний HTML-звіт тестового покриття на рівні 96% за допомогою `pytest-cov`.
+- [Property-Based тестування](tests/test_properties.py) - перевірка інваріантів каталогу на згенерованих вхідних даних за допомогою `hypothesis` (Бонус).
+
 ### Швидкий запуск та перевірки якості коду
 
 1. **Встановлення залежностей розробки та тестування:**
    ```bash
-   pip install fastapi pyyaml uvicorn bandit flake8 black pytest httpx
+   pip install fastapi pyyaml uvicorn bandit flake8 black pytest httpx pytest-cov hypothesis
    ```
 
 2. **Автогенерація специфікації OpenAPI з коду:**
@@ -76,10 +83,11 @@
    python -m bandit -r src scripts -v
    ```
 
-4. **Запуск автоматизованих та регресійних тестів:**
+4. **Запуск автоматизованих тестів із перевіркою порогу покриття (Coverage Gate 85%):**
    ```bash
-   python -m pytest -q
+   python -m pytest -q --cov=src --cov-report=term-missing --cov-fail-under=85
    ```
+
 
 5. **Локальний запуск API сервера:**
    ```bash
