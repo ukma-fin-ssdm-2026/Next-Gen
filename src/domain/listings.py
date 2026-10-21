@@ -15,6 +15,13 @@ class ListingStatus(str, Enum):
     SOLD = "SOLD"
 
 
+class ListingSortOrder(str, Enum):
+    """Порядок сортування каталогу за датою публікації (FR-008)."""
+
+    NEWEST = "newest"
+    OLDEST = "oldest"
+
+
 def utc_now() -> datetime:
     """Повертає поточний час у UTC."""
     return datetime.now(timezone.utc)

@@ -7,7 +7,7 @@ from src.domain.exceptions import (
     ListingNotFoundError,
     ListingUnauthorizedError,
 )
-from src.domain.listings import Listing, ListingStatus, utc_now
+from src.domain.listings import Listing, ListingSortOrder, ListingStatus, utc_now
 from src.repositories.listings import ListingRepository
 
 
@@ -25,6 +25,7 @@ class ListingService:
         query: str | None = None,
         min_price: float | None = None,
         max_price: float | None = None,
+        sort_order: ListingSortOrder = ListingSortOrder.NEWEST,
     ) -> list[Listing]:
         """Каталог активних оголошень (FR-006, FR-007, FR-008)."""
         items = [item for item in self._repository.list_all() if item.is_public()]
@@ -42,7 +43,10 @@ class ListingService:
             items = [item for item in items if item.price >= min_price]
         if max_price is not None:
             items = [item for item in items if item.price <= max_price]
-        items.sort(key=lambda item: item.created_at, reverse=True)
+        items.sort(
+            key=lambda item: item.created_at,
+            reverse=sort_order != ListingSortOrder.OLDEST,
+        )
         return items[skip : skip + limit]
 
     def get_public(self, listing_id: UUID) -> Listing:

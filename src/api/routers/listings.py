@@ -18,7 +18,7 @@ from src.domain.exceptions import (
     ListingNotFoundError,
     ListingUnauthorizedError,
 )
-from src.domain.listings import Listing
+from src.domain.listings import Listing, ListingSortOrder
 from src.services.listings import ListingService
 
 router = APIRouter(
@@ -96,6 +96,11 @@ def get_listings(
     ),
     min_price: Optional[float] = Query(None, ge=0, description="Мінімальна ціна"),
     max_price: Optional[float] = Query(None, ge=0, description="Максимальна ціна"),
+    sort_order: ListingSortOrder = Query(
+        ListingSortOrder.NEWEST,
+        alias="sort",
+        description="Порядок за датою публікації: newest або oldest",
+    ),
     service: ListingService = Depends(get_listing_service),
 ) -> list[ListingPublicResponse]:
     items = service.list_public(
@@ -105,6 +110,7 @@ def get_listings(
         query=q,
         min_price=min_price,
         max_price=max_price,
+        sort_order=sort_order,
     )
     return [_to_public(item) for item in items]
 

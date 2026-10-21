@@ -1,5 +1,7 @@
 """Модульні тести Listing Service без HTTP."""
 
+from datetime import datetime, timezone
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
@@ -9,7 +11,15 @@ from src.domain.exceptions import (
     ListingNotFoundError,
     ListingUnauthorizedError,
 )
-from src.domain.listings import SEED_LISTING_ID, SEED_OWNER_ID, WITHDRAWN_LISTING_ID
+from src.domain.listings import (
+    SEED_CATEGORY_ID,
+    SEED_LISTING_ID,
+    SEED_OWNER_ID,
+    WITHDRAWN_LISTING_ID,
+    Listing,
+    ListingSortOrder,
+)
+from src.repositories.listings import InMemoryListingRepository, ListingRepository
 from src.services.listings import ListingService
 
 
@@ -78,3 +88,49 @@ def test_filter_by_price_range(listing_service: ListingService) -> None:
 
     empty_low = listing_service.list_public(max_price=100.0)
     assert len(empty_low) == 0
+
+
+def test_public_catalog_can_sort_oldest_first() -> None:
+    older = Listing(
+        title="Старіше оголошення",
+        description="Тестовий опис старішого оголошення.",
+        price=100.0,
+        category_id=SEED_CATEGORY_ID,
+        contact="@older",
+        user_id=SEED_OWNER_ID,
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    newer = Listing(
+        title="Нове оголошення",
+        description="Тестовий опис нового оголошення.",
+        price=200.0,
+        category_id=SEED_CATEGORY_ID,
+        contact="@newer",
+        user_id=SEED_OWNER_ID,
+        created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+    )
+    service = ListingService(InMemoryListingRepository([newer, older]))
+
+    items = service.list_public(sort_order=ListingSortOrder.OLDEST)
+
+    assert [item.id for item in items] == [older.id, newer.id]
+
+
+def test_create_delegates_to_repository_and_uses_actor_as_owner() -> None:
+    repository = Mock(spec=ListingRepository)
+    repository.add.side_effect = lambda listing: listing
+    service = ListingService(repository)
+    actor_id = uuid4()
+
+    created = service.create(
+        actor_id=actor_id,
+        title="Лабораторний халат",
+        description="Чистий лабораторний халат розміру M.",
+        price=300.0,
+        category_id=SEED_CATEGORY_ID,
+        contact="@student",
+    )
+
+    assert created.user_id == actor_id
+    assert created.status.value == "ACTIVE"
+    repository.add.assert_called_once_with(created)

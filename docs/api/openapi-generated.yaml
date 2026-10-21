@@ -80,6 +80,14 @@ paths:
           description: Максимальна ціна
           title: Max Price
         description: Максимальна ціна
+      - name: sort
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/ListingSortOrder'
+          description: 'Порядок за датою публікації: newest або oldest'
+          default: newest
+        description: 'Порядок за датою публікації: newest або oldest'
       responses:
         '200':
           description: Successful Response
@@ -528,6 +536,13 @@ components:
       - updated_at
       - contact
       title: ListingResponse
+    ListingSortOrder:
+      type: string
+      enum:
+      - newest
+      - oldest
+      title: ListingSortOrder
+      description: Порядок сортування каталогу за датою публікації (FR-008).
     ListingUpdate:
       properties:
         title:

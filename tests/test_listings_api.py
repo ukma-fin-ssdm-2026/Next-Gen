@@ -2,9 +2,10 @@
 
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
-from src.domain.listings import SEED_CATEGORY_ID, SEED_LISTING_ID, SEED_OWNER_ID
+from src.domain.listings import SEED_LISTING_ID, SEED_OWNER_ID
 
 
 def test_health(client: TestClient) -> None:
@@ -42,16 +43,13 @@ def test_search_query(client: TestClient) -> None:
     assert len(response.json()) == 1
 
 
-def test_create_without_actor_is_401(client: TestClient) -> None:
+def test_create_without_actor_is_401(
+    client: TestClient,
+    listing_payload: dict[str, object],
+) -> None:
     response = client.post(
         "/api/v1/listings",
-        json={
-            "title": "Конспект з алгебри",
-            "description": "Друкований конспект, майже не користувався.",
-            "price": 80,
-            "category_id": str(SEED_CATEGORY_ID),
-            "contact": "@someone",
-        },
+        json=listing_payload,
     )
     assert response.status_code == 401
 
@@ -114,3 +112,40 @@ def test_filter_by_price_range_api(client: TestClient) -> None:
     res_empty = client.get("/api/v1/listings", params={"min_price": 200.0})
     assert res_empty.status_code == 200
     assert len(res_empty.json()) == 0
+
+
+def test_catalog_accepts_oldest_sort_order(
+    client: TestClient,
+    listing_payload: dict[str, object],
+) -> None:
+    created = client.post(
+        "/api/v1/listings",
+        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
+        json=listing_payload,
+    )
+    assert created.status_code == 201
+
+    response = client.get("/api/v1/listings", params={"sort": "oldest"})
+
+    assert response.status_code == 200
+    assert response.json()[0]["id"] == str(SEED_LISTING_ID)
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"skip": -1},
+        {"limit": 0},
+        {"limit": 101},
+        {"q": ""},
+        {"min_price": -0.01},
+        {"sort": "unsupported"},
+    ],
+)
+def test_catalog_rejects_invalid_query_boundaries(
+    client: TestClient,
+    params: dict[str, object],
+) -> None:
+    response = client.get("/api/v1/listings", params=params)
+
+    assert response.status_code == 422
