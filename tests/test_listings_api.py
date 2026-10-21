@@ -114,6 +114,20 @@ def test_filter_by_price_range_api(client: TestClient) -> None:
     assert len(res_empty.json()) == 0
 
 
+def test_catalog_rejects_inverted_price_range(client: TestClient) -> None:
+    """Регресійний тест: API повертає HTTP 422, якщо min_price > max_price."""
+    res = client.get(
+        "/api/v1/listings", params={"min_price": 200.0, "max_price": 100.0}
+    )
+    assert res.status_code == 422
+    payload = res.json()
+    assert isinstance(payload["detail"], list)
+    assert payload["detail"][0]["loc"] == ["query", "min_price"]
+    assert "min_price" in payload["detail"][0]["msg"]
+    assert "не може перевищувати max_price" in payload["detail"][0]["msg"]
+    assert payload["detail"][0]["type"] == "value_error"
+
+
 def test_catalog_accepts_oldest_sort_order(
     client: TestClient,
     listing_payload: dict[str, object],
