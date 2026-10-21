@@ -2,6 +2,7 @@
 
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.domain.listings import SEED_LISTING_ID, SEED_OWNER_ID
@@ -128,3 +129,23 @@ def test_catalog_accepts_oldest_sort_order(
 
     assert response.status_code == 200
     assert response.json()[0]["id"] == str(SEED_LISTING_ID)
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"skip": -1},
+        {"limit": 0},
+        {"limit": 101},
+        {"q": ""},
+        {"min_price": -0.01},
+        {"sort": "unsupported"},
+    ],
+)
+def test_catalog_rejects_invalid_query_boundaries(
+    client: TestClient,
+    params: dict[str, object],
+) -> None:
+    response = client.get("/api/v1/listings", params=params)
+
+    assert response.status_code == 422
