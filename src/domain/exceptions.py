@@ -15,3 +15,7 @@ class ListingUnauthorizedError(ListingError):
 
 class ListingForbiddenError(ListingError):
     """Поточний користувач не є власником оголошення."""
+
+
+class InvalidPriceRangeError(ListingError):
+    """Мінімальна ціна фільтрації перевищує максимальну ціну."""
