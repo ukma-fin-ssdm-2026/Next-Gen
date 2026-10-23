@@ -2,7 +2,7 @@
 
 | Вимога   | Опис                                              | Архітектурний компонент / Сутність БД | Метод верифікації |
 |----------|----------------------------------------------------|----------------------------------------|---------------------|
-| FR-001   | Вхід за університетською адресою                    | Auth Service, Data Access Layer (ORM), User | Unit-тест перевірки домену email |
+| FR-001   | Вхід через Microsoft Entra ID НаУКМА | Microsoft Entra ID, Auth Service, Data Access Layer (ORM), User | Інтеграційні OIDC-тести та unit-тести claims/domain |
 | FR-002   | Створення оголошення (UC-001)                       | Listing Service, Data Access Layer (ORM), Listing, ListingImage, Category, Сховище зображень | Інтеграційний тест створення запису |
 | FR-003   | Редагування оголошення                              | Listing Service, Data Access Layer (ORM), Listing | Unit-тест перевірки власника (seller_id) |
 | FR-004   | Зняття оголошення з публікації                      | Listing Service, Data Access Layer (ORM), Listing (status: WITHDRAWN) | Unit-тест зміни статусу |
@@ -17,7 +17,7 @@
 | FR-013   | Блокування користувачів                             | Auth Service, Moderation Service, Data Access Layer (ORM), User.is_blocked | Unit-тест блокування входу |
 | PERF-001 | Час завантаження ≤300мс при 50 користувачах         | React SPA, API Router, Listing Service, Data Access Layer (ORM), PostgreSQL (Listing) | Навантажувальний тест |
 | REL-001  | Відновлення без втрати даних, RTO ≤5хв              | Data Access Layer (ORM), PostgreSQL Database | Хаос-експеримент (збій сервера) |
-| SEC-001  | Обмеження реєстрації доменом @ukma.edu.ua           | Auth Service, Data Access Layer (ORM), User.email | Unit-тест блокування чужого домену |
+| SEC-001  | Лише tenant НаУКМА та @ukma.edu.ua | Microsoft Entra ID, Auth Service, User.tenant_id/entra_object_id/email | Негативні тести tenant, issuer, audience, expiry, state/nonce і domain |
 | SEC-002  | Приховування контактів від неавторизованих          | API Router, Listing Service, Auth Service, Data Access Layer (ORM), Listing.contact | Unit-тест доступу без токена |
 
 ## Сценарії атрибутів якості

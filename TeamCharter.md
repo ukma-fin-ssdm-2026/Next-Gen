@@ -166,7 +166,7 @@
 - **Конвенції за елементами:**
   - Змінні, поля моделей, атрибути та назви функцій: `snake_case`. Функції та методи обов'язково є дієслівними фразами (`get_listing_by_id`, `verify_listing_ownership`, `mask_seller_contact`).
   - Класи, моделі Pydantic, винятки: `PascalCase` та іменники (`ListingResponse`, `UserCredentials`, `ListingNotFoundError`, `UnauthorizedActionError`).
-  - Константи та конфігураційні змінні оточення: `UPPER_SNAKE_CASE` (`DEFAULT_PAGE_SIZE`, `MAX_IMAGE_UPLOAD_BYTES`, `JWT_ACCESS_TOKEN_EXPIRE_MINUTES`).
+  - Константи та конфігураційні змінні оточення: `UPPER_SNAKE_CASE` (`DEFAULT_PAGE_SIZE`, `MAX_IMAGE_UPLOAD_BYTES`, `MICROSOFT_TENANT_ID`).
   - Приватні методи / внутрішні допоміжні функції: префікс із нижнього підкреслення `_build_filter_query`, `_verify_token_claims`.
 - **Форматування:**
   - Відступи: рівно 4 пробіли на рівень вкладеності. Використання символів табуляції суворо заборонено.
