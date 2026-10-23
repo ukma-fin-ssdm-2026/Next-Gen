@@ -43,6 +43,7 @@
 - [Модель даних](docs/architecture/data-model.md) - схема бази даних (ER) із позначенням чутливих даних.
 - [Модель загроз STRIDE](docs/architecture/threat-model.md) - аналіз меж довіри, ризиків та контрзаходів.
 - [Архітектурні рішення (ADR)](docs/architecture/decisions/) - реєстр ключових технічних рішень проєкту.
+- [Автентифікація Microsoft Entra ID](docs/architecture/decisions/ADR-003-auth-mechanism.md) - single-tenant OIDC-рішення для облікових записів НаУКМА та поточний стан його налаштування.
 - [UML-діаграми](docs/architecture/uml/) - сирцеві файли діаграм компонентів, послідовності та розгортання.
 
 ## Проєктування та документація API

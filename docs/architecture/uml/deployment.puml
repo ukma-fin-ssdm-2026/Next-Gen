@@ -16,6 +16,7 @@ rectangle "Недовірене середовище клієнта" #FFF2CC {
 }
 
 cloud "Інтернет" as internet
+cloud "Microsoft Entra ID\nNaUKMA tenant" as entra
 
 rectangle "Серверна зона застосунку" #D5E8D4 {
   node "Сервер застосунку" as app_server {
@@ -31,6 +32,7 @@ rectangle "Зона даних" #DAE8FC {
 user --> browser : використовує
 frontend --> internet : HTTPS
 internet --> backend : REST API / JSON\nHTTPS
+backend --> entra : OIDC authorization code / tokens\nHTTPS
 backend --> database : SQL\nзахищене з'єднання
 backend --> image_storage : API сховища\nHTTPS
 
@@ -42,6 +44,14 @@ end note
 note bottom of app_server
   Межа довіри TB-2:
   серверна зона ↔ зона даних
+end note
+
+note right of entra
+  Межа довіри TB-3:
+  backend ↔ зовнішній IdP.
+  Backend перевіряє issuer,
+  audience, signature, exp, tid,
+  state/nonce та @ukma.edu.ua.
 end note
 
 note right of frontend
@@ -60,6 +70,7 @@ legend left
   |= Позначення |= Значення |
   | TB-1 | Дані надходять із недовіреного клієнта |
   | TB-2 | Доступ до постійних даних і файлів |
+  | TB-3 | Зовнішній постачальник ідентичності Microsoft Entra ID |
 endlegend
 
 @enduml

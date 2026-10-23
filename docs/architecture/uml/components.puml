@@ -7,6 +7,8 @@ package "Client Tier" {
     component "React SPA\n(Frontend)" as SPA <<Browser>>
 }
 
+cloud "Microsoft Entra ID\n(NaUKMA tenant)" as Entra <<IdentityProvider>>
+
 package "Server Tier (FastAPI Monolith)" {
     interface "REST API" as RestAPI
     
@@ -25,7 +27,7 @@ package "Data Tier" {
 }
 
 ' Connections
-SPA ..> RestAPI : "HTTP/HTTPS\n(JSON, JWT)"
+SPA ..> RestAPI : "HTTPS\n(JSON)"
 RestAPI - Router
 
 Router --> AuthService
@@ -33,6 +35,7 @@ Router --> ListingService
 Router --> ModerationService
 
 AuthService --> DAL
+AuthService ..> Entra : "OIDC Authorization Code\nHTTPS"
 ListingService --> DAL
 ListingService --> S3 : "Save/Delete Images"
 ModerationService --> DAL
