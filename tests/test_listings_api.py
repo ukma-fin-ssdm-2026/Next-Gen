@@ -102,6 +102,27 @@ def test_delete_marks_withdrawn_and_hides_from_public(client: TestClient) -> Non
     assert str(SEED_LISTING_ID) not in ids
 
 
+def test_delete_foreign_listing_is_403_and_preserves_listing(
+    client: TestClient,
+) -> None:
+    before = client.get(f"/api/v1/listings/{SEED_LISTING_ID}")
+    assert before.status_code == 200
+
+    response = client.delete(
+        f"/api/v1/listings/{SEED_LISTING_ID}",
+        headers={"X-Actor-Id": str(uuid4())},
+    )
+    assert response.status_code == 403
+
+    after = client.get(f"/api/v1/listings/{SEED_LISTING_ID}")
+    assert after.status_code == 200
+    assert after.json() == before.json()
+
+    catalog = client.get("/api/v1/listings")
+    assert catalog.status_code == 200
+    assert str(SEED_LISTING_ID) in {item["id"] for item in catalog.json()}
+
+
 def test_filter_by_price_range_api(client: TestClient) -> None:
     res = client.get(
         "/api/v1/listings", params={"min_price": 100.0, "max_price": 200.0}
