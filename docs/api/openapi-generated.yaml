@@ -108,7 +108,8 @@ paths:
       tags:
       - Listings
       summary: Створити оголошення
-      description: Створює оголошення від імені X-Actor-Id. Повертає об'єкт з контактами.
+      description: Створює оголошення від імені X-Actor-Id із підтримкою фотографій
+        та стану товару (FR-002). Повертає об'єкт з контактами.
       operationId: create_listing_api_v1_listings_post
       parameters:
       - name: X-Actor-Id
@@ -137,6 +138,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListingResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/listings/my:
+    get:
+      tags:
+      - Listings
+      summary: Отримати історію власних оголошень продавця
+      description: Повертає перелік активних і знятих з публікації оголошень поточного
+        користувача з відповідним статусом кожного оголошення (FR-005).
+      operationId: get_my_listings_api_v1_listings_my_get
+      parameters:
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+            Сервер не приймає user_id з тіла запиту.
+          title: X-Actor-Id
+        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+          Сервер не приймає user_id з тіла запиту.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ListingResponse'
+                title: Response Get My Listings Api V1 Listings My Get
         '401':
           description: Unauthorized
           content:
@@ -375,6 +420,15 @@ components:
       - version
       - timestamp
       title: HealthResponse
+    ListingCondition:
+      type: string
+      enum:
+      - NEW
+      - LIKE_NEW
+      - GOOD
+      - USED
+      title: ListingCondition
+      description: Стан товару в оголошенні згідно з моделлю даних (FR-002).
     ListingCreate:
       properties:
         title:
@@ -407,6 +461,12 @@ components:
           description: ID категорії
           examples:
           - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        condition:
+          $ref: '#/components/schemas/ListingCondition'
+          description: Стан товару (NEW, LIKE_NEW, GOOD, USED)
+          default: GOOD
+          examples:
+          - GOOD
         contact:
           type: string
           maxLength: 200
@@ -415,6 +475,15 @@ components:
           description: Контактні дані (пошта або Telegram)
           examples:
           - '@student_ukma'
+        image_urls:
+          items:
+            type: string
+          type: array
+          maxItems: 10
+          title: Image Urls
+          description: URL фотографій оголошення (до 10 зображень)
+          examples:
+          - - https://baraholka.ukma.edu.ua/images/hoodie-naukma.jpg
       type: object
       required:
       - title
@@ -423,6 +492,32 @@ components:
       - category_id
       - contact
       title: ListingCreate
+    ListingImageResponse:
+      properties:
+        image_id:
+          type: string
+          format: uuid
+          title: Image Id
+          description: Унікальний ідентифікатор зображення
+        image_url:
+          type: string
+          title: Image Url
+          description: URL або шлях до збереженого зображення
+          examples:
+          - https://baraholka.ukma.edu.ua/images/hoodie-naukma.jpg
+        display_order:
+          type: integer
+          minimum: 0.0
+          title: Display Order
+          description: Порядок відображення зображення
+          examples:
+          - 0
+      type: object
+      required:
+      - image_id
+      - image_url
+      - display_order
+      title: ListingImageResponse
     ListingPublicResponse:
       properties:
         title:
@@ -455,6 +550,12 @@ components:
           description: ID категорії
           examples:
           - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        condition:
+          $ref: '#/components/schemas/ListingCondition'
+          description: Стан товару (NEW, LIKE_NEW, GOOD, USED)
+          default: GOOD
+          examples:
+          - GOOD
         id:
           type: string
           format: uuid
@@ -471,6 +572,12 @@ components:
           description: Статус оголошення
           examples:
           - ACTIVE
+        images:
+          items:
+            $ref: '#/components/schemas/ListingImageResponse'
+          type: array
+          title: Images
+          description: Список фотографій оголошення
         created_at:
           type: string
           format: date-time
@@ -525,6 +632,12 @@ components:
           description: ID категорії
           examples:
           - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        condition:
+          $ref: '#/components/schemas/ListingCondition'
+          description: Стан товару (NEW, LIKE_NEW, GOOD, USED)
+          default: GOOD
+          examples:
+          - GOOD
         id:
           type: string
           format: uuid
@@ -541,6 +654,12 @@ components:
           description: Статус оголошення
           examples:
           - ACTIVE
+        images:
+          items:
+            $ref: '#/components/schemas/ListingImageResponse'
+          type: array
+          title: Images
+          description: Список фотографій оголошення
         created_at:
           type: string
           format: date-time
@@ -604,6 +723,18 @@ components:
             minLength: 3
           - type: 'null'
           title: Contact
+        condition:
+          anyOf:
+          - $ref: '#/components/schemas/ListingCondition'
+          - type: 'null'
+        image_urls:
+          anyOf:
+          - items:
+              type: string
+            type: array
+            maxItems: 10
+          - type: 'null'
+          title: Image Urls
       type: object
       title: ListingUpdate
     ValidationErrorDetail:

@@ -15,9 +15,11 @@
 | `description` | `string` | min: 10, max: 2000 | Детальний опис товару | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `price` | `number` (float) | ge: 0 (негативні значення заборонені) | Ціна в гривнях | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `category_id` | `UUID` | Valid UUID | Унікальний ідентифікатор категорії | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
+| `condition` | `string` | Enum: `NEW`, `LIKE_NEW`, `GOOD`, `USED` | Стан товару в оголошенні (`FR-002`) | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
+| `image_urls` / `images` | `array` | max: 10, валідні `http(s)://` або `/uploads/` | Фотографії оголошення з порядком відображення (`FR-002`) | `image_urls` у `Create`/`Update`; `images` (`ListingImageResponse`) у відповідях |
 | `contact` | `string` | Required on create | Контактні дані продавця (Telegram / Email) | **Приватне поле:** `ListingCreate`, `ListingUpdate`, `ListingResponse`. **Відсутнє в `ListingPublicResponse`** |
 | `user_id` | `UUID` | Auto UUID v4 | Унікальний ідентифікатор автора | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
-| `status` | `string` | Enum: `ACTIVE`, `RESERVED`, `SOLD` | Поточний стан оголошення | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
+| `status` | `string` | Enum: `ACTIVE`, `WITHDRAWN`, `REMOVED_BY_MODERATOR`, `RESERVED`, `SOLD` | Поточний стан оголошення | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
 | `created_at` | `string` (datetime) | ISO 8601 | Дата та час створення оголошення | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
 | `updated_at` | `string` (datetime) | ISO 8601 | Дата та час останнього оновлення | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
 
@@ -58,6 +60,7 @@
 | Метод | URL | Опис | Успішний статус | Статуси помилок |
 |---|---|---|---|---|
 | `GET` | `/api/v1/listings` | Отримати список оголошень (з пагінацією, фільтрацією та сортуванням) | 200 OK | 422 Unprocessable Entity |
+| `GET` | `/api/v1/listings/my` | Отримати історію власних оголошень продавця (активні та зняті, `FR-005`) | 200 OK | 401 Unauthorized, 422 |
 | `POST` | `/api/v1/listings` | Створити нове оголошення | 201 Created | 401 Unauthorized, 422 |
 | `GET` | `/api/v1/listings/{id}` | Отримати деталі конкретного оголошення за ID (без контактів) | 200 OK | 404 Not Found |
 | `PATCH` | `/api/v1/listings/{id}` | Частково оновити дані оголошення | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
