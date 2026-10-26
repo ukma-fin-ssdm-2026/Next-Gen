@@ -12,6 +12,9 @@ class ListingRepository(Protocol):
     def list_all(self) -> list[Listing]:
         """Повертає всі оголошення, включно зі знятими з публікації."""
 
+    def list_by_owner(self, user_id: UUID) -> list[Listing]:
+        """Повертає всі оголошення вказаного продавця (активні та зняті, FR-005)."""
+
     def get(self, listing_id: UUID) -> Listing | None:
         """Повертає оголошення за id або None."""
 
@@ -38,6 +41,9 @@ class InMemoryListingRepository:
 
     def list_all(self) -> list[Listing]:
         return list(self._items.values())
+
+    def list_by_owner(self, user_id: UUID) -> list[Listing]:
+        return [item for item in self._items.values() if item.user_id == user_id]
 
     def get(self, listing_id: UUID) -> Listing | None:
         return self._items.get(listing_id)

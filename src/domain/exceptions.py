@@ -19,3 +19,7 @@ class ListingForbiddenError(ListingError):
 
 class InvalidPriceRangeError(ListingError):
     """Мінімальна ціна фільтрації перевищує максимальну ціну."""
+
+
+class InvalidListingImageError(ListingError):
+    """Некоректні дані або кількість зображень оголошення."""
