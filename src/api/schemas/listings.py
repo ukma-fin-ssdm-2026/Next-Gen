@@ -6,6 +6,23 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
+from src.domain.listings import ListingCondition
+
+
+class ListingImageResponse(BaseModel):
+    image_id: UUID = Field(..., description="Унікальний ідентифікатор зображення")
+    image_url: str = Field(
+        ...,
+        description="URL або шлях до збереженого зображення",
+        examples=["https://baraholka.ukma.edu.ua/images/hoodie-naukma.jpg"],
+    )
+    display_order: int = Field(
+        ...,
+        ge=0,
+        description="Порядок відображення зображення",
+        examples=[0],
+    )
+
 
 class ListingBase(BaseModel):
     title: str = Field(
@@ -28,6 +45,11 @@ class ListingBase(BaseModel):
         description="ID категорії",
         examples=["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
     )
+    condition: ListingCondition = Field(
+        ListingCondition.GOOD,
+        description="Стан товару (NEW, LIKE_NEW, GOOD, USED)",
+        examples=[ListingCondition.GOOD],
+    )
 
 
 class ListingCreate(ListingBase):
@@ -38,6 +60,12 @@ class ListingCreate(ListingBase):
         description="Контактні дані (пошта або Telegram)",
         examples=["@student_ukma"],
     )
+    image_urls: list[str] = Field(
+        default_factory=list,
+        max_length=10,
+        description="URL фотографій оголошення (до 10 зображень)",
+        examples=[["https://baraholka.ukma.edu.ua/images/hoodie-naukma.jpg"]],
+    )
 
 
 class ListingUpdate(BaseModel):
@@ -45,8 +73,18 @@ class ListingUpdate(BaseModel):
     description: Optional[str] = Field(None, min_length=10, max_length=2000)
     price: Optional[float] = Field(None, ge=0)
     contact: Optional[str] = Field(None, min_length=3, max_length=200)
+    condition: Optional[ListingCondition] = Field(None)
+    image_urls: Optional[list[str]] = Field(None, max_length=10)
 
-    @field_validator("title", "description", "price", "contact", mode="before")
+    @field_validator(
+        "title",
+        "description",
+        "price",
+        "contact",
+        "condition",
+        "image_urls",
+        mode="before",
+    )
     @classmethod
     def reject_null(cls, value: Any) -> Any:
         if value is None:
@@ -58,6 +96,10 @@ class ListingPublicResponse(ListingBase):
     id: UUID = Field(..., description="Унікальний ідентифікатор оголошення")
     user_id: UUID = Field(..., description="ID автора")
     status: str = Field(..., description="Статус оголошення", examples=["ACTIVE"])
+    images: list[ListingImageResponse] = Field(
+        default_factory=list,
+        description="Список фотографій оголошення",
+    )
     created_at: datetime = Field(..., description="Дата створення")
     updated_at: datetime = Field(..., description="Дата останнього оновлення")
 

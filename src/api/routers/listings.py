@@ -10,11 +10,13 @@ from src.api.schemas.listings import (
     ErrorResponse,
     HTTPValidationError,
     ListingCreate,
+    ListingImageResponse,
     ListingPublicResponse,
     ListingResponse,
     ListingUpdate,
 )
 from src.domain.exceptions import (
+    InvalidListingImageError,
     InvalidPriceRangeError,
     ListingForbiddenError,
     ListingNotFoundError,
@@ -48,15 +50,24 @@ def _to_public(listing: Listing) -> ListingPublicResponse:
         description=listing.description,
         price=listing.price,
         category_id=listing.category_id,
+        condition=listing.condition,
         user_id=listing.user_id,
         status=listing.status.value,
+        images=[
+            ListingImageResponse(
+                image_id=image.image_id,
+                image_url=image.image_url,
+                display_order=image.display_order,
+            )
+            for image in listing.images
+        ],
         created_at=listing.created_at,
         updated_at=listing.updated_at,
     )
 
 
 def _to_private(listing: Listing) -> ListingResponse:
-    """Повна схема для власника після create/update."""
+    """Повна схема для власника після create/update та у власній історії."""
     return ListingResponse(
         **_to_public(listing).model_dump(),
         contact=listing.contact,
@@ -70,6 +81,17 @@ def _raise_domain(exc: Exception) -> None:
             detail=[
                 {
                     "loc": ["query", "min_price"],
+                    "msg": str(exc),
+                    "type": "value_error",
+                }
+            ],
+        )
+    if isinstance(exc, InvalidListingImageError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=[
+                {
+                    "loc": ["body", "image_urls"],
                     "msg": str(exc),
                     "type": "value_error",
                 }
@@ -134,13 +156,38 @@ def get_listings(
     return [_to_public(item) for item in items]
 
 
+@router.get(
+    "/my",
+    response_model=list[ListingResponse],
+    summary="Отримати історію власних оголошень продавця",
+    description=(
+        "Повертає перелік активних і знятих з публікації оголошень поточного "
+        "користувача з відповідним статусом кожного оголошення (FR-005)."
+    ),
+    responses={
+        401: {"model": ErrorResponse, "description": "Unauthorized"},
+        422: {"model": HTTPValidationError, "description": "Validation Error"},
+    },
+)
+def get_my_listings(
+    actor_id: ActorId = None,
+    service: ListingService = Depends(get_listing_service),
+) -> list[ListingResponse]:
+    try:
+        items = service.list_owner_listings(actor_id=actor_id)
+    except ListingUnauthorizedError as exc:
+        _raise_domain(exc)
+    return [_to_private(item) for item in items]
+
+
 @router.post(
     "",
     response_model=ListingResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Створити оголошення",
     description=(
-        "Створює оголошення від імені X-Actor-Id. Повертає об'єкт з контактами."
+        "Створює оголошення від імені X-Actor-Id із підтримкою фотографій "
+        "та стану товару (FR-002). Повертає об'єкт з контактами."
     ),
     responses={
         401: {"model": ErrorResponse, "description": "Unauthorized"},
@@ -160,8 +207,10 @@ def create_listing(
             price=listing.price,
             category_id=listing.category_id,
             contact=listing.contact,
+            condition=listing.condition,
+            image_urls=listing.image_urls,
         )
-    except ListingUnauthorizedError as exc:
+    except (ListingUnauthorizedError, InvalidListingImageError) as exc:
         _raise_domain(exc)
     return _to_private(created)
 
@@ -215,6 +264,7 @@ def update_listing(
         ListingUnauthorizedError,
         ListingForbiddenError,
         ListingNotFoundError,
+        InvalidListingImageError,
     ) as exc:
         _raise_domain(exc)
     return _to_public(updated)
