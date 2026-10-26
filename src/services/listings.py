@@ -1,5 +1,6 @@
-"""Listing Service: каталог, пошук, створення та зміна власних оголошень."""
+"""Listing Service: каталог, пошук, створення, історія та зміна власних оголошень."""
 
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from src.domain.exceptions import (
@@ -8,15 +9,29 @@ from src.domain.exceptions import (
     ListingNotFoundError,
     ListingUnauthorizedError,
 )
-from src.domain.listings import Listing, ListingSortOrder, ListingStatus, utc_now
+from src.domain.listings import (
+    Listing,
+    ListingCondition,
+    ListingSortOrder,
+    ListingStatus,
+    utc_now,
+)
+from src.repositories.image_storage import ImageStorage, InMemoryImageStorage
 from src.repositories.listings import ListingRepository
 
 
 class ListingService:
     """Бізнес-правила оголошень незалежно від HTTP-фреймворку."""
 
-    def __init__(self, repository: ListingRepository) -> None:
+    def __init__(
+        self,
+        repository: ListingRepository,
+        image_storage: ImageStorage | None = None,
+    ) -> None:
         self._repository = repository
+        self._image_storage: ImageStorage = (
+            image_storage if image_storage is not None else InMemoryImageStorage()
+        )
 
     def list_public(
         self,
@@ -33,8 +48,8 @@ class ListingService:
         items = [item for item in self._repository.list_all() if item.is_public()]
         if category_id is not None:
             items = [item for item in items if item.category_id == category_id]
-        if query:
-            needle = query.casefold()
+        if query and query.strip():
+            needle = query.strip().casefold()
             items = [
                 item
                 for item in items
@@ -51,6 +66,13 @@ class ListingService:
         )
         return items[skip : skip + limit]
 
+    def list_owner_listings(self, actor_id: UUID | None) -> list[Listing]:
+        """Історія активних і знятих оголошень поточного продавця (FR-005)."""
+        owner_id = self._require_actor(actor_id)
+        items = list(self._repository.list_by_owner(owner_id))
+        items.sort(key=lambda item: item.created_at, reverse=True)
+        return items
+
     def get_public(self, listing_id: UUID) -> Listing:
         """Деталі активного оголошення для каталогу. Contact лишається в домені."""
         listing = self._require_listing(listing_id)
@@ -66,6 +88,8 @@ class ListingService:
         price: float,
         category_id: UUID,
         contact: str,
+        condition: ListingCondition = ListingCondition.GOOD,
+        image_urls: list[str] | None = None,
     ) -> Listing:
         """Створює оголошення від імені актора. user_id з тіла запиту ігнорується."""
         owner_id = self._require_actor(actor_id)
@@ -76,8 +100,11 @@ class ListingService:
             category_id=category_id,
             contact=contact,
             user_id=owner_id,
+            condition=condition,
             status=ListingStatus.ACTIVE,
         )
+        if image_urls is not None:
+            listing.images = self._image_storage.save_images(listing.id, image_urls)
         return self._repository.add(listing)
 
     def update(
@@ -88,6 +115,8 @@ class ListingService:
         description: str | None = None,
         price: float | None = None,
         contact: str | None = None,
+        condition: ListingCondition | None = None,
+        image_urls: list[str] | None = None,
     ) -> Listing:
         """Оновлює лише власне оголошення (FR-003, TM-02)."""
         listing = self._require_owned(listing_id, actor_id)
@@ -99,14 +128,18 @@ class ListingService:
             listing.price = price
         if contact is not None:
             listing.contact = contact
-        listing.updated_at = utc_now()
+        if condition is not None:
+            listing.condition = condition
+        if image_urls is not None:
+            listing.images = self._image_storage.save_images(listing.id, image_urls)
+        listing.updated_at = self._next_timestamp(listing.updated_at)
         return self._repository.save(listing)
 
     def delete(self, listing_id: UUID, actor_id: UUID | None) -> Listing:
         """Знімає оголошення з публікації (переводить у WITHDRAWN, FR-004)."""
         listing = self._require_owned(listing_id, actor_id)
         listing.status = ListingStatus.WITHDRAWN
-        listing.updated_at = utc_now()
+        listing.updated_at = self._next_timestamp(listing.updated_at)
         return self._repository.save(listing)
 
     def _require_listing(self, listing_id: UUID) -> Listing:
@@ -126,6 +159,11 @@ class ListingService:
         if listing.user_id != owner_id:
             raise ListingForbiddenError("Немає прав змінювати чуже оголошення")
         return listing
+
+    @staticmethod
+    def _next_timestamp(previous: datetime) -> datetime:
+        now = utc_now()
+        return now if now > previous else previous + timedelta(microseconds=1)
 
     @staticmethod
     def _validate_price_range(min_price: float | None, max_price: float | None) -> None:
