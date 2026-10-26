@@ -7,7 +7,7 @@ from src.domain.exceptions import InvalidListingImageError
 from src.domain.listings import ListingImage
 
 MAX_IMAGES_PER_LISTING = 10
-ALLOWED_IMAGE_PREFIXES = ("http://", "https://", "/uploads/")
+ALLOWED_IMAGE_PREFIXES = ("https://", "/uploads/")
 
 
 def validate_image_url(url: str) -> str:
@@ -17,7 +17,7 @@ def validate_image_url(url: str) -> str:
         raise InvalidListingImageError("URL зображення не може бути порожнім")
     if " " in normalized or not normalized.startswith(ALLOWED_IMAGE_PREFIXES):
         raise InvalidListingImageError(
-            "URL зображення має починатися з http://, https:// або /uploads/"
+            "URL зображення має починатися з https:// або /uploads/"
         )
     return normalized
 
