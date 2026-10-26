@@ -204,7 +204,7 @@ def test_get_my_listings_returns_active_and_withdrawn_for_owner(
 
     assert ids == {str(SEED_LISTING_ID), str(WITHDRAWN_LISTING_ID)}
     assert statuses == {"ACTIVE", "WITHDRAWN"}
-    assert all("contact" in item for item in payload)
+    assert all("contact" not in item for item in payload)
 
 
 def test_create_and_patch_listing_with_images_and_condition(

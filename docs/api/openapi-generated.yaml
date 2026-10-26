@@ -180,7 +180,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/ListingResponse'
+                  $ref: '#/components/schemas/ListingPublicResponse'
                 title: Response Get My Listings Api V1 Listings My Get
         '401':
           description: Unauthorized

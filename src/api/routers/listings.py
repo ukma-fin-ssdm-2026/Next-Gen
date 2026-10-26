@@ -158,7 +158,7 @@ def get_listings(
 
 @router.get(
     "/my",
-    response_model=list[ListingResponse],
+    response_model=list[ListingPublicResponse],
     summary="Отримати історію власних оголошень продавця",
     description=(
         "Повертає перелік активних і знятих з публікації оголошень поточного "
@@ -172,12 +172,12 @@ def get_listings(
 def get_my_listings(
     actor_id: ActorId = None,
     service: ListingService = Depends(get_listing_service),
-) -> list[ListingResponse]:
+) -> list[ListingPublicResponse]:
     try:
         items = service.list_owner_listings(actor_id=actor_id)
     except ListingUnauthorizedError as exc:
         _raise_domain(exc)
-    return [_to_private(item) for item in items]
+    return [_to_public(item) for item in items]
 
 
 @router.post(
