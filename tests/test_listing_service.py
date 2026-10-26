@@ -233,6 +233,7 @@ def test_create_delegates_to_repository_and_uses_actor_as_owner() -> None:
         price=300.0,
         category_id=SEED_CATEGORY_ID,
         contact="@student",
+        image_urls=["https://baraholka.ukma.edu.ua/images/coat.jpg"],
     )
 
     assert created.user_id == actor_id
@@ -251,6 +252,7 @@ def test_list_owner_listings_returns_active_and_withdrawn_for_seller(
         price=90.0,
         category_id=SEED_CATEGORY_ID,
         contact="@foreign_seller",
+        image_urls=["https://baraholka.ukma.edu.ua/images/foreign.jpg"],
     )
 
     history = listing_service.list_owner_listings(actor_id=SEED_OWNER_ID)
@@ -312,6 +314,7 @@ def test_create_and_update_with_images_and_condition() -> None:
 @pytest.mark.parametrize(
     "invalid_urls",
     [
+        [],
         [""],
         ["   "],
         ["ftp://invalid-scheme.example.com/photo.jpg"],
@@ -333,3 +336,26 @@ def test_image_storage_rejects_invalid_urls_or_too_many_images(
             contact="@econ_student",
             image_urls=invalid_urls,
         )
+
+
+def test_failed_image_update_does_not_partially_mutate_listing(
+    listing_service: ListingService,
+) -> None:
+    original = listing_service.get_public(SEED_LISTING_ID)
+    original_title = original.title
+    original_price = original.price
+    original_images = list(original.images)
+
+    with pytest.raises(InvalidListingImageError):
+        listing_service.update(
+            SEED_LISTING_ID,
+            actor_id=SEED_OWNER_ID,
+            title="Змінений заголовок перед помилкою",
+            price=999.0,
+            image_urls=["ftp://invalid-scheme.example.com/photo.jpg"],
+        )
+
+    after = listing_service.get_public(SEED_LISTING_ID)
+    assert after.title == original_title
+    assert after.price == original_price
+    assert after.images == original_images

@@ -61,9 +61,10 @@ class ListingCreate(ListingBase):
         examples=["@student_ukma"],
     )
     image_urls: list[str] = Field(
-        default_factory=list,
+        ...,
+        min_length=1,
         max_length=10,
-        description="URL фотографій оголошення (до 10 зображень)",
+        description="URL фотографій оголошення (від 1 до 10 зображень, FR-002)",
         examples=[["https://baraholka.ukma.edu.ua/images/hoodie-naukma.jpg"]],
     )
 
@@ -74,7 +75,7 @@ class ListingUpdate(BaseModel):
     price: Optional[float] = Field(None, ge=0)
     contact: Optional[str] = Field(None, min_length=3, max_length=200)
     condition: Optional[ListingCondition] = Field(None)
-    image_urls: Optional[list[str]] = Field(None, max_length=10)
+    image_urls: Optional[list[str]] = Field(None, min_length=1, max_length=10)
 
     @field_validator(
         "title",

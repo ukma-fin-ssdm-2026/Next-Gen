@@ -6,6 +6,7 @@ from uuid import UUID
 from src.domain.exceptions import InvalidListingImageError
 from src.domain.listings import ListingImage
 
+MIN_IMAGES_PER_LISTING = 1
 MAX_IMAGES_PER_LISTING = 10
 ALLOWED_IMAGE_PREFIXES = ("https://", "/uploads/")
 
@@ -43,6 +44,10 @@ class InMemoryImageStorage:
     def save_images(
         self, listing_id: UUID, image_urls: list[str]
     ) -> list[ListingImage]:
+        if len(image_urls) < MIN_IMAGES_PER_LISTING:
+            raise InvalidListingImageError(
+                "Оголошення має містити щонайменше одне зображення (FR-002)"
+            )
         if len(image_urls) > MAX_IMAGES_PER_LISTING:
             raise InvalidListingImageError(
                 f"Кількість зображень не може перевищувати {MAX_IMAGES_PER_LISTING}"

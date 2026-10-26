@@ -1,7 +1,7 @@
 """Listing Service: каталог, пошук, створення, історія та зміна власних оголошень."""
 
 from datetime import datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from src.domain.exceptions import (
     InvalidPriceRangeError,
@@ -91,9 +91,14 @@ class ListingService:
         condition: ListingCondition = ListingCondition.GOOD,
         image_urls: list[str] | None = None,
     ) -> Listing:
-        """Створює оголошення від імені актора. user_id з тіла запиту ігнорується."""
+        """Створює оголошення від імені актора з обов'язковими фотографіями (FR-002)."""
         owner_id = self._require_actor(actor_id)
+        listing_id = uuid4()
+        images = self._image_storage.save_images(
+            listing_id, image_urls if image_urls is not None else []
+        )
         listing = Listing(
+            id=listing_id,
             title=title,
             description=description,
             price=price,
@@ -102,9 +107,8 @@ class ListingService:
             user_id=owner_id,
             condition=condition,
             status=ListingStatus.ACTIVE,
+            images=images,
         )
-        if image_urls is not None:
-            listing.images = self._image_storage.save_images(listing.id, image_urls)
         return self._repository.add(listing)
 
     def update(
@@ -118,8 +122,13 @@ class ListingService:
         condition: ListingCondition | None = None,
         image_urls: list[str] | None = None,
     ) -> Listing:
-        """Оновлює лише власне оголошення (FR-003, TM-02)."""
+        """Оновлює лише власне оголошення атомарно (FR-003, TM-02)."""
         listing = self._require_owned(listing_id, actor_id)
+        new_images = (
+            self._image_storage.save_images(listing.id, image_urls)
+            if image_urls is not None
+            else None
+        )
         if title is not None:
             listing.title = title
         if description is not None:
@@ -130,8 +139,8 @@ class ListingService:
             listing.contact = contact
         if condition is not None:
             listing.condition = condition
-        if image_urls is not None:
-            listing.images = self._image_storage.save_images(listing.id, image_urls)
+        if new_images is not None:
+            listing.images = new_images
         listing.updated_at = self._next_timestamp(listing.updated_at)
         return self._repository.save(listing)
 

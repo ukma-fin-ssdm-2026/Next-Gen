@@ -480,8 +480,9 @@ components:
             type: string
           type: array
           maxItems: 10
+          minItems: 1
           title: Image Urls
-          description: URL фотографій оголошення (до 10 зображень)
+          description: URL фотографій оголошення (від 1 до 10 зображень, FR-002)
           examples:
           - - https://baraholka.ukma.edu.ua/images/hoodie-naukma.jpg
       type: object
@@ -491,6 +492,7 @@ components:
       - price
       - category_id
       - contact
+      - image_urls
       title: ListingCreate
     ListingImageResponse:
       properties:
@@ -733,6 +735,7 @@ components:
               type: string
             type: array
             maxItems: 10
+            minItems: 1
           - type: 'null'
           title: Image Urls
       type: object

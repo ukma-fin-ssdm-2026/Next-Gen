@@ -16,7 +16,7 @@
 | `price` | `number` (float) | ge: 0 (негативні значення заборонені) | Ціна в гривнях | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `category_id` | `UUID` | Valid UUID | Унікальний ідентифікатор категорії | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `condition` | `string` | Enum: `NEW`, `LIKE_NEW`, `GOOD`, `USED` | Стан товару в оголошенні (`FR-002`) | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
-| `image_urls` / `images` | `array` | max: 10, валідні `https://` або `/uploads/` | Фотографії оголошення з порядком відображення (`FR-002`) | `image_urls` у `Create`/`Update`; `images` (`ListingImageResponse`) у відповідях |
+| `image_urls` / `images` | `array` | min: 1, max: 10, валідні `https://` або `/uploads/` | Фотографії оголошення з порядком відображення (`FR-002`) | `image_urls` у `Create`/`Update`; `images` (`ListingImageResponse`) у відповідях |
 | `contact` | `string` | Required on create | Контактні дані продавця (Telegram / Email) | **Приватне поле:** `ListingCreate`, `ListingUpdate`, `ListingResponse`. **Відсутнє в `ListingPublicResponse`** |
 | `user_id` | `UUID` | Auto UUID v4 | Унікальний ідентифікатор автора | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
 | `status` | `string` | Enum: `ACTIVE`, `WITHDRAWN`, `REMOVED_BY_MODERATOR`, `RESERVED`, `SOLD` | Поточний стан оголошення | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |

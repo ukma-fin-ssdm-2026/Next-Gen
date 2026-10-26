@@ -264,4 +264,36 @@ def test_create_listing_rejects_invalid_image_url_with_422(
     detail = response.json()["detail"]
     assert detail[0]["loc"] == ["body", "image_urls"]
 
+
+def test_create_listing_rejects_empty_images_list_with_422(
+    client: TestClient,
+    listing_payload: dict[str, object],
+) -> None:
+    payload = {**listing_payload, "image_urls": []}
+    response = client.post(
+        "/api/v1/listings",
+        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
+        json=payload,
+    )
+    assert response.status_code == 422
+
+
+def test_patch_listing_failed_image_validation_preserves_state(
+    client: TestClient,
+) -> None:
+    before = client.get(f"/api/v1/listings/{SEED_LISTING_ID}").json()
+
+    response = client.patch(
+        f"/api/v1/listings/{SEED_LISTING_ID}",
+        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
+        json={
+            "title": "Не має зберегтися при помилці фото",
+            "image_urls": ["ftp://invalid-scheme.example.com/photo.jpg"],
+        },
+    )
+    assert response.status_code == 422
+
+    after = client.get(f"/api/v1/listings/{SEED_LISTING_ID}").json()
+    assert after == before
+
     assert response.status_code == 422
