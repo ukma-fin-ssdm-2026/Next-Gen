@@ -33,8 +33,8 @@ class ListingService:
         items = [item for item in self._repository.list_all() if item.is_public()]
         if category_id is not None:
             items = [item for item in items if item.category_id == category_id]
-        if query:
-            needle = query.casefold()
+        if query and query.strip():
+            needle = query.strip().casefold()
             items = [
                 item
                 for item in items
