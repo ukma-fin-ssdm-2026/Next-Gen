@@ -32,4 +32,5 @@ def listing_payload() -> dict[str, object]:
         "price": 80.0,
         "category_id": str(SEED_CATEGORY_ID),
         "contact": "@someone",
+        "image_urls": ["https://baraholka.ukma.edu.ua/images/algebra-notes.jpg"],
     }

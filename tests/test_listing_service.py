@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 
 from src.domain.exceptions import (
+    InvalidListingImageError,
     InvalidPriceRangeError,
     ListingForbiddenError,
     ListingNotFoundError,
@@ -18,8 +19,10 @@ from src.domain.listings import (
     SEED_OWNER_ID,
     WITHDRAWN_LISTING_ID,
     Listing,
+    ListingCondition,
     ListingSortOrder,
 )
+from src.repositories.image_storage import InMemoryImageStorage
 from src.repositories.listings import InMemoryListingRepository, ListingRepository
 from src.services.listings import ListingService
 
@@ -230,8 +233,129 @@ def test_create_delegates_to_repository_and_uses_actor_as_owner() -> None:
         price=300.0,
         category_id=SEED_CATEGORY_ID,
         contact="@student",
+        image_urls=["https://baraholka.ukma.edu.ua/images/coat.jpg"],
     )
 
     assert created.user_id == actor_id
     assert created.status.value == "ACTIVE"
     repository.add.assert_called_once_with(created)
+
+
+def test_list_owner_listings_returns_active_and_withdrawn_for_seller(
+    listing_service: ListingService,
+) -> None:
+    foreign_owner = uuid4()
+    listing_service.create(
+        actor_id=foreign_owner,
+        title="Чуже оголошення",
+        description="Опис чужого оголошення для перевірки фільтрації власника.",
+        price=90.0,
+        category_id=SEED_CATEGORY_ID,
+        contact="@foreign_seller",
+        image_urls=["https://baraholka.ukma.edu.ua/images/foreign.jpg"],
+    )
+
+    history = listing_service.list_owner_listings(actor_id=SEED_OWNER_ID)
+    history_ids = {item.id for item in history}
+    statuses = {item.status.value for item in history}
+
+    assert history_ids == {SEED_LISTING_ID, WITHDRAWN_LISTING_ID}
+    assert statuses == {"ACTIVE", "WITHDRAWN"}
+
+
+def test_list_owner_listings_requires_actor(
+    listing_service: ListingService,
+) -> None:
+    with pytest.raises(ListingUnauthorizedError):
+        listing_service.list_owner_listings(actor_id=None)
+
+
+def test_create_and_update_with_images_and_condition() -> None:
+    storage = InMemoryImageStorage()
+    repository = InMemoryListingRepository.with_seed()
+    service = ListingService(repository=repository, image_storage=storage)
+
+    created = service.create(
+        actor_id=SEED_OWNER_ID,
+        title="Калькулятор Casio",
+        description="Інженерний калькулятор у відмінному стані.",
+        price=450.0,
+        category_id=SEED_CATEGORY_ID,
+        contact="@casio_seller",
+        condition=ListingCondition.NEW,
+        image_urls=[
+            " https://baraholka.ukma.edu.ua/images/casio-1.jpg ",
+            "/uploads/casio-2.jpg",
+        ],
+    )
+
+    assert created.condition == ListingCondition.NEW
+    assert len(created.images) == 2
+    assert created.images[0].image_url == (
+        "https://baraholka.ukma.edu.ua/images/casio-1.jpg"
+    )
+    assert created.images[0].display_order == 0
+    assert created.images[1].display_order == 1
+    assert len(storage.get_images(created.id)) == 2
+
+    updated = service.update(
+        created.id,
+        actor_id=SEED_OWNER_ID,
+        condition=ListingCondition.USED,
+        image_urls=["https://baraholka.ukma.edu.ua/images/casio-updated.jpg"],
+    )
+    assert updated.condition == ListingCondition.USED
+    assert len(updated.images) == 1
+    assert updated.images[0].image_url == (
+        "https://baraholka.ukma.edu.ua/images/casio-updated.jpg"
+    )
+
+
+@pytest.mark.parametrize(
+    "invalid_urls",
+    [
+        [],
+        [""],
+        ["   "],
+        ["ftp://invalid-scheme.example.com/photo.jpg"],
+        ["https://baraholka.ukma.edu.ua/images/has space.jpg"],
+        [f"https://baraholka.ukma.edu.ua/images/{idx}.jpg" for idx in range(11)],
+    ],
+)
+def test_image_storage_rejects_invalid_urls_or_too_many_images(
+    listing_service: ListingService,
+    invalid_urls: list[str],
+) -> None:
+    with pytest.raises(InvalidListingImageError):
+        listing_service.create(
+            actor_id=SEED_OWNER_ID,
+            title="Підручник з економіки",
+            description="Підручник для першого курсу у гарному стані.",
+            price=200.0,
+            category_id=SEED_CATEGORY_ID,
+            contact="@econ_student",
+            image_urls=invalid_urls,
+        )
+
+
+def test_failed_image_update_does_not_partially_mutate_listing(
+    listing_service: ListingService,
+) -> None:
+    original = listing_service.get_public(SEED_LISTING_ID)
+    original_title = original.title
+    original_price = original.price
+    original_images = list(original.images)
+
+    with pytest.raises(InvalidListingImageError):
+        listing_service.update(
+            SEED_LISTING_ID,
+            actor_id=SEED_OWNER_ID,
+            title="Змінений заголовок перед помилкою",
+            price=999.0,
+            image_urls=["ftp://invalid-scheme.example.com/photo.jpg"],
+        )
+
+    after = listing_service.get_public(SEED_LISTING_ID)
+    assert after.title == original_title
+    assert after.price == original_price
+    assert after.images == original_images

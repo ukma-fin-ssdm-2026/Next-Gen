@@ -15,9 +15,11 @@
 | `description` | `string` | min: 10, max: 2000 | Детальний опис товару | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `price` | `number` (float) | ge: 0 (негативні значення заборонені) | Ціна в гривнях | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `category_id` | `UUID` | Valid UUID | Унікальний ідентифікатор категорії | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
+| `condition` | `string` | Enum: `NEW`, `LIKE_NEW`, `GOOD`, `USED` | Стан товару в оголошенні (`FR-002`) | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
+| `image_urls` / `images` | `array` | min: 1, max: 10, валідні `https://` або `/uploads/` | Фотографії оголошення з порядком відображення (`FR-002`) | `image_urls` у `Create`/`Update`; `images` (`ListingImageResponse`) у відповідях |
 | `contact` | `string` | Required on create | Контактні дані продавця (Telegram / Email) | **Приватне поле:** `ListingCreate`, `ListingUpdate`, `ListingResponse`. **Відсутнє в `ListingPublicResponse`** |
 | `user_id` | `UUID` | Auto UUID v4 | Унікальний ідентифікатор автора | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
-| `status` | `string` | Enum: `ACTIVE`, `RESERVED`, `SOLD` | Поточний стан оголошення | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
+| `status` | `string` | Enum: `ACTIVE`, `WITHDRAWN`, `REMOVED_BY_MODERATOR`, `RESERVED`, `SOLD` | Поточний стан оголошення | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
 | `created_at` | `string` (datetime) | ISO 8601 | Дата та час створення оголошення | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
 | `updated_at` | `string` (datetime) | ISO 8601 | Дата та час останнього оновлення | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
 
@@ -31,7 +33,7 @@
 
 ### 2.2 Захист персональних даних та публічна схема (SEC-002, QA-SEC-01)
 - **Рішення:** Розділення схем відповідей на `ListingPublicResponse` та `ListingResponse`.
-- **Обґрунтування:** Для захисту конфіденційності контактні дані продавця (`contact`) виключено з публічної схеми `ListingPublicResponse`, яка використовується для загального списку оголошень (`GET /api/v1/listings`) та публічного перегляду по ID (`GET /api/v1/listings/{id}`). Повне представлення `ListingResponse` з контактами повертається лише при створенні (`POST`) або оновленні (`PATCH`).
+- **Обґрунтування:** Для захисту конфіденційності контактні дані продавця (`contact`) виключено з публічної схеми `ListingPublicResponse`, яка використовується для загального списку оголошень (`GET /api/v1/listings`), перегляду по ID (`GET /api/v1/listings/{id}`), історії оголошень продавця (`GET /api/v1/listings/my` до появи повноцінної Entra-автентифікації) та відповіді часткового оновлення (`PATCH /api/v1/listings/{id}`). Повне представлення `ListingResponse` з контактами повертається лише при створенні (`POST /api/v1/listings`).
 
 ### 2.3 Пагінація, фільтрація та сортування
 - **Рішення:** Підтримка query-параметрів `skip`, `limit`, `category_id`, `q`, `min_price`, `max_price` та `sort` в ендпоінті `GET /api/v1/listings`.
@@ -44,7 +46,7 @@
   - `sort` (`newest` або `oldest`, default `newest`) — порядок за датою публікації (FR-008).
 
 ### 2.4 Ідентифікація автора змін до впровадження Microsoft Entra ID (TM-02)
-- **Рішення:** `user_id` завжди призначається на сервері. Мутації (`POST` / `PATCH` / `DELETE`) вимагають заголовок `X-Actor-Id`.
+- **Рішення:** `user_id` завжди призначається на сервері. Захищені операції власника (`GET /api/v1/listings/my`, `POST`, `PATCH`, `DELETE`) вимагають заголовок `X-Actor-Id`.
 - **Обґрунтування:** Клієнт не може підмінити власника в тілі запиту. `X-Actor-Id` — лише прототипна заглушка і не забезпечує автентифікації. За ADR-003 її має замінити перевірена Entra-ідентичність, зв'язана з локальним `User`; `user_id`, email чи роль із запиту клієнта не приймаються як доказ особи. Відсутня/невалідна сесія дає 401, чуже оголошення — 403.
 
 ### 2.5 Семантика часткового оновлення (PATCH замість PUT)
@@ -58,6 +60,7 @@
 | Метод | URL | Опис | Успішний статус | Статуси помилок |
 |---|---|---|---|---|
 | `GET` | `/api/v1/listings` | Отримати список оголошень (з пагінацією, фільтрацією та сортуванням) | 200 OK | 422 Unprocessable Entity |
+| `GET` | `/api/v1/listings/my` | Отримати історію власних оголошень продавця (активні та зняті, `FR-005`) | 200 OK | 401 Unauthorized, 422 |
 | `POST` | `/api/v1/listings` | Створити нове оголошення | 201 Created | 401 Unauthorized, 422 |
 | `GET` | `/api/v1/listings/{id}` | Отримати деталі конкретного оголошення за ID (без контактів) | 200 OK | 404 Not Found |
 | `PATCH` | `/api/v1/listings/{id}` | Частково оновити дані оголошення | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
