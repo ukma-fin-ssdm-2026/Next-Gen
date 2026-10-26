@@ -5,12 +5,12 @@
 
 ## Команда 
 
-| Учасник | Lab 1 — репозиторій | Lab 2 — вимоги | Lab 3 — архітектура | Lab 4 — API | Lab 5 — якість коду | Lab 6 — тестування |
-|---|---|---|---|---|---|---|
-| **Артем Солодкий** | Repo Maintainer | Requirements Lead + Functional Requirements Lead | Data Model & Threat Modeling Lead | Quality Lead | Code Reviewer | Testing Lead + Test Doubles Lead |
-| **Данііл Чернявський** | CI Maintainer | Quality Lead (NFR) | Architecture Lead | Backend Lead + API Design Lead | Quality & Prototype Lead | Debugging Lead |
-| **Євгеній Остапенко** | Documentation Lead | Documentation Lead | Documentation & UML Lead | Documentation Lead | Documentation Lead | Testing Strategist |
-| **Богдан Солонина** | Issue Tracker Lead | Traceability Lead | Traceability Lead | Integration Lead | Security Analyst | Integration Lead |
+| Учасник | Lab 1 — репозиторій | Lab 2 — вимоги | Lab 3 — архітектура | Lab 4 — API | Lab 5 — якість коду | Lab 6 — тестування | Lab 7 — валідація |
+|---|---|---|---|---|---|---|---|
+| **Артем Солодкий** | Repo Maintainer | Requirements Lead + Functional Requirements Lead | Data Model & Threat Modeling Lead | Quality Lead | Code Reviewer | Testing Lead + Test Doubles Lead | Test Planner |
+| **Данііл Чернявський** | CI Maintainer | Quality Lead (NFR) | Architecture Lead | Backend Lead + API Design Lead | Quality & Prototype Lead | Debugging Lead | Review Manager + AI Code Reviewer |
+| **Євгеній Остапенко** | Documentation Lead | Documentation Lead | Documentation & UML Lead | Documentation Lead | Documentation Lead | Testing Strategist | Documentation Lead |
+| **Богдан Солонина** | Issue Tracker Lead | Traceability Lead | Traceability Lead | Integration Lead | Security Analyst | Integration Lead | Quality Analyst |
 
 Детальний опис відповідальностей наведено в [Командному статуті](TeamCharter.md#2-ролі-та-відповідальності).
 
@@ -66,6 +66,11 @@
 - [Звіт покриття коду](htmlcov/index.html) - інтерактивний HTML-звіт тестового покриття на рівні 98% за допомогою `pytest-cov`.
 - [Property-Based тестування](tests/test_properties.py) - перевірка інваріантів каталогу на згенерованих вхідних даних за допомогою `hypothesis` (Бонус).
 - [Mutation testing](docs/testing/mutation-testing.md) - перевірка стійкості тестів до навмисних змін бізнес-логіки: знищено 54 з 54 мутантів (Бонус).
+
+## Планування тестування та валідація
+
+- [План тестування](docs/validation/test-plan.md) - обсяг, критерії виходу, аналіз ризиків та таблиця тест-кейсів різних рівнів із трасуванням до вимог.
+- [Журнал взаємного огляду та огляду ШІ-коду](docs/validation/review-log.md) - підсумки взаємного огляду тест-плану з командою B2B, внесені зміни та контрольний список огляду ШІ-згенерованого коду.
 
 ### Швидкий запуск та перевірки якості коду
 
