@@ -31,6 +31,7 @@
 
 ## Артефакти вимог
 
+- [Опис проєкту та Міні-ТЗ](Project-Description.md) - ідея проєкту, ролі користувачів, межі системи, функціональні й нефункціональні вимоги та обмеження.
 - [Вимоги (FR та NFR)](docs/requirements/requirements.md) - функціональні вимоги та вимірювані NFR за стандартом ISO 25010.
 - [Користувацькі історії](docs/requirements/user-stories.md) - історії користувачів із критеріями прийняття.
 - [Матриця простежуваності (RTM)](docs/requirements/rtm.md) - зв'язок між історіями, NFR та тестами.
@@ -42,12 +43,14 @@
 - [Матриця простежуваності архітектури](docs/architecture/traceability-matrix.md) - відображення вимог на компоненти та сценарії якості.
 - [Модель даних](docs/architecture/data-model.md) - схема бази даних (ER) із позначенням чутливих даних.
 - [Модель загроз STRIDE](docs/architecture/threat-model.md) - аналіз меж довіри, ризиків та контрзаходів.
-- [Архітектурні рішення (ADR)](docs/architecture/decisions/) - реєстр ключових технічних рішень проєкту.
+- [Архітектурні рішення (ADR)](docs/architecture/decisions/) - реєстр ключових технічних рішень проєкту ([ADR-001](docs/architecture/decisions/ADR-001-architectural-style.md), [ADR-002](docs/architecture/decisions/ADR-002-database-storage.md), [ADR-003](docs/architecture/decisions/ADR-003-auth-mechanism.md)).
 - [Автентифікація Microsoft Entra ID](docs/architecture/decisions/ADR-003-auth-mechanism.md) - single-tenant OIDC-рішення для облікових записів НаУКМА та поточний стан його налаштування.
 - [UML-діаграми](docs/architecture/uml/) - сирцеві файли діаграм компонентів, послідовності та розгортання.
 
 ## Проєктування та документація API
 
+- [Документація проєктування API (API Design)](docs/api/api-design.md) - ресурсна модель, ключові проєктні рішення, перелік кінцевих точок, версіонування та обробка помилок.
+- [Атрибути якості API](docs/api/quality-attributes.md) - вимірювані цілі якості (`PERF-001`, `SEC-001`, `SEC-002`, `REL-001`), умови провалу, сценарії якості та результати перевірок через Swagger UI.
 - [Інтерактивна документація (Swagger UI)](docs/api/index.html) - веб-інтерфейс перегляду та тестування API.
 - [Згенерована специфікація OpenAPI](docs/api/openapi-generated.yaml) - файл специфікації OpenAPI 3.1 у форматі YAML.
 - **GitHub Pages:** https://ukma-fin-ssdm-2026.github.io/Next-Gen/docs/api/
@@ -71,6 +74,15 @@
 
 - [План тестування](docs/validation/test-plan.md) - обсяг, критерії виходу, аналіз ризиків та таблиця тест-кейсів різних рівнів із трасуванням до вимог.
 - [Журнал взаємного огляду та огляду ШІ-коду](docs/validation/review-log.md) - підсумки взаємного огляду тест-плану з командою B2B, внесені зміни та контрольний список огляду ШІ-згенерованого коду.
+
+## Індивідуальні відеозвіти (Loom)
+
+- [Лабораторна 1 (`Labs/Lab01/`)](Labs/Lab01/) — [Чернявський](Labs/Lab01/video_Cherniavskyi.txt), [Остапенко](Labs/Lab01/video_Ostapenko.txt), [Солодкий](Labs/Lab01/video_Solodkyi.txt), [Солонина](Labs/Lab01/video_Solonyna.txt)
+- [Лабораторна 2 (`Labs/Lab02/`)](Labs/Lab02/) — [Чернявський](Labs/Lab02/video_Cherniavskyi.txt), [Остапенко](Labs/Lab02/video_Ostapenko.txt), [Солодкий](Labs/Lab02/video_Solodkyi.txt), [Солонина](Labs/Lab02/video_Solonyna.txt)
+- [Лабораторна 3 (`Labs/Lab03/`)](Labs/Lab03/) — [Чернявський](Labs/Lab03/video_Cherniavskyi.txt), [Остапенко](Labs/Lab03/video_Ostapenko.txt), [Солодкий](Labs/Lab03/video_Solodkyi.txt), [Солонина](Labs/Lab03/Video_Solonyna.txt)
+- [Лабораторна 4 (`Labs/Lab04/`)](Labs/Lab04/) — [Чернявський](Labs/Lab04/video_Cherniavskyi.txt), [Остапенко](Labs/Lab04/video_Ostapenko.txt), [Солодкий](Labs/Lab04/video_Solodkyi.txt), [Солонина](Labs/Lab04/video_Solonyna.txt)
+- [Лабораторна 5 (`Labs/Lab05/`)](Labs/Lab05/) — [Чернявський](Labs/Lab05/video_Cherniavskyi.txt), [Остапенко](Labs/Lab05/video_Ostapenko.txt), [Солодкий](Labs/Lab05/video_Solodkyi.txt), [Солонина](Labs/Lab05/video_Solonyna.txt)
+- [Лабораторна 6 (`Labs/Lab06/`)](Labs/Lab06/) — [Чернявський](Labs/Lab06/video_Cherniavskyi.txt) ([TDD](Labs/Lab06/videoTDD_Cherniavskyi.txt)), [Остапенко](Labs/Lab06/video_Ostapenko.txt), [Солодкий](Labs/Lab06/video_Solodkyi.txt), [Солонина](Labs/Lab06/video_Solonyna.txt)
 
 ### Швидкий запуск та перевірки якості коду
 
