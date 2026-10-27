@@ -13,12 +13,14 @@ from src.domain.exceptions import (
 from src.domain.favorites import Favorite
 from src.domain.listings import (
     SEED_LISTING_ID,
+    SEED_OWNER_ID,
     WITHDRAWN_LISTING_ID,
     ListingStatus,
 )
 from src.repositories.favorites import InMemoryFavoriteRepository
 from src.repositories.listings import InMemoryListingRepository
 from src.services.favorites import FavoriteService
+from src.services.listings import ListingService
 
 BUYER_ID = uuid4()
 
@@ -100,13 +102,19 @@ def test_listing_withdrawn_after_adding_is_hidden(
     assert service.list_for(BUYER_ID) == []
 
 
-def test_purge_listing_removes_it_for_all_users(
-    service: FavoriteService, favorites: InMemoryFavoriteRepository
+def test_withdrawing_listing_removes_it_from_all_favorites(
+    service: FavoriteService,
+    favorites: InMemoryFavoriteRepository,
+    listings: InMemoryListingRepository,
 ) -> None:
+    # Arrange: два покупці зберегли те саме оголошення
     other_buyer = uuid4()
     service.add(BUYER_ID, SEED_LISTING_ID)
     service.add(other_buyer, SEED_LISTING_ID)
-    assert service.purge_listing(SEED_LISTING_ID) == 2
+    listing_service = ListingService(listings, favorites=favorites)
+    # Act: власник знімає оголошення з публікації
+    listing_service.delete(SEED_LISTING_ID, SEED_OWNER_ID)
+    # Assert: записів в обраному не лишилось, а не лише приховано
     assert favorites.list_by_user(BUYER_ID) == []
     assert favorites.list_by_user(other_buyer) == []
 

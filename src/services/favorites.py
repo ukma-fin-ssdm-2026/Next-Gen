@@ -54,10 +54,6 @@ class FavoriteService:
         if not self._favorites.delete(user_id, listing_id):
             raise FavoriteNotFoundError("Оголошення немає в обраному")
 
-    def purge_listing(self, listing_id: UUID) -> int:
-        """Прибирає зняте оголошення з обраного всіх користувачів (FR-009)."""
-        return self._favorites.delete_by_listing(listing_id)
-
     def _require_actor(self, actor_id: UUID | None) -> UUID:
         if actor_id is None:
             raise ListingUnauthorizedError("Потрібна ідентифікація користувача")
