@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, status
 from pydantic import BaseModel, Field
 
-from src.api.routers import listings
+from src.api.routers import favorites, listings
 
 app = FastAPI(
     title="Baraholka NaUKMA API",
@@ -19,6 +19,7 @@ app = FastAPI(
 )
 
 app.include_router(listings.router, prefix="/api/v1")
+app.include_router(favorites.router, prefix="/api/v1")
 
 
 class HealthResponse(BaseModel):
