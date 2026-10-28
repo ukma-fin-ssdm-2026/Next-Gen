@@ -10,8 +10,8 @@ paths:
       tags:
       - Listings
       summary: Отримати список оголошень (публічний)
-      description: Повертає список оголошень з підтримкою пагінації та фільтрації
-        за категорією. Не містить контактних даних.
+      description: Повертає активні оголошення з пагінацією, фільтром категорії, діапазоном
+        ціни та текстовим пошуком (FR-006, FR-007, FR-008). Контакт продавця не включається.
       operationId: get_listings_api_v1_listings_get
       parameters:
       - name: skip
@@ -20,10 +20,10 @@ paths:
         schema:
           type: integer
           minimum: 0
-          description: Кількість пропущених записів (для пагінації)
+          description: Кількість пропущених записів
           default: 0
           title: Skip
-        description: Кількість пропущених записів (для пагінації)
+        description: Кількість пропущених записів
       - name: limit
         in: query
         required: false
@@ -31,10 +31,10 @@ paths:
           type: integer
           maximum: 100
           minimum: 1
-          description: Максимальна кількість записів у відповіді
+          description: Розмір сторінки
           default: 10
           title: Limit
-        description: Максимальна кількість записів у відповіді
+        description: Розмір сторінки
       - name: category_id
         in: query
         required: false
@@ -43,9 +43,51 @@ paths:
           - type: string
             format: uuid
           - type: 'null'
-          description: Фільтр за ID категорії
+          description: Фільтр за категорією
           title: Category Id
-        description: Фільтр за ID категорії
+        description: Фільтр за категорією
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 100
+          - type: 'null'
+          description: Пошук за назвою та описом
+          title: Q
+        description: Пошук за назвою та описом
+      - name: min_price
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: number
+            minimum: 0
+          - type: 'null'
+          description: Мінімальна ціна
+          title: Min Price
+        description: Мінімальна ціна
+      - name: max_price
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: number
+            minimum: 0
+          - type: 'null'
+          description: Максимальна ціна
+          title: Max Price
+        description: Максимальна ціна
+      - name: sort
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/ListingSortOrder'
+          description: 'Порядок за датою публікації: newest або oldest'
+          default: newest
+        description: 'Порядок за датою публікації: newest або oldest'
       responses:
         '200':
           description: Successful Response
@@ -56,20 +98,33 @@ paths:
                 items:
                   $ref: '#/components/schemas/ListingPublicResponse'
                 title: Response Get Listings Api V1 Listings Get
-        '404':
-          description: Not Found
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '422':
-          description: Validation Error
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
     post:
       tags:
       - Listings
       summary: Створити оголошення
-      description: Створює нове оголошення. Повертає створений об'єкт разом з контактами.
+      description: Створює оголошення від імені X-Actor-Id із підтримкою фотографій
+        та стану товару (FR-002). Повертає об'єкт з контактами.
       operationId: create_listing_api_v1_listings_post
+      parameters:
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+            Сервер не приймає user_id з тіла запиту.
+          title: X-Actor-Id
+        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+          Сервер не приймає user_id з тіла запиту.
       requestBody:
         required: true
         content:
@@ -83,20 +138,74 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListingResponse'
-        '404':
-          description: Not Found
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/listings/my:
+    get:
+      tags:
+      - Listings
+      summary: Отримати історію власних оголошень продавця
+      description: Повертає перелік активних і знятих з публікації оголошень поточного
+        користувача з відповідним статусом кожного оголошення (FR-005).
+      operationId: get_my_listings_api_v1_listings_my_get
+      parameters:
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+            Сервер не приймає user_id з тіла запиту.
+          title: X-Actor-Id
+        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+          Сервер не приймає user_id з тіла запиту.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ListingPublicResponse'
+                title: Response Get My Listings Api V1 Listings My Get
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
   /api/v1/listings/{listing_id}:
     get:
       tags:
       - Listings
       summary: Отримати оголошення за ID (публічне)
-      description: Повертає детальну інформацію про конкретне оголошення без контактів.
+      description: Деталі активного оголошення без контактів.
       operationId: get_listing_api_v1_listings__listing_id__get
       parameters:
       - name: listing_id
@@ -121,11 +230,15 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
     patch:
       tags:
       - Listings
       summary: Частково оновити оголошення
-      description: Оновлює часткову інформацію про оголошення.
+      description: Оновлює лише оголошення поточного користувача (заголовок X-Actor-Id).
       operationId: update_listing_api_v1_listings__listing_id__patch
       parameters:
       - name: listing_id
@@ -135,6 +248,19 @@ paths:
           type: string
           format: uuid
           title: Listing Id
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+            Сервер не приймає user_id з тіла запиту.
+          title: X-Actor-Id
+        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+          Сервер не приймає user_id з тіла запиту.
       requestBody:
         required: true
         content:
@@ -147,7 +273,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListingResponse'
+                $ref: '#/components/schemas/ListingPublicResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not Found
           content:
@@ -156,11 +294,16 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
     delete:
       tags:
       - Listings
       summary: Видалити оголошення
-      description: Видаляє оголошення за ID.
+      description: Знімає оголошення з публікації (переводить у WITHDRAWN, FR-004).
+        Виконується лише власником.
       operationId: delete_listing_api_v1_listings__listing_id__delete
       parameters:
       - name: listing_id
@@ -170,9 +313,34 @@ paths:
           type: string
           format: uuid
           title: Listing Id
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+            Сервер не приймає user_id з тіла запиту.
+          title: X-Actor-Id
+        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+          Сервер не приймає user_id з тіла запиту.
       responses:
         '204':
           description: Successful Response
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not Found
           content:
@@ -181,6 +349,450 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/favorites:
+    get:
+      tags:
+      - Favorites
+      summary: Отримати власне обране
+      description: Повертає активні оголошення з обраного поточного користувача, спершу
+        додані останніми (FR-009). Контакти продавців не включаються.
+      operationId: get_favorites_api_v1_favorites_get
+      parameters:
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+            Сервер не приймає user_id з тіла запиту.
+          title: X-Actor-Id
+        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+          Сервер не приймає user_id з тіла запиту.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ListingPublicResponse'
+                title: Response Get Favorites Api V1 Favorites Get
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/favorites/{listing_id}:
+    post:
+      tags:
+      - Favorites
+      summary: Додати оголошення в обране
+      description: Додає активне оголошення в обране поточного користувача (FR-009).
+        Повторне додавання не створює дубліката і повертає наявний запис.
+      operationId: add_favorite_api_v1_favorites__listing_id__post
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Listing Id
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+            Сервер не приймає user_id з тіла запиту.
+          title: X-Actor-Id
+        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+          Сервер не приймає user_id з тіла запиту.
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoriteResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+    delete:
+      tags:
+      - Favorites
+      summary: Прибрати оголошення з обраного
+      description: Видаляє оголошення з обраного поточного користувача (FR-009).
+      operationId: remove_favorite_api_v1_favorites__listing_id__delete
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Listing Id
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+            Сервер не приймає user_id з тіла запиту.
+          title: X-Actor-Id
+        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+          Сервер не приймає user_id з тіла запиту.
+      responses:
+        '204':
+          description: Successful Response
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/categories:
+    get:
+      tags:
+      - Categories
+      summary: Отримати список активних категорій
+      description: Публічний ендпоінт для отримання списку доступних активних категорій
+        для фільтрації каталогу та створення нових оголошень (FR-012).
+      operationId: list_categories_api_v1_categories_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CategoryResponse'
+                title: Response List Categories Api V1 Categories Get
+    post:
+      tags:
+      - Categories
+      summary: Створити нову категорію (Адміністратор)
+      description: Адміністративний ендпоінт для створення нової категорії оголошень
+        (FR-012). Вимагає валідної серверної сесії та ролі ADMIN.
+      operationId: create_category_api_v1_categories_post
+      parameters:
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryCreateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+        '401':
+          description: Необхідна автентифікація (потрібен вхід через Microsoft)
+        '403':
+          description: Недостатньо прав доступу (потрібна роль ADMIN)
+        '409':
+          description: Категорія з таким slug вже існує
+        '422':
+          description: Невалідні поля категорії
+  /api/v1/categories/{category_id}:
+    get:
+      tags:
+      - Categories
+      summary: Отримати інформацію про категорію за ID
+      description: Повертає метадані конкретної категорії оголошень за її ідентифікатором
+        (FR-012).
+      operationId: get_category_api_v1_categories__category_id__get
+      parameters:
+      - name: category_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Category Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+        '404':
+          description: Категорію не знайдено
+        '422':
+          description: Некоректний формат UUID
+    patch:
+      tags:
+      - Categories
+      summary: Оновити або деактивувати категорію (Адміністратор)
+      description: Адміністративний ендпоінт для зміни назви, опису або деактивації
+        категорії (FR-012). Деактивована категорія зберігається в системі для збереження
+        цілісності наявних оголошень. Вимагає валідної серверної сесії та ролі ADMIN.
+      operationId: update_category_api_v1_categories__category_id__patch
+      parameters:
+      - name: category_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Category Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryUpdateRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+        '401':
+          description: Необхідна автентифікація (потрібен вхід через Microsoft)
+        '403':
+          description: Недостатньо прав доступу (потрібна роль ADMIN)
+        '404':
+          description: Категорію не знайдено
+        '409':
+          description: Новий slug вже використовується
+        '422':
+          description: Невалідні дані оновлення
+  /api/v1/auth/login:
+    get:
+      tags:
+      - Authentication
+      summary: Розпочати вхід Microsoft Entra ID
+      operationId: login_api_v1_auth_login_get
+      responses:
+        '307':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '502':
+          description: Microsoft Entra unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Entra ID not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/auth/callback:
+    get:
+      tags:
+      - Authentication
+      summary: Завершити Microsoft Entra ID callback
+      operationId: callback_api_v1_auth_callback_get
+      parameters:
+      - name: state
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: state, який повернув Microsoft
+          title: State
+        description: state, який повернув Microsoft
+      - name: baraholka_oidc_state
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Одноразовий state потоку OIDC
+          title: Baraholka Oidc State
+        description: Одноразовий state потоку OIDC
+      responses:
+        '303':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid OIDC state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Microsoft sign-in rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Local user is blocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Entra ID not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/auth/me:
+    get:
+      tags:
+      - Authentication
+      summary: Отримати поточного користувача
+      operationId: me_api_v1_auth_me_get
+      parameters:
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Local user is blocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Entra ID not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/auth/logout:
+    post:
+      tags:
+      - Authentication
+      summary: Завершити локальну сесію
+      operationId: logout_api_v1_auth_logout_post
+      parameters:
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /health:
     get:
       tags:
@@ -198,34 +810,196 @@ paths:
                 $ref: '#/components/schemas/HealthResponse'
 components:
   schemas:
+    ApiValidationErrorResponse:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationErrorDetail'
+          type: array
+          title: Detail
+          description: Список помилок валідації
+      type: object
+      required:
+      - detail
+      title: ApiValidationErrorResponse
+      description: Узгоджений формат 422 для доменних і Pydantic-помилок API.
+    CategoryCreateRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Name
+          description: Назва категорії
+        slug:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Slug
+          description: Slug категорії
+        description:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Description
+          description: Опис категорії
+      type: object
+      required:
+      - name
+      - slug
+      title: CategoryCreateRequest
+      description: Схема створення нової категорії (адміністративна дія, FR-012).
+    CategoryResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Унікальний ідентифікатор категорії
+        name:
+          type: string
+          title: Name
+          description: Назва категорії
+        slug:
+          type: string
+          title: Slug
+          description: Людинозрозумілий ідентифікатор
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+          description: Опис категорії
+        is_active:
+          type: boolean
+          title: Is Active
+          description: Статус активності категорії
+          default: true
+      type: object
+      required:
+      - id
+      - name
+      - slug
+      title: CategoryResponse
+      description: Публічна схема категорії.
+    CategoryUpdateRequest:
+      properties:
+        name:
+          anyOf:
+          - type: string
+            maxLength: 100
+            minLength: 1
+          - type: 'null'
+          title: Name
+          description: Нова назва категорії
+        slug:
+          anyOf:
+          - type: string
+            maxLength: 100
+            minLength: 1
+          - type: 'null'
+          title: Slug
+          description: Новий slug категорії
+        description:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Description
+          description: Новий опис категорії
+        is_active:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Active
+          description: Статус активності (деактивація)
+      type: object
+      title: CategoryUpdateRequest
+      description: Схема часткового оновлення категорії (адміністративна дія, FR-012).
+    CurrentUserResponse:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+          description: Локальний ID користувача
+        email:
+          type: string
+          title: Email
+          description: Підтверджена адреса @ukma.edu.ua
+        display_name:
+          type: string
+          title: Display Name
+          description: Ім'я з Microsoft Entra ID
+        role:
+          $ref: '#/components/schemas/UserRole'
+          description: Локальна роль користувача
+      type: object
+      required:
+      - user_id
+      - email
+      - display_name
+      - role
+      title: CurrentUserResponse
     ErrorResponse:
       properties:
         detail:
           type: string
           title: Detail
           description: Опис помилки
-          example: Оголошення не знайдено
+          examples:
+          - Оголошення не знайдено
       type: object
       required:
       - detail
       title: ErrorResponse
+    FavoriteResponse:
+      properties:
+        listing_id:
+          type: string
+          format: uuid
+          title: Listing Id
+          description: Оголошення, збережене в обране
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Час додавання в обране
+      type: object
+      required:
+      - listing_id
+      - created_at
+      title: FavoriteResponse
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
     HealthResponse:
       properties:
         status:
           type: string
           title: Status
           description: Статус доступності сервісу
-          example: ok
+          examples:
+          - ok
         app:
           type: string
           title: App
           description: Назва застосунку
-          example: Baraholka NaUKMA API
+          examples:
+          - Baraholka NaUKMA API
         version:
           type: string
           title: Version
           description: Поточна версія API
-          example: 1.0.0
+          examples:
+          - 1.0.0
         timestamp:
           type: string
           format: date-time
@@ -238,6 +1012,15 @@ components:
       - version
       - timestamp
       title: HealthResponse
+    ListingCondition:
+      type: string
+      enum:
+      - NEW
+      - LIKE_NEW
+      - GOOD
+      - USED
+      title: ListingCondition
+      description: Стан товару в оголошенні згідно з моделлю даних (FR-002).
     ListingCreate:
       properties:
         title:
@@ -246,31 +1029,54 @@ components:
           minLength: 3
           title: Title
           description: Назва оголошення
-          example: Худі з логотипом НаУКМА
+          examples:
+          - Худі з логотипом НаУКМА
         description:
           type: string
           maxLength: 2000
           minLength: 10
           title: Description
           description: Детальний опис товару
-          example: Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
+          examples:
+          - Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
         price:
           type: number
           minimum: 0.0
           title: Price
           description: Ціна в гривнях
-          example: 150.0
+          examples:
+          - 150.0
         category_id:
           type: string
           format: uuid
           title: Category Id
           description: ID категорії
-          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+          examples:
+          - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        condition:
+          $ref: '#/components/schemas/ListingCondition'
+          description: Стан товару (NEW, LIKE_NEW, GOOD, USED)
+          default: GOOD
+          examples:
+          - GOOD
         contact:
           type: string
+          maxLength: 200
+          minLength: 3
           title: Contact
           description: Контактні дані (пошта або Telegram)
-          example: '@student_ukma'
+          examples:
+          - '@student_ukma'
+        image_urls:
+          items:
+            type: string
+          type: array
+          maxItems: 10
+          minItems: 1
+          title: Image Urls
+          description: URL фотографій оголошення (від 1 до 10 зображень, FR-002)
+          examples:
+          - - https://baraholka.ukma.edu.ua/images/hoodie-naukma.jpg
       type: object
       required:
       - title
@@ -278,7 +1084,34 @@ components:
       - price
       - category_id
       - contact
+      - image_urls
       title: ListingCreate
+    ListingImageResponse:
+      properties:
+        image_id:
+          type: string
+          format: uuid
+          title: Image Id
+          description: Унікальний ідентифікатор зображення
+        image_url:
+          type: string
+          title: Image Url
+          description: URL або шлях до збереженого зображення
+          examples:
+          - https://baraholka.ukma.edu.ua/images/hoodie-naukma.jpg
+        display_order:
+          type: integer
+          minimum: 0.0
+          title: Display Order
+          description: Порядок відображення зображення
+          examples:
+          - 0
+      type: object
+      required:
+      - image_id
+      - image_url
+      - display_order
+      title: ListingImageResponse
     ListingPublicResponse:
       properties:
         title:
@@ -287,26 +1120,36 @@ components:
           minLength: 3
           title: Title
           description: Назва оголошення
-          example: Худі з логотипом НаУКМА
+          examples:
+          - Худі з логотипом НаУКМА
         description:
           type: string
           maxLength: 2000
           minLength: 10
           title: Description
           description: Детальний опис товару
-          example: Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
+          examples:
+          - Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
         price:
           type: number
           minimum: 0.0
           title: Price
           description: Ціна в гривнях
-          example: 150.0
+          examples:
+          - 150.0
         category_id:
           type: string
           format: uuid
           title: Category Id
           description: ID категорії
-          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+          examples:
+          - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        condition:
+          $ref: '#/components/schemas/ListingCondition'
+          description: Стан товару (NEW, LIKE_NEW, GOOD, USED)
+          default: GOOD
+          examples:
+          - GOOD
         id:
           type: string
           format: uuid
@@ -320,8 +1163,15 @@ components:
         status:
           type: string
           title: Status
-          description: Статус оголошення (ACTIVE, RESERVED, SOLD)
-          example: ACTIVE
+          description: Статус оголошення
+          examples:
+          - ACTIVE
+        images:
+          items:
+            $ref: '#/components/schemas/ListingImageResponse'
+          type: array
+          title: Images
+          description: Список фотографій оголошення
         created_at:
           type: string
           format: date-time
@@ -352,26 +1202,36 @@ components:
           minLength: 3
           title: Title
           description: Назва оголошення
-          example: Худі з логотипом НаУКМА
+          examples:
+          - Худі з логотипом НаУКМА
         description:
           type: string
           maxLength: 2000
           minLength: 10
           title: Description
           description: Детальний опис товару
-          example: Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
+          examples:
+          - Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
         price:
           type: number
           minimum: 0.0
           title: Price
           description: Ціна в гривнях
-          example: 150.0
+          examples:
+          - 150.0
         category_id:
           type: string
           format: uuid
           title: Category Id
           description: ID категорії
-          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+          examples:
+          - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        condition:
+          $ref: '#/components/schemas/ListingCondition'
+          description: Стан товару (NEW, LIKE_NEW, GOOD, USED)
+          default: GOOD
+          examples:
+          - GOOD
         id:
           type: string
           format: uuid
@@ -385,8 +1245,15 @@ components:
         status:
           type: string
           title: Status
-          description: Статус оголошення (ACTIVE, RESERVED, SOLD)
-          example: ACTIVE
+          description: Статус оголошення
+          examples:
+          - ACTIVE
+        images:
+          items:
+            $ref: '#/components/schemas/ListingImageResponse'
+          type: array
+          title: Images
+          description: Список фотографій оголошення
         created_at:
           type: string
           format: date-time
@@ -414,6 +1281,13 @@ components:
       - updated_at
       - contact
       title: ListingResponse
+    ListingSortOrder:
+      type: string
+      enum:
+      - newest
+      - oldest
+      title: ListingSortOrder
+      description: Порядок сортування каталогу за датою публікації (FR-008).
     ListingUpdate:
       properties:
         title:
@@ -423,7 +1297,6 @@ components:
             minLength: 3
           - type: 'null'
           title: Title
-          description: Назва оголошення
         description:
           anyOf:
           - type: string
@@ -431,19 +1304,95 @@ components:
             minLength: 10
           - type: 'null'
           title: Description
-          description: Детальний опис товару
         price:
           anyOf:
           - type: number
             minimum: 0.0
           - type: 'null'
           title: Price
-          description: Ціна в гривнях
         contact:
           anyOf:
           - type: string
+            maxLength: 200
+            minLength: 3
           - type: 'null'
           title: Contact
-          description: Контактні дані (пошта або Telegram)
+        condition:
+          anyOf:
+          - $ref: '#/components/schemas/ListingCondition'
+          - type: 'null'
+        image_urls:
+          anyOf:
+          - items:
+              type: string
+            type: array
+            maxItems: 10
+            minItems: 1
+          - type: 'null'
+          title: Image Urls
       type: object
       title: ListingUpdate
+    UserRole:
+      type: string
+      enum:
+      - USER
+      - ADMIN
+      title: UserRole
+      description: Авторитетні локальні ролі Baraholka NaUKMA.
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    ValidationErrorDetail:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Loc
+          description: Розташування поля помилки
+          examples:
+          - - query
+            - min_price
+        msg:
+          type: string
+          title: Msg
+          description: Повідомлення про помилку
+          examples:
+          - min_price (200.0) не може перевищувати max_price (100.0)
+        type:
+          type: string
+          title: Type
+          description: Тип валідаційної помилки
+          examples:
+          - value_error
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationErrorDetail

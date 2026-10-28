@@ -5,10 +5,14 @@
 
 ## Команда 
 
-- Repo Maintainer - Артем Солодкий
-- Documentation Lead - Остапенко Євгеній
-- Issue Tracker Lead - Солонина Богдан
-- CI Maintainer - Чернявський Данііл
+| Учасник | Lab 1 — репозиторій | Lab 2 — вимоги | Lab 3 — архітектура | Lab 4 — API | Lab 5 — якість коду | Lab 6 — тестування | Lab 7 — валідація |
+|---|---|---|---|---|---|---|---|
+| **Артем Солодкий** | Repo Maintainer | Requirements Lead + Functional Requirements Lead | Data Model & Threat Modeling Lead | Quality Lead | Code Reviewer | Testing Lead + Test Doubles Lead | Test Planner |
+| **Данііл Чернявський** | CI Maintainer | Quality Lead (NFR) | Architecture Lead | Backend Lead + API Design Lead | Quality & Prototype Lead | Debugging Lead | Review Manager + AI Code Reviewer |
+| **Євгеній Остапенко** | Documentation Lead | Documentation Lead | Documentation & UML Lead | Documentation Lead | Documentation Lead | Testing Strategist | Documentation Lead |
+| **Богдан Солонина** | Issue Tracker Lead | Traceability Lead | Traceability Lead | Integration Lead | Security Analyst | Integration Lead | Quality Analyst |
+
+Детальний опис відповідальностей наведено в [Командному статуті](TeamCharter.md#2-ролі-та-відповідальності).
 
 ## Стратегія роботи з гілками - GitHub Flow
 
@@ -27,6 +31,7 @@
 
 ## Артефакти вимог
 
+- [Опис проєкту та Міні-ТЗ](Project-Description.md) - ідея проєкту, ролі користувачів, межі системи, функціональні й нефункціональні вимоги та обмеження.
 - [Вимоги (FR та NFR)](docs/requirements/requirements.md) - функціональні вимоги та вимірювані NFR за стандартом ISO 25010.
 - [Користувацькі історії](docs/requirements/user-stories.md) - історії користувачів із критеріями прийняття.
 - [Матриця простежуваності (RTM)](docs/requirements/rtm.md) - зв'язок між історіями, NFR та тестами.
@@ -38,20 +43,54 @@
 - [Матриця простежуваності архітектури](docs/architecture/traceability-matrix.md) - відображення вимог на компоненти та сценарії якості.
 - [Модель даних](docs/architecture/data-model.md) - схема бази даних (ER) із позначенням чутливих даних.
 - [Модель загроз STRIDE](docs/architecture/threat-model.md) - аналіз меж довіри, ризиків та контрзаходів.
-- [Архітектурні рішення (ADR)](docs/architecture/decisions/) - реєстр ключових технічних рішень проєкту.
+- [Архітектурні рішення (ADR)](docs/architecture/decisions/) - реєстр ключових технічних рішень проєкту ([ADR-001](docs/architecture/decisions/ADR-001-architectural-style.md), [ADR-002](docs/architecture/decisions/ADR-002-database-storage.md), [ADR-003](docs/architecture/decisions/ADR-003-auth-mechanism.md)).
+- [Автентифікація Microsoft Entra ID](docs/architecture/decisions/ADR-003-auth-mechanism.md) - single-tenant OIDC-рішення для облікових записів НаУКМА та поточний стан його налаштування.
 - [UML-діаграми](docs/architecture/uml/) - сирцеві файли діаграм компонентів, послідовності та розгортання.
 
 ## Проєктування та документація API
 
+- [Документація проєктування API (API Design)](docs/api/api-design.md) - ресурсна модель, ключові проєктні рішення, перелік кінцевих точок, версіонування та обробка помилок.
+- [Атрибути якості API](docs/api/quality-attributes.md) - вимірювані цілі якості (`PERF-001`, `SEC-001`, `SEC-002`, `REL-001`), умови провалу, сценарії якості та результати перевірок через Swagger UI.
 - [Інтерактивна документація (Swagger UI)](docs/api/index.html) - веб-інтерфейс перегляду та тестування API.
 - [Згенерована специфікація OpenAPI](docs/api/openapi-generated.yaml) - файл специфікації OpenAPI 3.1 у форматі YAML.
 - **GitHub Pages:** https://ukma-fin-ssdm-2026.github.io/Next-Gen/docs/api/
 
-### Швидкий запуск та автогенерація OpenAPI
+## Якість коду, стандарти та безпека
 
-1. **Встановлення залежностей:**
+- [Політика якості та огляду коду](TeamCharter.md#49-політика-якості-та-огляду-коду-code-quality--review-policy) - стандарти PEP 8, конвенції іменування, правила коментування, критерії peer review та оновлений Definition of Done.
+- [Статичний аналіз та аналіз безпеки](docs/code-quality/static-analysis.md) - результати перевірки Bandit, аналіз загрози TM-05 (STRIDE), усунення витоку контактів (SA-01) з регресійним тестом та фіксація прийнятого ризику (SA-02).
+- [Звіт командного огляду коду](docs/code-quality/review-report.md) - результати рецензування кодової бази іншої команди за 5 критеріями.
+- [Прогрес реалізації компонентів](docs/code-quality/progress.md) - стан розробки базової структури коду та мінімального прототипу системи.
+- [Розподіл реалізації](docs/code-allocation.md) - модулі, файли, порядок інтеграції та матриця взаємного огляду.
+
+## Тестування та налагодження
+
+- [Стратегія тестування](docs/testing/testing-strategy.md) - комплексна стратегія тестування, аналіз покриття (98%), плани піраміди тестування, ворота якості в CI (поріг 85%) та бонуси.
+- [Журнал налагодження](docs/testing/debugging-log.md) - 5 систематичних кроків відтворення, ізоляції та виправлення логічного дефекту фільтрації цін із регресійними тестами.
+- [Звіт покриття коду](htmlcov/index.html) - інтерактивний HTML-звіт тестового покриття на рівні 98% за допомогою `pytest-cov`.
+- [Property-Based тестування](tests/test_properties.py) - перевірка інваріантів каталогу на згенерованих вхідних даних за допомогою `hypothesis` (Бонус).
+- [Mutation testing](docs/testing/mutation-testing.md) - перевірка стійкості тестів до навмисних змін бізнес-логіки: знищено 54 з 54 мутантів (Бонус).
+
+## Планування тестування та валідація
+
+- [План тестування](docs/validation/test-plan.md) - обсяг, критерії виходу, аналіз ризиків та таблиця тест-кейсів різних рівнів із трасуванням до вимог.
+- [Журнал взаємного огляду та огляду ШІ-коду](docs/validation/review-log.md) - підсумки взаємного огляду тест-плану з командою B2B, внесені зміни та контрольний список огляду ШІ-згенерованого коду.
+
+## Індивідуальні відеозвіти (Loom)
+
+- [Лабораторна 1 (`Labs/Lab01/`)](Labs/Lab01/) — [Чернявський](Labs/Lab01/video_Cherniavskyi.txt), [Остапенко](Labs/Lab01/video_Ostapenko.txt), [Солодкий](Labs/Lab01/video_Solodkyi.txt), [Солонина](Labs/Lab01/video_Solonyna.txt)
+- [Лабораторна 2 (`Labs/Lab02/`)](Labs/Lab02/) — [Чернявський](Labs/Lab02/video_Cherniavskyi.txt), [Остапенко](Labs/Lab02/video_Ostapenko.txt), [Солодкий](Labs/Lab02/video_Solodkyi.txt), [Солонина](Labs/Lab02/video_Solonyna.txt)
+- [Лабораторна 3 (`Labs/Lab03/`)](Labs/Lab03/) — [Чернявський](Labs/Lab03/video_Cherniavskyi.txt), [Остапенко](Labs/Lab03/video_Ostapenko.txt), [Солодкий](Labs/Lab03/video_Solodkyi.txt), [Солонина](Labs/Lab03/Video_Solonyna.txt)
+- [Лабораторна 4 (`Labs/Lab04/`)](Labs/Lab04/) — [Чернявський](Labs/Lab04/video_Cherniavskyi.txt), [Остапенко](Labs/Lab04/video_Ostapenko.txt), [Солодкий](Labs/Lab04/video_Solodkyi.txt), [Солонина](Labs/Lab04/video_Solonyna.txt)
+- [Лабораторна 5 (`Labs/Lab05/`)](Labs/Lab05/) — [Чернявський](Labs/Lab05/video_Cherniavskyi.txt), [Остапенко](Labs/Lab05/video_Ostapenko.txt), [Солодкий](Labs/Lab05/video_Solodkyi.txt), [Солонина](Labs/Lab05/video_Solonyna.txt)
+- [Лабораторна 6 (`Labs/Lab06/`)](Labs/Lab06/) — [Чернявський](Labs/Lab06/video_Cherniavskyi.txt) ([TDD](Labs/Lab06/videoTDD_Cherniavskyi.txt)), [Остапенко](Labs/Lab06/video_Ostapenko.txt), [Солодкий](Labs/Lab06/video_Solodkyi.txt), [Солонина](Labs/Lab06/video_Solonyna.txt)
+- [Лабораторна 7 (`Labs/Lab07/`)](Labs/Lab07/) — [Чернявський](Labs/Lab07/video_Cherniavskyi.txt), [Остапенко](Labs/Lab07/video_Ostapenko.txt), [Солодкий](Labs/Lab07/video_Solodkyi.txt), [Солонина](Labs/Lab07/video_Solonyna.txt)
+
+### Швидкий запуск та перевірки якості коду
+
+1. **Встановлення залежностей розробки та тестування:**
    ```bash
-   pip install fastapi pyyaml uvicorn
+   python -m pip install -r requirements.txt -r requirements-dev.txt
    ```
 
 2. **Автогенерація специфікації OpenAPI з коду:**
@@ -60,7 +99,18 @@
    ```
    *Специфікація автоматично зчитується з FastAPI-застосунку (`src/api/main.py`) та зберігається у `docs/api/openapi-generated.yaml`.*
 
-3. **Локальний запуск API сервера:**
+3. **Запуск аналізатора безпеки (Bandit):**
+   ```bash
+   python -m bandit -r src scripts -v
+   ```
+
+4. **Запуск автоматизованих тестів із перевіркою порогу покриття (Coverage Gate 85%):**
+   ```bash
+   python -m pytest -q --cov=src --cov-report=term-missing --cov-fail-under=85
+   ```
+
+
+5. **Локальний запуск API сервера:**
    ```bash
    uvicorn src.api.main:app --reload --port 8000
    ```

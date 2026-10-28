@@ -8,8 +8,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-
+    runs-on: [self-hosted, linux]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -20,7 +19,31 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install fastapi pyyaml
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Format check (Black)
+        run: black --check src tests scripts
+
+      - name: Lint (flake8)
+        run: flake8 src tests scripts
+
+      - name: Security scan (Bandit)
+        run: bandit -r src -ll -c pyproject.toml
+
+      - name: Dependency audit (pip-audit)
+        run: pip-audit -r requirements.txt
+
+      - name: Tests with coverage gate (85%)
+        run: pytest -q --cov=src --cov-report=term-missing --cov-report=html --cov-fail-under=85
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: htmlcov
+          path: htmlcov/
 
       - name: Generate OpenAPI spec
         run: python scripts/generate_openapi.py

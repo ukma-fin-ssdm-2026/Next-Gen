@@ -1,0 +1,46 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    env_file:
+      - ${ENV_FILE:-.env}
+    expose:
+      - "8000"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:?Set TRAEFIK_NETWORK in .env}
+      - traefik.http.routers.baraholka-http.rule=Host(`${BARAHOLKA_HOST:?Set BARAHOLKA_HOST in .env}`)
+      - traefik.http.routers.baraholka-http.entrypoints=web
+      - traefik.http.routers.baraholka-http.middlewares=baraholka-https
+      - traefik.http.middlewares.baraholka-https.redirectscheme.scheme=https
+      - traefik.http.middlewares.baraholka-https.redirectscheme.permanent=true
+      - traefik.http.routers.baraholka.rule=Host(`${BARAHOLKA_HOST:?Set BARAHOLKA_HOST in .env}`)
+      - traefik.http.routers.baraholka.entrypoints=websecure
+      - traefik.http.routers.baraholka.tls=true
+      - traefik.http.routers.baraholka.tls.certresolver=letsencrypt
+      - traefik.http.services.baraholka.loadbalancer.server.port=8000
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+    name: ${TRAEFIK_NETWORK:?Set TRAEFIK_NETWORK in .env}

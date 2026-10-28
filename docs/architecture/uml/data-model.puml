@@ -7,8 +7,9 @@ hide stereotypes
 entity "User" as user {
   * user_id : UUID <<PK>>
   --
+  * tenant_id : UUID
+  * entra_object_id : UUID
   * email : string <<personal data, unique>>
-  * password_hash : string <<sensitive data>>
   * display_name : string <<personal data>>
   * role : enum
   * is_blocked : boolean
@@ -75,6 +76,8 @@ listing ||--o{ favorite : is_favorited
 note right of user
   role: USER | ADMIN
   email domain: @ukma.edu.ua
+  UNIQUE (tenant_id, entra_object_id)
+  no local password
 end note
 
 note right of listing
