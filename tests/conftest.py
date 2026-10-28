@@ -1,13 +1,27 @@
 """Спільні фікстури: ізольований Listing Service на кожен тест."""
 
+from collections.abc import Callable
+from uuid import uuid4
+
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api.deps import category_service, get_favorite_service, get_listing_service
+from src.api.deps import (
+    SESSION_COOKIE_NAME,
+    category_service,
+    get_auth_service,
+    get_auth_session_store,
+    get_favorite_service,
+    get_listing_service,
+)
 from src.api.main import app
 from src.domain.listings import SEED_CATEGORY_ID
+from src.domain.users import User, UserRole
 from src.repositories.favorites import InMemoryFavoriteRepository
 from src.repositories.listings import InMemoryListingRepository
+from src.repositories.users import InMemoryUserRepository
+from src.services.auth import AuthService, EntraAuthConfig
+from src.services.auth_sessions import InMemoryAuthSessionStore
 from src.services.favorites import FavoriteService
 from src.services.listings import ListingService
 
@@ -62,3 +76,43 @@ def listing_payload() -> dict[str, object]:
         "contact": "@someone",
         "image_urls": ["https://baraholka.ukma.edu.ua/images/algebra-notes.jpg"],
     }
+
+
+LoginAs = Callable[..., User]
+
+
+@pytest.fixture
+def login_as(client: TestClient) -> LoginAs:
+    """Створює локального користувача і справжню серверну сесію в cookie клієнта.
+
+    Не підміняє `require_current_user`: перевіряється реальний шлях
+    cookie -> InMemoryAuthSessionStore -> AuthService.get_current_user.
+    """
+    users = InMemoryUserRepository()
+    sessions = InMemoryAuthSessionStore()
+    service = AuthService(
+        users,
+        EntraAuthConfig(
+            tenant_id=uuid4(),
+            issuer="https://login.microsoftonline.com/test/v2.0",
+            audience="baraholka-test",
+        ),
+    )
+    app.dependency_overrides[get_auth_session_store] = lambda: sessions
+    app.dependency_overrides[get_auth_service] = lambda: service
+
+    def _login(role: UserRole = UserRole.USER, is_blocked: bool = False) -> User:
+        user = users.save(
+            User(
+                tenant_id=uuid4(),
+                entra_object_id=uuid4(),
+                email=f"user-{uuid4().hex[:8]}@ukma.edu.ua",
+                display_name="Test User",
+                role=role,
+                is_blocked=is_blocked,
+            )
+        )
+        client.cookies.set(SESSION_COOKIE_NAME, sessions.create(user.user_id))
+        return user
+
+    return _login

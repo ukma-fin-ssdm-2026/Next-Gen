@@ -362,19 +362,16 @@ paths:
         додані останніми (FR-009). Контакти продавців не включаються.
       operationId: get_favorites_api_v1_favorites_get
       parameters:
-      - name: X-Actor-Id
-        in: header
+      - name: baraholka_session
+        in: cookie
         required: false
         schema:
           anyOf:
           - type: string
-            format: uuid
           - type: 'null'
-          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-            Сервер не приймає user_id з тіла запиту.
-          title: X-Actor-Id
-        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-          Сервер не приймає user_id з тіла запиту.
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
       responses:
         '200':
           description: Successful Response
@@ -386,7 +383,13 @@ paths:
                   $ref: '#/components/schemas/ListingPublicResponse'
                 title: Response Get Favorites Api V1 Favorites Get
         '401':
-          description: Unauthorized
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Обліковий запис заблоковано
           content:
             application/json:
               schema:
@@ -413,19 +416,16 @@ paths:
           type: string
           format: uuid
           title: Listing Id
-      - name: X-Actor-Id
-        in: header
+      - name: baraholka_session
+        in: cookie
         required: false
         schema:
           anyOf:
           - type: string
-            format: uuid
           - type: 'null'
-          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-            Сервер не приймає user_id з тіла запиту.
-          title: X-Actor-Id
-        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-          Сервер не приймає user_id з тіла запиту.
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
       responses:
         '201':
           description: Successful Response
@@ -434,7 +434,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/FavoriteResponse'
         '401':
-          description: Unauthorized
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Обліковий запис заблоковано
           content:
             application/json:
               schema:
@@ -465,24 +471,27 @@ paths:
           type: string
           format: uuid
           title: Listing Id
-      - name: X-Actor-Id
-        in: header
+      - name: baraholka_session
+        in: cookie
         required: false
         schema:
           anyOf:
           - type: string
-            format: uuid
           - type: 'null'
-          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-            Сервер не приймає user_id з тіла запиту.
-          title: X-Actor-Id
-        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-          Сервер не приймає user_id з тіла запиту.
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
       responses:
         '204':
           description: Successful Response
         '401':
-          description: Unauthorized
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Обліковий запис заблоковано
           content:
             application/json:
               schema:

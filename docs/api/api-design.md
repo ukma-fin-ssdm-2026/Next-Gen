@@ -55,7 +55,7 @@
 - **Обґрунтування:** Модель `ListingUpdate` дозволяє передавати лише ті поля, які змінюються. Використання `PATCH` відповідає специфікації REST і унеможливлює ненавмисне скидання відсутніх у запиті полів у `null`. При спробі передати `null` у обов'язкове поле сервер повертає контрольовану помилку `422 Unprocessable Entity` замість `500 Internal Server Error`.
 
 ### 2.6 Обране (FR-009)
-- **Рішення:** Обране — окремий ресурс `/api/v1/favorites`, прив'язаний до поточного користувача з `X-Actor-Id`; `user_id` у запиті не приймається. `POST /api/v1/favorites/{listing_id}` ідемпотентний: повторне додавання повертає наявний запис без дубліката.
+- **Рішення:** Обране — окремий ресурс `/api/v1/favorites`, прив'язаний до `CurrentUser` із серверної сесії (`require_current_user`, cookie `baraholka_session`). `X-Actor-Id`, а також `user_id` у path, query чи body не враховуються: без валідної сесії — 401, заблокований користувач — 403. `POST /api/v1/favorites/{listing_id}` ідемпотентний: повторне додавання повертає наявний запис без дубліката.
 - **Обґрунтування:** Обране одного користувача недоступне іншим (TM-02). Список повертає `ListingPublicResponse`, тож контакти продавців через обране не розкриваються (SEC-002). Додати можна лише активне оголошення (404 для знятого чи неіснуючого), а зняття оголошення власником одразу прибирає його з обраного всіх користувачів.
 
 ### 2.7 Категорії оголошень (FR-012)
@@ -74,9 +74,9 @@
 | `GET` | `/api/v1/listings/{id}` | Отримати деталі конкретного оголошення за ID (без контактів) | 200 OK | 404 Not Found |
 | `PATCH` | `/api/v1/listings/{id}` | Частково оновити дані оголошення | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
 | `DELETE` | `/api/v1/listings/{id}` | Видалити оголошення | 204 No Content | 401 Unauthorized, 403 Forbidden, 404 Not Found |
-| `GET` | `/api/v1/favorites` | Отримати власне обране (активні оголошення без контактів, `FR-009`) | 200 OK | 401 Unauthorized |
-| `POST` | `/api/v1/favorites/{listing_id}` | Додати активне оголошення в обране (без дублікатів) | 201 Created | 401 Unauthorized, 404 Not Found, 422 |
-| `DELETE` | `/api/v1/favorites/{listing_id}` | Прибрати оголошення з обраного | 204 No Content | 401 Unauthorized, 404 Not Found, 422 |
+| `GET` | `/api/v1/favorites` | Отримати власне обране (активні оголошення без контактів, `FR-009`) | 200 OK | 401 Unauthorized, 403 Forbidden (заблокований) |
+| `POST` | `/api/v1/favorites/{listing_id}` | Додати активне оголошення в обране (без дублікатів) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
+| `DELETE` | `/api/v1/favorites/{listing_id}` | Прибрати оголошення з власного обраного | 204 No Content | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
 | `GET` | `/api/v1/categories` | Отримати список активних категорій для фільтрації каталогу (`FR-012`) | 200 OK | - |
 | `GET` | `/api/v1/categories/{id}` | Отримати дані конкретної категорії за ID (`FR-012`) | 200 OK | 404 Not Found, 422 |
 | `POST` | `/api/v1/categories` | Створити нову категорію (Адміністратор, `FR-012`) | 201 Created | 401 Unauthorized, 403 Forbidden, 409 Conflict, 422 |
