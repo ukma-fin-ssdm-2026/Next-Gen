@@ -9,7 +9,7 @@ from src.domain.listings import SEED_LISTING_ID, SEED_OWNER_ID, WITHDRAWN_LISTIN
 
 
 def test_health(client: TestClient) -> None:
-    """[NFR-001] [REL-002] Healthcheck endpoint перевірки працездатності сервісу."""
+    """[TP-003] [FR-006] Healthcheck endpoint перевірки працездатності сервісу."""
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
@@ -323,5 +323,52 @@ def test_patch_listing_failed_image_validation_preserves_state(
 
     after = client.get(f"/api/v1/listings/{SEED_LISTING_ID}").json()
     assert after == before
-
     assert response.status_code == 422
+
+
+def test_create_listing_with_unknown_category_returns_400(
+    client: TestClient,
+    listing_payload: dict[str, object],
+) -> None:
+    """[TP-002] [FR-002] [FR-012]
+    Створення оголошення з неіснуючою категорією повертає 400.
+    """
+    payload = {**listing_payload, "category_id": str(uuid4())}
+    response = client.post(
+        "/api/v1/listings",
+        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
+        json=payload,
+    )
+    assert response.status_code == 400
+    assert "не існує або була деактивована" in response.json()["detail"]
+
+
+def test_create_listing_with_deactivated_category_returns_400(
+    client: TestClient,
+    listing_payload: dict[str, object],
+) -> None:
+    """[TP-002] [FR-002] [FR-012]
+    Створення оголошення з деактивованою категорією відхиляється.
+    """
+    cat_id = str(listing_payload["category_id"])
+    patch_res = client.patch(
+        f"/api/v1/categories/{cat_id}",
+        headers={"X-Actor-Id": str(SEED_OWNER_ID), "X-Actor-Role": "ADMIN"},
+        json={"is_active": False},
+    )
+    assert patch_res.status_code == 200
+
+    try:
+        response = client.post(
+            "/api/v1/listings",
+            headers={"X-Actor-Id": str(SEED_OWNER_ID)},
+            json=listing_payload,
+        )
+        assert response.status_code == 400
+        assert "не існує або була деактивована" in response.json()["detail"]
+    finally:
+        client.patch(
+            f"/api/v1/categories/{cat_id}",
+            headers={"X-Actor-Id": str(SEED_OWNER_ID), "X-Actor-Role": "ADMIN"},
+            json={"is_active": True},
+        )

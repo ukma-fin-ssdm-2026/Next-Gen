@@ -11,7 +11,11 @@ category_repository = InMemoryCategoryRepository.with_seed()
 listing_repository = InMemoryListingRepository.with_seed()
 favorite_repository = InMemoryFavoriteRepository()
 category_service = CategoryService(category_repository)
-listing_service = ListingService(listing_repository, favorites=favorite_repository)
+listing_service = ListingService(
+    listing_repository,
+    favorites=favorite_repository,
+    category_validator=category_service.is_valid_category_id,
+)
 favorite_service = FavoriteService(favorite_repository, listing_repository)
 
 

@@ -69,7 +69,7 @@
 |---|---|---|---|---|
 | `GET` | `/api/v1/listings` | Отримати список оголошень (з пагінацією, фільтрацією та сортуванням) | 200 OK | 422 Unprocessable Entity |
 | `GET` | `/api/v1/listings/my` | Отримати історію власних оголошень продавця (активні та зняті, `FR-005`) | 200 OK | 401 Unauthorized, 422 |
-| `POST` | `/api/v1/listings` | Створити нове оголошення | 201 Created | 401 Unauthorized, 422 |
+| `POST` | `/api/v1/listings` | Створити нове оголошення | 201 Created | 400 Bad Request, 401 Unauthorized, 422 |
 | `GET` | `/api/v1/listings/{id}` | Отримати деталі конкретного оголошення за ID (без контактів) | 200 OK | 404 Not Found |
 | `PATCH` | `/api/v1/listings/{id}` | Частково оновити дані оголошення | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
 | `DELETE` | `/api/v1/listings/{id}` | Видалити оголошення | 204 No Content | 401 Unauthorized, 403 Forbidden, 404 Not Found |

@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 
 from src.domain.exceptions import (
+    InvalidCategoryError,
     InvalidListingImageError,
     InvalidPriceRangeError,
     ListingForbiddenError,
@@ -65,6 +66,29 @@ def test_create_requires_actor(listing_service: ListingService) -> None:
             contact="@someone",
         )
     assert str(exc_info.value) == "Потрібна ідентифікація користувача"
+
+
+def test_create_listing_validates_active_category() -> None:
+    """[TP-001] [FR-002] [FR-012]
+    Створення оголошення перевіряє активність категорії через валідатор.
+    """
+    repo = Mock(spec=ListingRepository)
+    validator = Mock(return_value=False)
+    service = ListingService(repo, category_validator=validator)
+
+    with pytest.raises(InvalidCategoryError) as exc_info:
+        service.create(
+            actor_id=uuid4(),
+            title="Товар у неактивній категорії",
+            description="Опис товару для перевірки валідатора категорії.",
+            price=150.0,
+            category_id=uuid4(),
+            contact="@student",
+        )
+
+    assert "не існує або була деактивована" in str(exc_info.value)
+    validator.assert_called_once()
+    repo.add.assert_not_called()
 
 
 def test_owner_can_update_title(listing_service: ListingService) -> None:

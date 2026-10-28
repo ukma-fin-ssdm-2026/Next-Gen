@@ -3,7 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api.deps import get_favorite_service, get_listing_service
+from src.api.deps import category_service, get_favorite_service, get_listing_service
 from src.api.main import app
 from src.domain.listings import SEED_CATEGORY_ID
 from src.repositories.favorites import InMemoryFavoriteRepository
@@ -27,7 +27,11 @@ def listing_service(
     listing_repository: InMemoryListingRepository,
     favorite_repository: InMemoryFavoriteRepository,
 ) -> ListingService:
-    return ListingService(listing_repository, favorites=favorite_repository)
+    return ListingService(
+        listing_repository,
+        favorites=favorite_repository,
+        category_validator=category_service.is_valid_category_id,
+    )
 
 
 @pytest.fixture

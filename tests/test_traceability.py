@@ -284,21 +284,69 @@ def test_ast_every_test_function_references_valid_requirement() -> None:
     """Двостороння простежуваність (Test -> Requirement): кожен тест має вимогу.
 
     Валить збірку, якщо будь-яка тестова функція в репозиторії не має посилання
-    на валідну вимогу або тест-кейс у своєму docstring.
+    на валідну вимогу або тест-кейс у своєму docstring, або якщо посилається
+    на вигаданий (неіснуючий) ідентифікатор (наприклад, [FR-999]).
     """
     all_functions = scan_all_test_functions(TESTS_DIR)
     assert len(all_functions) > 0, "Не знайдено жодної тестової функції"
 
+    all_reqs, _ = parse_rtm_requirements(RTM_PATH)
+    plan_cases = parse_test_plan_cases(TEST_PLAN_PATH)
+    valid_identifiers = set(all_reqs) | set(plan_cases.keys())
+
     unlinked_tests: list[str] = []
+    invalid_tag_tests: list[str] = []
+
     for fn in all_functions:
-        tags = fn["tags"]
+        tags = set(fn["tags"])
+        fname = str(fn["full_name"])
         if not tags:
-            unlinked_tests.append(str(fn["full_name"]))
+            unlinked_tests.append(f"{fname} (відсутні теги)")
+            continue
+
+        has_valid_id = any(t in valid_identifiers for t in tags)
+        if not has_valid_id:
+            unlinked_tests.append(f"{fname} (жодного валідного ID: {sorted(tags)})")
+
+        for tag in tags:
+            if (
+                tag.startswith("FR-")
+                or tag.startswith("SEC-")
+                or tag.startswith("PERF-")
+                or tag.startswith("REL-")
+                or tag.startswith("TP-")
+                or tag.startswith("DT-")
+            ) and tag not in valid_identifiers:
+                invalid_tag_tests.append(f"{fname} -> неіснуючий тег [{tag}]")
 
     assert not unlinked_tests, (
-        f"Знайдено {len(unlinked_tests)} тестових функцій без прив'язки до вимог "
-        f"чи тест-кейсів з RTM: {unlinked_tests}"
+        f"Знайдено {len(unlinked_tests)} тестових функцій без валідної прив'язки "
+        f"до вимог чи тест-кейсів з RTM: {unlinked_tests}"
     )
+    assert not invalid_tag_tests, (
+        f"Знайдено тестові функції з неіснуючими ідентифікаторами згідно RTM: "
+        f"{invalid_tag_tests}"
+    )
+
+
+def test_ast_traceability_detects_fake_or_missing_requirement_ids() -> None:
+    """[TP-017] [FR-012]
+    Перевіряє, що неіснуючий [FR-999] або відсутність тегу валить перевірку.
+    """
+    all_reqs, _ = parse_rtm_requirements(RTM_PATH)
+    plan_cases = parse_test_plan_cases(TEST_PLAN_PATH)
+    valid_identifiers = set(all_reqs) | set(plan_cases.keys())
+
+    assert "FR-999" not in valid_identifiers
+
+    fake_tags = {"FR-999"}
+    has_valid_id = any(t in valid_identifiers for t in fake_tags)
+    assert not has_valid_id, "Неіснуючий тег не повинен вважатися валідним"
+
+    invalid_tags = [
+        t for t in fake_tags if t.startswith("FR-") and t not in valid_identifiers
+    ]
+    assert invalid_tags == ["FR-999"], "Неіснуючий тег FR-999 має бути зафіксовано"
 
 
 def test_ast_every_in_scope_requirement_has_test_coverage() -> None:

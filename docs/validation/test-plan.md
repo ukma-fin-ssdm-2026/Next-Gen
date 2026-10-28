@@ -94,8 +94,9 @@ python -m pytest tests/test_decision_table.py -v
   2. `test_all_rtm_test_ids_exist_in_test_plan`: кожен ID тест-кейсу (`TP-*`, `DT-*`), згаданий у матриці RTM, обов'язково описаний у `test-plan.md`;
   3. `test_test_plan_cases_have_valid_metadata`: кожен тест-кейс має рівень тестування, тип, очікуваний результат і прив'язку до вимоги;
   4. `test_ast_every_test_plan_case_has_matching_python_test`: **Пряма простежуваність (Forward: Plan -> Code)** — кожен активний тест-кейс із `test-plan.md` (`TP-001`–`TP-017`, `TP-N01`, `TP-N02`, `DT-01`–`DT-07`) знайдено в реальних функціях `test_*` у каталозі `tests/`;
-  5. `test_ast_every_test_function_references_valid_requirement`: **Простежуваність функцій (Test -> Requirement)** — перевіряє кожну з 90+ тестових функцій у репозиторії. Будь-який тест без валідної вимоги або тест-кейсу валить збірку (0 функцій без прив'язки);
-  6. `test_ast_every_in_scope_requirement_has_test_coverage`: **Зворотна простежуваність (Requirement -> Test)** — динамічно зчитує всі вимоги з таблиці `rtm.md` (без фіксованих констант). Будь-яка активна вимога без виконуваного тесту валить збірку.
+  5. `test_ast_every_test_function_references_valid_requirement`: **Простежуваність функцій (Test -> Requirement)** — перевіряє кожну з 90+ тестових функцій у репозиторії. Будь-який тест без валідної вимоги або тест-кейсу, або з вигаданим ідентифікатором (наприклад, `[FR-999]`), валить збірку (0 функцій без прив'язки);
+  6. `test_ast_traceability_detects_fake_or_missing_requirement_ids`: перевіряє, що неіснуючий `[FR-999]` або відсутність тегів гарантовано валить збірку;
+  7. `test_ast_every_in_scope_requirement_has_test_coverage`: **Зворотна простежуваність (Requirement -> Test)** — динамічно зчитує всі вимоги з таблиці `rtm.md` (без фіксованих констант). Будь-яка активна вимога без виконуваного тесту валить збірку.
 
 #### Команда запуску
 ```bash
@@ -103,8 +104,8 @@ python -m pytest tests/test_traceability.py -v
 ```
 
 #### Демонстрація червоного та зеленого прогонів (Red/Green CI Demonstration)
-- **Червоний прогін (дірку знайдено):** Якщо будь-яка тестова функція додається без прив'язки до вимоги чи тест-кейсу, або якщо вимога з `rtm.md` не покрита жодним тестом, тести `test_ast_every_test_function_references_valid_requirement` чи `test_ast_every_in_scope_requirement_has_test_coverage` падають з `AssertionError` та ненульовим кодом повернення, блокуючи збірку в CI.
-- **Зелений прогін (дірку закрито):** Після повного маркування всіх тестових функцій та покриття всіх активних вимог усі 6 тестів простежуваності успішно проходять (`6 passed`), формуючи зелений статус у [GitHub Actions PR #200](https://github.com/ukma-fin-ssdm-2026/Next-Gen/actions).
+- **Червоний прогін (дірку знайдено / Red Run):** Посилання на зафіксовані збої в CI репозиторію: [GitHub Actions Run #40735291717](https://github.com/ukma-fin-ssdm-2026/Next-Gen/actions/runs/40735291717) та [GitHub Actions Run #40739429276](https://github.com/ukma-fin-ssdm-2026/Next-Gen/actions/runs/40739429276). При додаванні будь-якої тестової функції без прив'язки або з неіснуючим ID (наприклад `[FR-999]`) тест `test_ast_every_test_function_references_valid_requirement` падає з `AssertionError` та кодом повернення 1, блокуючи CI.
+- **Зелений прогін (дірку закрито / Green Run):** Посилання на успішний запуск CI гілки PR #200: [GitHub Actions Run #40737742764](https://github.com/ukma-fin-ssdm-2026/Next-Gen/actions/runs/40737742764) (усі 7 перевірок простежуваності успішно виконано).
 
 ---
 
