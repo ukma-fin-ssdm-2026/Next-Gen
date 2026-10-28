@@ -353,6 +353,64 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/listings/{listing_id}/contact:
+    get:
+      tags:
+      - Contacts
+      summary: Отримати контакт продавця
+      description: Повертає контакт продавця активного оголошення автентифікованому
+        користувачу (FR-010, SEC-002). Анонімний запит отримує 401 без контакту; неіснуюче
+        або зняте оголошення — 404.
+      operationId: get_seller_contact_api_v1_listings__listing_id__contact_get
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Listing Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SellerContactResponse'
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Обліковий запис заблоковано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Оголошення не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
   /api/v1/favorites:
     get:
       tags:
@@ -1341,6 +1399,24 @@ components:
           title: Image Urls
       type: object
       title: ListingUpdate
+    SellerContactResponse:
+      properties:
+        listing_id:
+          type: string
+          format: uuid
+          title: Listing Id
+          description: Оголошення, контакт продавця якого запитано
+        contact:
+          type: string
+          title: Contact
+          description: Контакт продавця (email або Telegram); лише для активної сесії
+          examples:
+          - '@student_ukma'
+      type: object
+      required:
+      - listing_id
+      - contact
+      title: SellerContactResponse
     UserRole:
       type: string
       enum:
