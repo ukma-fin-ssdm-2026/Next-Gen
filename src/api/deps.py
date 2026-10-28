@@ -19,6 +19,7 @@ from src.services.auth import (
 )
 from src.services.auth_sessions import InMemoryAuthSessionStore, InMemoryOidcFlowStore
 from src.services.categories import CategoryService
+from src.services.contacts import SellerContactService
 from src.services.favorites import FavoriteService
 from src.services.listings import ListingService
 
@@ -32,6 +33,7 @@ listing_service = ListingService(
     category_validator=category_service.is_valid_category_id,
 )
 favorite_service = FavoriteService(favorite_repository, listing_repository)
+contact_service = SellerContactService(listing_repository)
 user_repository = InMemoryUserRepository()
 oidc_flow_store = InMemoryOidcFlowStore()
 auth_session_store = InMemoryAuthSessionStore()
@@ -53,6 +55,11 @@ def get_listing_service() -> ListingService:
 def get_favorite_service() -> FavoriteService:
     """Повертає Favorite Service, що ділить сховища з Listing Service."""
     return favorite_service
+
+
+def get_contact_service() -> SellerContactService:
+    """Повертає Seller Contact Service, що читає те саме сховище оголошень."""
+    return contact_service
 
 
 def get_entra_settings() -> EntraSettings:

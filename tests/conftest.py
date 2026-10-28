@@ -11,6 +11,7 @@ from src.api.deps import (
     category_service,
     get_auth_service,
     get_auth_session_store,
+    get_contact_service,
     get_favorite_service,
     get_listing_service,
 )
@@ -22,6 +23,7 @@ from src.repositories.listings import InMemoryListingRepository
 from src.repositories.users import InMemoryUserRepository
 from src.services.auth import AuthService, EntraAuthConfig
 from src.services.auth_sessions import InMemoryAuthSessionStore
+from src.services.contacts import SellerContactService
 from src.services.favorites import FavoriteService
 from src.services.listings import ListingService
 
@@ -57,9 +59,21 @@ def favorite_service(
 
 
 @pytest.fixture
-def client(listing_service: ListingService, favorite_service: FavoriteService):
+def contact_service(
+    listing_repository: InMemoryListingRepository,
+) -> SellerContactService:
+    return SellerContactService(listing_repository)
+
+
+@pytest.fixture
+def client(
+    listing_service: ListingService,
+    favorite_service: FavoriteService,
+    contact_service: SellerContactService,
+):
     app.dependency_overrides[get_listing_service] = lambda: listing_service
     app.dependency_overrides[get_favorite_service] = lambda: favorite_service
+    app.dependency_overrides[get_contact_service] = lambda: contact_service
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
