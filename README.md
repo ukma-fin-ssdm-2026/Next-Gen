@@ -84,6 +84,7 @@
 - [Лабораторна 4 (`Labs/Lab04/`)](Labs/Lab04/) — [Чернявський](Labs/Lab04/video_Cherniavskyi.txt), [Остапенко](Labs/Lab04/video_Ostapenko.txt), [Солодкий](Labs/Lab04/video_Solodkyi.txt), [Солонина](Labs/Lab04/video_Solonyna.txt)
 - [Лабораторна 5 (`Labs/Lab05/`)](Labs/Lab05/) — [Чернявський](Labs/Lab05/video_Cherniavskyi.txt), [Остапенко](Labs/Lab05/video_Ostapenko.txt), [Солодкий](Labs/Lab05/video_Solodkyi.txt), [Солонина](Labs/Lab05/video_Solonyna.txt)
 - [Лабораторна 6 (`Labs/Lab06/`)](Labs/Lab06/) — [Чернявський](Labs/Lab06/video_Cherniavskyi.txt) ([TDD](Labs/Lab06/videoTDD_Cherniavskyi.txt)), [Остапенко](Labs/Lab06/video_Ostapenko.txt), [Солодкий](Labs/Lab06/video_Solodkyi.txt), [Солонина](Labs/Lab06/video_Solonyna.txt)
+- [Лабораторна 7 (`Labs/Lab07/`)](Labs/Lab07/) — [Чернявський](Labs/Lab07/video_Cherniavskyi.txt), [Остапенко](Labs/Lab07/video_Ostapenko.txt), [Солодкий](Labs/Lab07/video_Solodkyi.txt), [Солонина](Labs/Lab07/video_Solonyna.txt)
 
 ### Швидкий запуск та перевірки якості коду
 
