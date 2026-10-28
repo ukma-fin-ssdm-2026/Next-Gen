@@ -347,6 +347,152 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/favorites:
+    get:
+      tags:
+      - Favorites
+      summary: Отримати власне обране
+      description: Повертає активні оголошення з обраного поточного користувача, спершу
+        додані останніми (FR-009). Контакти продавців не включаються.
+      operationId: get_favorites_api_v1_favorites_get
+      parameters:
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+            Сервер не приймає user_id з тіла запиту.
+          title: X-Actor-Id
+        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+          Сервер не приймає user_id з тіла запиту.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ListingPublicResponse'
+                title: Response Get Favorites Api V1 Favorites Get
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/favorites/{listing_id}:
+    post:
+      tags:
+      - Favorites
+      summary: Додати оголошення в обране
+      description: Додає активне оголошення в обране поточного користувача (FR-009).
+        Повторне додавання не створює дубліката і повертає наявний запис.
+      operationId: add_favorite_api_v1_favorites__listing_id__post
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Listing Id
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+            Сервер не приймає user_id з тіла запиту.
+          title: X-Actor-Id
+        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+          Сервер не приймає user_id з тіла запиту.
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoriteResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+    delete:
+      tags:
+      - Favorites
+      summary: Прибрати оголошення з обраного
+      description: Видаляє оголошення з обраного поточного користувача (FR-009).
+      operationId: remove_favorite_api_v1_favorites__listing_id__delete
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Listing Id
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+            Сервер не приймає user_id з тіла запиту.
+          title: X-Actor-Id
+        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
+          Сервер не приймає user_id з тіла запиту.
+      responses:
+        '204':
+          description: Successful Response
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
   /api/v1/auth/login:
     get:
       tags:
@@ -502,152 +648,6 @@ paths:
       responses:
         '204':
           description: Successful Response
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/favorites:
-    get:
-      tags:
-      - Favorites
-      summary: Отримати власне обране
-      description: Повертає активні оголошення з обраного поточного користувача, спершу
-        додані останніми (FR-009). Контакти продавців не включаються.
-      operationId: get_favorites_api_v1_favorites_get
-      parameters:
-      - name: X-Actor-Id
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-            Сервер не приймає user_id з тіла запиту.
-          title: X-Actor-Id
-        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-          Сервер не приймає user_id з тіла запиту.
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ListingPublicResponse'
-                title: Response Get Favorites Api V1 Favorites Get
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/favorites/{listing_id}:
-    post:
-      tags:
-      - Favorites
-      summary: Додати оголошення в обране
-      description: Додає активне оголошення в обране поточного користувача (FR-009).
-        Повторне додавання не створює дубліката і повертає наявний запис.
-      operationId: add_favorite_api_v1_favorites__listing_id__post
-      parameters:
-      - name: listing_id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-          title: Listing Id
-      - name: X-Actor-Id
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-            Сервер не приймає user_id з тіла запиту.
-          title: X-Actor-Id
-        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-          Сервер не приймає user_id з тіла запиту.
-      responses:
-        '201':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FavoriteResponse'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Not Found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-    delete:
-      tags:
-      - Favorites
-      summary: Прибрати оголошення з обраного
-      description: Видаляє оголошення з обраного поточного користувача (FR-009).
-      operationId: remove_favorite_api_v1_favorites__listing_id__delete
-      parameters:
-      - name: listing_id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-          title: Listing Id
-      - name: X-Actor-Id
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-            Сервер не приймає user_id з тіла запиту.
-          title: X-Actor-Id
-        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-          Сервер не приймає user_id з тіла запиту.
-      responses:
-        '204':
-          description: Successful Response
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Not Found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Validation Error
           content:
