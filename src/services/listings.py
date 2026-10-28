@@ -16,6 +16,7 @@ from src.domain.listings import (
     ListingStatus,
     utc_now,
 )
+from src.repositories.favorites import FavoriteRepository
 from src.repositories.image_storage import ImageStorage, InMemoryImageStorage
 from src.repositories.listings import ListingRepository
 
@@ -27,8 +28,10 @@ class ListingService:
         self,
         repository: ListingRepository,
         image_storage: ImageStorage | None = None,
+        favorites: FavoriteRepository | None = None,
     ) -> None:
         self._repository = repository
+        self._favorites = favorites
         self._image_storage: ImageStorage = (
             image_storage if image_storage is not None else InMemoryImageStorage()
         )
@@ -145,11 +148,17 @@ class ListingService:
         return self._repository.save(listing)
 
     def delete(self, listing_id: UUID, actor_id: UUID | None) -> Listing:
-        """Знімає оголошення з публікації (переводить у WITHDRAWN, FR-004)."""
+        """Знімає оголошення з публікації (WITHDRAWN, FR-004).
+
+        Зняте оголошення одразу прибирається з обраного всіх користувачів (FR-009).
+        """
         listing = self._require_owned(listing_id, actor_id)
         listing.status = ListingStatus.WITHDRAWN
         listing.updated_at = self._next_timestamp(listing.updated_at)
-        return self._repository.save(listing)
+        saved = self._repository.save(listing)
+        if self._favorites is not None:
+            self._favorites.delete_by_listing(listing.id)
+        return saved
 
     def _require_listing(self, listing_id: UUID) -> Listing:
         listing = self._repository.get(listing_id)

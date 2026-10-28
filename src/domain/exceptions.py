@@ -23,3 +23,7 @@ class InvalidPriceRangeError(ListingError):
 
 class InvalidListingImageError(ListingError):
     """Некоректні дані або кількість зображень оголошення."""
+
+
+class FavoriteNotFoundError(ListingError):
+    """Оголошення немає в обраному поточного користувача."""
