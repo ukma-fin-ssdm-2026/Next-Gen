@@ -17,6 +17,9 @@ def test_add_favorite_returns_201(client: TestClient) -> None:
 
 
 def test_list_favorites_returns_public_listings(client: TestClient) -> None:
+    """[TP-013] [FR-009] [SEC-002]
+    Публічний перегляд обраного без розкриття контактів продавця.
+    """
     # Arrange
     client.post(f"{URL}/{SEED_LISTING_ID}", headers=BUYER)
     # Act
@@ -59,6 +62,7 @@ def test_favorites_are_private_per_user(client: TestClient) -> None:
 
 
 def test_remove_favorite_returns_204(client: TestClient) -> None:
+    """[TP-014] [FR-009] Видалення оголошення з обраного повертає HTTP 204."""
     client.post(f"{URL}/{SEED_LISTING_ID}", headers=BUYER)
     response = client.delete(f"{URL}/{SEED_LISTING_ID}", headers=BUYER)
     assert response.status_code == 204

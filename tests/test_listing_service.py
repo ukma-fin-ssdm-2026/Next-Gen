@@ -76,6 +76,7 @@ def test_owner_can_update_title(listing_service: ListingService) -> None:
 def test_owner_can_update_all_editable_fields(
     listing_service: ListingService,
 ) -> None:
+    """[TP-008] [FR-003] Власник може оновити всі доступні поля оголошення."""
     original = listing_service.get_public(SEED_LISTING_ID)
     previous_updated_at = original.updated_at
 
@@ -98,6 +99,9 @@ def test_owner_can_update_all_editable_fields(
 def test_delete_marks_withdrawn_and_preserves_data(
     listing_service: ListingService,
 ) -> None:
+    """[TP-005] [FR-004]
+    Зняття оголошення переводить його у WITHDRAWN зі збереженням даних.
+    """
     previous_updated_at = listing_service.get_public(SEED_LISTING_ID).updated_at
     deleted = listing_service.delete(SEED_LISTING_ID, actor_id=SEED_OWNER_ID)
     assert deleted.status.value == "WITHDRAWN"
@@ -143,6 +147,9 @@ def test_list_public_rejects_inverted_price_range(
 
 
 def test_public_catalog_filters_by_category_and_searches_description() -> None:
+    """[TP-003] [FR-006] [FR-007]
+    Каталог фільтрує за категорією та шукає в назві й описі.
+    """
     target_category = uuid4()
     title_match = Listing(
         title="Синій рюкзак",
@@ -244,6 +251,9 @@ def test_create_delegates_to_repository_and_uses_actor_as_owner() -> None:
 def test_list_owner_listings_returns_active_and_withdrawn_for_seller(
     listing_service: ListingService,
 ) -> None:
+    """[TP-010] [FR-005]
+    Історія власних оголошень повертає active та withdrawn для продавця.
+    """
     foreign_owner = uuid4()
     listing_service.create(
         actor_id=foreign_owner,
@@ -271,6 +281,9 @@ def test_list_owner_listings_requires_actor(
 
 
 def test_create_and_update_with_images_and_condition() -> None:
+    """[TP-001] [FR-002]
+    Створення та оновлення оголошення з фотографіями та станом товару.
+    """
     storage = InMemoryImageStorage()
     repository = InMemoryListingRepository.with_seed()
     service = ListingService(repository=repository, image_storage=storage)

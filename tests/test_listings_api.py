@@ -47,6 +47,7 @@ def test_create_without_actor_is_401(
     client: TestClient,
     listing_payload: dict[str, object],
 ) -> None:
+    """[TP-002] [FR-002] Створення оголошення без actor_id повертає HTTP 401."""
     response = client.post(
         "/api/v1/listings",
         json=listing_payload,
@@ -55,6 +56,7 @@ def test_create_without_actor_is_401(
 
 
 def test_patch_foreign_listing_is_403(client: TestClient) -> None:
+    """[TP-009] [FR-003] Редагування чужого оголошення повертає HTTP 403."""
     response = client.patch(
         f"/api/v1/listings/{SEED_LISTING_ID}",
         headers={"X-Actor-Id": str(uuid4())},
@@ -86,6 +88,9 @@ def test_patch_with_explicit_null_is_422(client: TestClient) -> None:
 
 
 def test_delete_marks_withdrawn_and_hides_from_public(client: TestClient) -> None:
+    """[TP-006] [FR-004]
+    Зняття оголошення власником повертає 204 та приховує з каталогу.
+    """
     response = client.delete(
         f"/api/v1/listings/{SEED_LISTING_ID}",
         headers={"X-Actor-Id": str(SEED_OWNER_ID)},
@@ -105,6 +110,9 @@ def test_delete_marks_withdrawn_and_hides_from_public(client: TestClient) -> Non
 def test_delete_foreign_listing_is_403_and_preserves_listing(
     client: TestClient,
 ) -> None:
+    """[TP-007] [FR-004]
+    Спроба зняти чуже оголошення повертає 403 та зберігає оголошення.
+    """
     before = client.get(f"/api/v1/listings/{SEED_LISTING_ID}")
     assert before.status_code == 200
 
@@ -136,7 +144,9 @@ def test_filter_by_price_range_api(client: TestClient) -> None:
 
 
 def test_catalog_rejects_inverted_price_range(client: TestClient) -> None:
-    """Регресійний тест: API повертає HTTP 422, якщо min_price > max_price."""
+    """[TP-004] [FR-008]
+    Регресійний тест: API повертає HTTP 422, якщо min_price > max_price.
+    """
     res = client.get(
         "/api/v1/listings", params={"min_price": 200.0, "max_price": 100.0}
     )
@@ -193,6 +203,9 @@ def test_get_my_listings_requires_actor(client: TestClient) -> None:
 def test_get_my_listings_returns_active_and_withdrawn_for_owner(
     client: TestClient,
 ) -> None:
+    """[TP-011] [FR-005] [SEC-001]
+    GET /api/v1/listings/my повертає всі оголошення власника.
+    """
     response = client.get(
         "/api/v1/listings/my",
         headers={"X-Actor-Id": str(SEED_OWNER_ID)},

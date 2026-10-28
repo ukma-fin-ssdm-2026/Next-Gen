@@ -43,6 +43,9 @@ def service(
 
 
 def test_add_active_listing_appears_in_list(service: FavoriteService) -> None:
+    """[TP-012] [FR-009]
+    Додавання активного оголошення в обране з'являється у списку.
+    """
     # Arrange: обране покупця порожнє
     # Act
     service.add(BUYER_ID, SEED_LISTING_ID)

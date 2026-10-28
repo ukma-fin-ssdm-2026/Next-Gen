@@ -1,9 +1,9 @@
-"""Category Service: бізнес-логіка керування категоріями (FR-012, REL-001)."""
+"""Category Service: бізнес-логіка керування категоріями (FR-012)."""
 
 from uuid import UUID
 
 from src.domain.categories import Category
-from src.domain.exceptions import CategoryNotFoundError
+from src.domain.exceptions import CategoryNotFoundError, InvalidCategoryError
 from src.repositories.categories import CategoryRepository
 
 
@@ -48,8 +48,34 @@ class CategoryService:
         )
         return self._repository.add(category)
 
+    def update(
+        self,
+        category_id: UUID,
+        name: str | None = None,
+        slug: str | None = None,
+        description: str | None = None,
+        is_active: bool | None = None,
+    ) -> Category:
+        """Оновлює атрибути категорії (FR-012)."""
+        category = self.get_by_id(category_id)
+        if name is not None:
+            clean_name = name.strip()
+            if not clean_name:
+                raise InvalidCategoryError("Назва категорії не може бути порожньою")
+            category.name = clean_name
+        if slug is not None:
+            clean_slug = slug.strip().lower()
+            if not clean_slug:
+                raise InvalidCategoryError("Slug категорії не може бути порожнім")
+            category.slug = clean_slug
+        if description is not None:
+            category.description = description.strip() if description.strip() else None
+        if is_active is not None:
+            category.is_active = is_active
+        return self._repository.update(category)
+
     def deactivate(self, category_id: UUID) -> Category:
-        """Деактивує категорію зі збереженням запису в БД (REL-001)."""
+        """Деактивує категорію зі збереженням запису в БД (FR-012)."""
         category = self.get_by_id(category_id)
         category.is_active = False
         return self._repository.update(category)

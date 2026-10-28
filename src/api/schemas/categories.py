@@ -17,10 +17,27 @@ class CategoryResponse(BaseModel):
 
 
 class CategoryCreateRequest(BaseModel):
-    """Схема створення нової категорії (адміністративна дія)."""
+    """Схема створення нової категорії (адміністративна дія, FR-012)."""
 
     name: str = Field(min_length=1, max_length=100, description="Назва категорії")
     slug: str = Field(min_length=1, max_length=100, description="Slug категорії")
     description: str | None = Field(
         default=None, max_length=500, description="Опис категорії"
+    )
+
+
+class CategoryUpdateRequest(BaseModel):
+    """Схема часткового оновлення категорії (адміністративна дія, FR-012)."""
+
+    name: str | None = Field(
+        default=None, min_length=1, max_length=100, description="Нова назва категорії"
+    )
+    slug: str | None = Field(
+        default=None, min_length=1, max_length=100, description="Новий slug категорії"
+    )
+    description: str | None = Field(
+        default=None, max_length=500, description="Новий опис категорії"
+    )
+    is_active: bool | None = Field(
+        default=None, description="Статус активності (деактивація)"
     )

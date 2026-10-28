@@ -1,4 +1,4 @@
-"""Репозиторій категорій оголошень (FR-012, REL-001)."""
+"""Репозиторій категорій оголошень (FR-012)."""
 
 from typing import Protocol
 from uuid import UUID

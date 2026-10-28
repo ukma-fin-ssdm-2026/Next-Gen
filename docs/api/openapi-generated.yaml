@@ -497,8 +497,9 @@ paths:
     get:
       tags:
       - Categories
-      summary: List Categories
-      description: Повертає список доступних активних категорій для перегляду та фільтрації.
+      summary: Отримати список активних категорій
+      description: Публічний ендпоінт для отримання списку доступних активних категорій
+        для фільтрації каталогу та створення нових оголошень (FR-012).
       operationId: list_categories_api_v1_categories_get
       responses:
         '200':
@@ -506,16 +507,56 @@ paths:
           content:
             application/json:
               schema:
+                type: array
                 items:
                   $ref: '#/components/schemas/CategoryResponse'
-                type: array
                 title: Response List Categories Api V1 Categories Get
+    post:
+      tags:
+      - Categories
+      summary: Створити нову категорію (Адміністратор)
+      description: 'Адміністративний ендпоінт для додавання нової категорії оголошень
+        (FR-012). Вимагає ролі ADMIN (заголовок X-Actor-Role: ADMIN).'
+      operationId: create_category_api_v1_categories_post
+      parameters:
+      - name: X-Actor-Role
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Тимчасовий заголовок ролі користувача (ADMIN / STUDENT) до
+            впровадження OIDC claims (ADR-003, FR-012).
+          title: X-Actor-Role
+        description: Тимчасовий заголовок ролі користувача (ADMIN / STUDENT) до впровадження
+          OIDC claims (ADR-003, FR-012).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryCreateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+        '403':
+          description: Недостатньо прав доступу (потрібна роль ADMIN)
+        '409':
+          description: Категорія з таким slug вже існує
+        '422':
+          description: Невалідні поля категорії
   /api/v1/categories/{category_id}:
     get:
       tags:
       - Categories
-      summary: Get Category
-      description: Повертає інформацію про конкретну категорію за її ID.
+      summary: Отримати інформацію про категорію за ID
+      description: Повертає метадані конкретної категорії оголошень за її ідентифікатором
+        (FR-012).
       operationId: get_category_api_v1_categories__category_id__get
       parameters:
       - name: category_id
@@ -535,11 +576,57 @@ paths:
         '404':
           description: Категорію не знайдено
         '422':
-          description: Validation Error
+          description: Некоректний формат UUID
+    patch:
+      tags:
+      - Categories
+      summary: Оновити або деактивувати категорію (Адміністратор)
+      description: 'Адміністративний ендпоінт для зміни назви, опису або деактивації
+        категорії (FR-012). Деактивована категорія зберігається в системі для збереження
+        цілісності наявних оголошень. Вимагає ролі ADMIN (заголовок X-Actor-Role:
+        ADMIN).'
+      operationId: update_category_api_v1_categories__category_id__patch
+      parameters:
+      - name: category_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Category Id
+      - name: X-Actor-Role
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Тимчасовий заголовок ролі користувача (ADMIN / STUDENT) до
+            впровадження OIDC claims (ADR-003, FR-012).
+          title: X-Actor-Role
+        description: Тимчасовий заголовок ролі користувача (ADMIN / STUDENT) до впровадження
+          OIDC claims (ADR-003, FR-012).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryUpdateRequest'
+      responses:
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/CategoryResponse'
+        '403':
+          description: Недостатньо прав доступу (потрібна роль ADMIN)
+        '404':
+          description: Категорію не знайдено
+        '409':
+          description: Новий slug вже використовується
+        '422':
+          description: Невалідні дані оновлення
   /health:
     get:
       tags:
@@ -557,6 +644,33 @@ paths:
                 $ref: '#/components/schemas/HealthResponse'
 components:
   schemas:
+    CategoryCreateRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Name
+          description: Назва категорії
+        slug:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Slug
+          description: Slug категорії
+        description:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Description
+          description: Опис категорії
+      type: object
+      required:
+      - name
+      - slug
+      title: CategoryCreateRequest
+      description: Схема створення нової категорії (адміністративна дія, FR-012).
     CategoryResponse:
       properties:
         id:
@@ -590,6 +704,40 @@ components:
       - slug
       title: CategoryResponse
       description: Публічна схема категорії.
+    CategoryUpdateRequest:
+      properties:
+        name:
+          anyOf:
+          - type: string
+            maxLength: 100
+            minLength: 1
+          - type: 'null'
+          title: Name
+          description: Нова назва категорії
+        slug:
+          anyOf:
+          - type: string
+            maxLength: 100
+            minLength: 1
+          - type: 'null'
+          title: Slug
+          description: Новий slug категорії
+        description:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Description
+          description: Новий опис категорії
+        is_active:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Active
+          description: Статус активності (деактивація)
+      type: object
+      title: CategoryUpdateRequest
+      description: Схема часткового оновлення категорії (адміністративна дія, FR-012).
     ErrorResponse:
       properties:
         detail:
@@ -623,10 +771,13 @@ components:
       properties:
         detail:
           items:
-            $ref: '#/components/schemas/ValidationError'
+            $ref: '#/components/schemas/ValidationErrorDetail'
           type: array
           title: Detail
+          description: Список помилок валідації
       type: object
+      required:
+      - detail
       title: HTTPValidationError
     HealthResponse:
       properties:
@@ -980,32 +1131,6 @@ components:
           title: Image Urls
       type: object
       title: ListingUpdate
-    ValidationError:
-      properties:
-        loc:
-          items:
-            anyOf:
-            - type: string
-            - type: integer
-          type: array
-          title: Location
-        msg:
-          type: string
-          title: Message
-        type:
-          type: string
-          title: Error Type
-        input:
-          title: Input
-        ctx:
-          type: object
-          title: Context
-      type: object
-      required:
-      - loc
-      - msg
-      - type
-      title: ValidationError
     ValidationErrorDetail:
       properties:
         loc:
