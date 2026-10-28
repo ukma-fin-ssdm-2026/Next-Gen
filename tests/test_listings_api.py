@@ -350,10 +350,22 @@ def test_create_listing_with_deactivated_category_returns_400(
     """[TP-002] [FR-002] [FR-012]
     Створення оголошення з деактивованою категорією відхиляється.
     """
+    from src.api.deps import require_current_user
+    from src.api.main import app
+    from src.domain.users import CurrentUser, UserRole
+
+    admin = CurrentUser(
+        user_id=SEED_OWNER_ID,
+        tenant_id=uuid4(),
+        entra_object_id=uuid4(),
+        email="admin@ukma.edu.ua",
+        display_name="Admin",
+        role=UserRole.ADMIN,
+    )
+    app.dependency_overrides[require_current_user] = lambda: admin
     cat_id = str(listing_payload["category_id"])
     patch_res = client.patch(
         f"/api/v1/categories/{cat_id}",
-        headers={"X-Actor-Id": str(SEED_OWNER_ID), "X-Actor-Role": "ADMIN"},
         json={"is_active": False},
     )
     assert patch_res.status_code == 200
@@ -369,6 +381,6 @@ def test_create_listing_with_deactivated_category_returns_400(
     finally:
         client.patch(
             f"/api/v1/categories/{cat_id}",
-            headers={"X-Actor-Id": str(SEED_OWNER_ID), "X-Actor-Role": "ADMIN"},
             json={"is_active": True},
         )
+        app.dependency_overrides.pop(require_current_user, None)

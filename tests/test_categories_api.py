@@ -6,15 +6,42 @@ GET /api/v1/categories/{id}, а також адміністративних оп
 """
 
 from uuid import uuid4
+import pytest
 from fastapi.testclient import TestClient
 
+from src.api.deps import require_current_user
+from src.api.main import app
 from src.domain.listings import SEED_CATEGORY_ID
+from src.domain.users import CurrentUser, UserRole
 
 URL = "/api/v1/categories"
 ADMIN_ACTOR_ID = uuid4()
 STUDENT_ACTOR_ID = uuid4()
-ADMIN_HEADER = {"X-Actor-Id": str(ADMIN_ACTOR_ID), "X-Actor-Role": "ADMIN"}
-STUDENT_HEADER = {"X-Actor-Id": str(STUDENT_ACTOR_ID), "X-Actor-Role": "STUDENT"}
+
+ADMIN_USER = CurrentUser(
+    user_id=ADMIN_ACTOR_ID,
+    tenant_id=uuid4(),
+    entra_object_id=uuid4(),
+    email="admin@ukma.edu.ua",
+    display_name="Admin NaUKMA",
+    role=UserRole.ADMIN,
+)
+
+STUDENT_USER = CurrentUser(
+    user_id=STUDENT_ACTOR_ID,
+    tenant_id=uuid4(),
+    entra_object_id=uuid4(),
+    email="student@ukma.edu.ua",
+    display_name="Student NaUKMA",
+    role=UserRole.USER,
+)
+
+
+@pytest.fixture
+def admin_client(client: TestClient):
+    app.dependency_overrides[require_current_user] = lambda: ADMIN_USER
+    yield client
+    app.dependency_overrides.pop(require_current_user, None)
 
 
 def test_list_categories_returns_200_and_active_categories(
@@ -71,14 +98,14 @@ def test_get_category_by_invalid_uuid_returns_422(client: TestClient) -> None:
     assert response.status_code == 422
 
 
-def test_admin_create_category_success(client: TestClient) -> None:
+def test_admin_create_category_success(admin_client: TestClient) -> None:
     """[TP-017] [FR-012] Адміністратор може створити нову категорію (HTTP 201)."""
     payload = {
         "name": "Настільні ігри НаУКМА",
         "slug": f"board-games-{uuid4().hex[:6]}",
         "description": "Клуб настілок та обмін іграми",
     }
-    response = client.post(URL, json=payload, headers=ADMIN_HEADER)
+    response = admin_client.post(URL, json=payload)
     assert response.status_code == 201
     created = response.json()
     assert created["name"] == payload["name"]
@@ -94,16 +121,20 @@ def test_non_admin_cannot_create_category(client: TestClient) -> None:
         "name": "Недозволена категорія",
         "slug": "unauthorized-cat",
     }
-    # Без заголовка автентифікації X-Actor-Id -> 401
+    # Без сесії -> 401
     res_no_actor = client.post(URL, json=payload)
     assert res_no_actor.status_code == 401
 
     # З роллю студента (автентифікований, але не адмін) -> 403
-    res_student = client.post(URL, json=payload, headers=STUDENT_HEADER)
-    assert res_student.status_code == 403
+    app.dependency_overrides[require_current_user] = lambda: STUDENT_USER
+    try:
+        res_student = client.post(URL, json=payload)
+        assert res_student.status_code == 403
+    finally:
+        app.dependency_overrides.pop(require_current_user, None)
 
 
-def test_create_category_duplicate_slug_returns_409(client: TestClient) -> None:
+def test_create_category_duplicate_slug_returns_409(admin_client: TestClient) -> None:
     """[TP-017] [FR-012]
     Спроба створити категорію з існуючим slug повертає HTTP 409 Conflict.
     """
@@ -111,39 +142,34 @@ def test_create_category_duplicate_slug_returns_409(client: TestClient) -> None:
         "name": "Дублюючі підручники",
         "slug": "textbooks",  # вже є в seed
     }
-    response = client.post(URL, json=payload, headers=ADMIN_HEADER)
+    response = admin_client.post(URL, json=payload)
     assert response.status_code == 409
     assert "вже існує" in response.json()["detail"].lower()
 
 
-def test_admin_update_category_and_deactivate(client: TestClient) -> None:
+def test_admin_update_category_and_deactivate(admin_client: TestClient) -> None:
     """[TP-017] [FR-012]
     Адміністратор може оновити та деактивувати категорію (HTTP 200).
     """
-    # Створюємо унікальну категорію для оновлення
     create_payload = {
         "name": "Тимчасова категорія",
         "slug": f"temp-cat-{uuid4().hex[:6]}",
         "description": "Опис до оновлення",
     }
-    created = client.post(URL, json=create_payload, headers=ADMIN_HEADER).json()
+    created = admin_client.post(URL, json=create_payload).json()
     cat_id = created["id"]
 
-    # Оновлюємо та деактивуємо
     update_payload = {
         "name": "Оновлена назва",
         "is_active": False,
     }
-    response = client.patch(
-        f"{URL}/{cat_id}", json=update_payload, headers=ADMIN_HEADER
-    )
+    response = admin_client.patch(f"{URL}/{cat_id}", json=update_payload)
     assert response.status_code == 200
     updated = response.json()
     assert updated["name"] == "Оновлена назва"
     assert updated["is_active"] is False
 
-    # Перевіряємо, що після деактивації категорія зникла з публічного списку
-    public_list = client.get(URL).json()
+    public_list = admin_client.get(URL).json()
     assert cat_id not in [cat["id"] for cat in public_list]
 
 
@@ -159,40 +185,40 @@ def test_non_admin_cannot_update_category(client: TestClient) -> None:
     assert res_no_actor.status_code == 401
 
     # З роллю студента -> 403
-    res_student = client.patch(
-        f"{URL}/{SEED_CATEGORY_ID}",
-        json={"name": "Хакерське перейменування"},
-        headers=STUDENT_HEADER,
-    )
-    assert res_student.status_code == 403
+    app.dependency_overrides[require_current_user] = lambda: STUDENT_USER
+    try:
+        res_student = client.patch(
+            f"{URL}/{SEED_CATEGORY_ID}",
+            json={"name": "Хакерське перейменування"},
+        )
+        assert res_student.status_code == 403
+    finally:
+        app.dependency_overrides.pop(require_current_user, None)
 
 
 def test_patch_duplicate_slug_returns_409_and_preserves_state(
-    client: TestClient,
+    admin_client: TestClient,
 ) -> None:
     """[TP-017] [FR-012] Регресійний API-тест: невдалий PATCH не пошкоджує стан.
 
     При спробі змінити slug на вже зайнятий ("electronics") сервер повертає
     HTTP 409 Conflict, а початковий запис не пошкоджується.
     """
-    before_res = client.get(f"{URL}/{SEED_CATEGORY_ID}")
+    before_res = admin_client.get(f"{URL}/{SEED_CATEGORY_ID}")
     assert before_res.status_code == 200
     orig_data = before_res.json()
 
-    patch_res = client.patch(
+    patch_res = admin_client.patch(
         f"{URL}/{SEED_CATEGORY_ID}",
         json={"name": "Нова назва", "slug": "electronics"},
-        headers=ADMIN_HEADER,
     )
     assert patch_res.status_code == 409
 
-    # Перевіряємо, що категорія зберегла свої первинні назву та slug
-    after_res = client.get(f"{URL}/{SEED_CATEGORY_ID}")
+    after_res = admin_client.get(f"{URL}/{SEED_CATEGORY_ID}")
     assert after_res.status_code == 200
     after_data = after_res.json()
     assert after_data["name"] == orig_data["name"]
     assert after_data["slug"] == orig_data["slug"]
 
-    # Кількість категорій зі слагом electronics залишається 1
-    all_categories = client.get(URL).json()
+    all_categories = admin_client.get(URL).json()
     assert sum(1 for cat in all_categories if cat["slug"] == "electronics") == 1

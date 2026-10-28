@@ -1,10 +1,10 @@
 """Endpoints для категорій оголошень (FR-012)."""
 
-from typing import Annotated, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, Header, HTTPException, status
 
-from src.api.deps import get_category_service
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from src.api.deps import get_category_service, require_current_user
 from src.api.schemas.categories import (
     CategoryCreateRequest,
     CategoryResponse,
@@ -15,49 +15,26 @@ from src.domain.exceptions import (
     DuplicateCategoryError,
     InvalidCategoryError,
 )
+from src.domain.users import CurrentUser, UserRole
 from src.services.categories import CategoryService
 
 router = APIRouter(prefix="/categories", tags=["Categories"])
 
-ActorId = Annotated[
-    Optional[UUID],
-    Header(
-        alias="X-Actor-Id",
-        description=(
-            "Тимчасовий ідентифікатор сесії користувача (SEC-001, ADR-003). "
-            "Після злиття Auth PR замінюється на CurrentUser із серверної сесії."
-        ),
-    ),
-]
 
-ActorRole = Annotated[
-    Optional[str],
-    Header(
-        alias="X-Actor-Role",
-        description=(
-            "Тимчасовий заголовок ролі користувача (ADMIN / STUDENT) "
-            "до переходу на перевірені серверні сесії (ADR-003, FR-012)."
-        ),
-    ),
-]
+def require_admin_user(
+    current_user: CurrentUser = Depends(require_current_user),
+) -> CurrentUser:
+    """Перевіряє адміністративні права поточного користувача (SEC-001, FR-012).
 
-
-def _require_admin(actor_id: Optional[UUID], role: Optional[str]) -> None:
-    """Перевіряє наявність сесії та адміністративних прав (SEC-001, FR-012).
-
-    Без сесії користувач отримує HTTP 401 Unauthorized.
+    Без валідної сесії require_current_user повертає HTTP 401 Unauthorized.
     Автентифікований користувач без ролі ADMIN отримує HTTP 403 Forbidden.
     """
-    if actor_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Необхідна автентифікація (відсутня сесія користувача)",
-        )
-    if role != "ADMIN":
+    if current_user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Дія дозволена лише адміністраторам системи",
         )
+    return current_user
 
 
 @router.get(
@@ -114,13 +91,13 @@ def get_category(
     response_model=CategoryResponse,
     summary="Створити нову категорію (Адміністратор)",
     description=(
-        "Адміністративний ендпоінт для додавання нової категорії оголошень (FR-012). "
-        "Вимагає ролі ADMIN (заголовок X-Actor-Role: ADMIN)."
+        "Адміністративний ендпоінт для створення нової категорії оголошень (FR-012). "
+        "Вимагає валідної серверної сесії та ролі ADMIN."
     ),
     status_code=status.HTTP_201_CREATED,
     responses={
         status.HTTP_401_UNAUTHORIZED: {
-            "description": "Необхідна автентифікація (відсутній X-Actor-Id)"
+            "description": "Необхідна автентифікація (потрібен вхід через Microsoft)"
         },
         status.HTTP_403_FORBIDDEN: {
             "description": "Недостатньо прав доступу (потрібна роль ADMIN)"
@@ -133,12 +110,10 @@ def get_category(
 )
 def create_category(
     payload: CategoryCreateRequest,
-    actor_id: ActorId = None,
-    role: ActorRole = None,
+    admin: CurrentUser = Depends(require_admin_user),
     service: CategoryService = Depends(get_category_service),
 ) -> CategoryResponse:
     """Створює нову категорію з валідацією прав адміністратора."""
-    _require_admin(actor_id, role)
     try:
         category = service.create(
             name=payload.name,
@@ -167,12 +142,12 @@ def create_category(
         "деактивації категорії (FR-012). "
         "Деактивована категорія зберігається в системі для "
         "збереження цілісності наявних оголошень. "
-        "Вимагає ролі ADMIN (заголовок X-Actor-Role: ADMIN)."
+        "Вимагає валідної серверної сесії та ролі ADMIN."
     ),
     status_code=status.HTTP_200_OK,
     responses={
         status.HTTP_401_UNAUTHORIZED: {
-            "description": "Необхідна автентифікація (відсутній X-Actor-Id)"
+            "description": "Необхідна автентифікація (потрібен вхід через Microsoft)"
         },
         status.HTTP_403_FORBIDDEN: {
             "description": "Недостатньо прав доступу (потрібна роль ADMIN)"
@@ -187,12 +162,10 @@ def create_category(
 def update_category(
     category_id: UUID,
     payload: CategoryUpdateRequest,
-    actor_id: ActorId = None,
-    role: ActorRole = None,
+    admin: CurrentUser = Depends(require_admin_user),
     service: CategoryService = Depends(get_category_service),
 ) -> CategoryResponse:
     """Оновлює параметри або деактивує категорію з перевіркою прав адміністратора."""
-    _require_admin(actor_id, role)
     try:
         category = service.update(
             category_id=category_id,

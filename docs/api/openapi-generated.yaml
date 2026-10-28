@@ -103,7 +103,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
     post:
       tags:
       - Listings
@@ -155,7 +155,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
   /api/v1/listings/my:
     get:
       tags:
@@ -199,7 +199,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
   /api/v1/listings/{listing_id}:
     get:
       tags:
@@ -233,7 +233,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
     patch:
       tags:
       - Listings
@@ -297,7 +297,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
     delete:
       tags:
       - Listings
@@ -352,7 +352,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
   /api/v1/favorites:
     get:
       tags:
@@ -396,7 +396,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
   /api/v1/favorites/{listing_id}:
     post:
       tags:
@@ -450,7 +450,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
     delete:
       tags:
       - Favorites
@@ -498,7 +498,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
   /api/v1/categories:
     get:
       tags:
@@ -521,35 +521,20 @@ paths:
       tags:
       - Categories
       summary: Створити нову категорію (Адміністратор)
-      description: 'Адміністративний ендпоінт для додавання нової категорії оголошень
-        (FR-012). Вимагає ролі ADMIN (заголовок X-Actor-Role: ADMIN).'
+      description: Адміністративний ендпоінт для створення нової категорії оголошень
+        (FR-012). Вимагає валідної серверної сесії та ролі ADMIN.
       operationId: create_category_api_v1_categories_post
       parameters:
-      - name: X-Actor-Id
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          description: Тимчасовий ідентифікатор сесії користувача (SEC-001, ADR-003).
-            Після злиття Auth PR замінюється на CurrentUser із серверної сесії.
-          title: X-Actor-Id
-        description: Тимчасовий ідентифікатор сесії користувача (SEC-001, ADR-003).
-          Після злиття Auth PR замінюється на CurrentUser із серверної сесії.
-      - name: X-Actor-Role
-        in: header
+      - name: baraholka_session
+        in: cookie
         required: false
         schema:
           anyOf:
           - type: string
           - type: 'null'
-          description: Тимчасовий заголовок ролі користувача (ADMIN / STUDENT) до
-            переходу на перевірені серверні сесії (ADR-003, FR-012).
-          title: X-Actor-Role
-        description: Тимчасовий заголовок ролі користувача (ADMIN / STUDENT) до переходу
-          на перевірені серверні сесії (ADR-003, FR-012).
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
       requestBody:
         required: true
         content:
@@ -564,7 +549,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CategoryResponse'
         '401':
-          description: Необхідна автентифікація (відсутній X-Actor-Id)
+          description: Необхідна автентифікація (потрібен вхід через Microsoft)
         '403':
           description: Недостатньо прав доступу (потрібна роль ADMIN)
         '409':
@@ -602,10 +587,9 @@ paths:
       tags:
       - Categories
       summary: Оновити або деактивувати категорію (Адміністратор)
-      description: 'Адміністративний ендпоінт для зміни назви, опису або деактивації
+      description: Адміністративний ендпоінт для зміни назви, опису або деактивації
         категорії (FR-012). Деактивована категорія зберігається в системі для збереження
-        цілісності наявних оголошень. Вимагає ролі ADMIN (заголовок X-Actor-Role:
-        ADMIN).'
+        цілісності наявних оголошень. Вимагає валідної серверної сесії та ролі ADMIN.
       operationId: update_category_api_v1_categories__category_id__patch
       parameters:
       - name: category_id
@@ -615,31 +599,16 @@ paths:
           type: string
           format: uuid
           title: Category Id
-      - name: X-Actor-Id
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          description: Тимчасовий ідентифікатор сесії користувача (SEC-001, ADR-003).
-            Після злиття Auth PR замінюється на CurrentUser із серверної сесії.
-          title: X-Actor-Id
-        description: Тимчасовий ідентифікатор сесії користувача (SEC-001, ADR-003).
-          Після злиття Auth PR замінюється на CurrentUser із серверної сесії.
-      - name: X-Actor-Role
-        in: header
+      - name: baraholka_session
+        in: cookie
         required: false
         schema:
           anyOf:
           - type: string
           - type: 'null'
-          description: Тимчасовий заголовок ролі користувача (ADMIN / STUDENT) до
-            переходу на перевірені серверні сесії (ADR-003, FR-012).
-          title: X-Actor-Role
-        description: Тимчасовий заголовок ролі користувача (ADMIN / STUDENT) до переходу
-          на перевірені серверні сесії (ADR-003, FR-012).
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
       requestBody:
         required: true
         content:
@@ -654,7 +623,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CategoryResponse'
         '401':
-          description: Необхідна автентифікація (відсутній X-Actor-Id)
+          description: Необхідна автентифікація (потрібен вхід через Microsoft)
         '403':
           description: Недостатньо прав доступу (потрібна роль ADMIN)
         '404':
@@ -663,6 +632,167 @@ paths:
           description: Новий slug вже використовується
         '422':
           description: Невалідні дані оновлення
+  /api/v1/auth/login:
+    get:
+      tags:
+      - Authentication
+      summary: Розпочати вхід Microsoft Entra ID
+      operationId: login_api_v1_auth_login_get
+      responses:
+        '307':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '502':
+          description: Microsoft Entra unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Entra ID not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/auth/callback:
+    get:
+      tags:
+      - Authentication
+      summary: Завершити Microsoft Entra ID callback
+      operationId: callback_api_v1_auth_callback_get
+      parameters:
+      - name: state
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: state, який повернув Microsoft
+          title: State
+        description: state, який повернув Microsoft
+      - name: baraholka_oidc_state
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Одноразовий state потоку OIDC
+          title: Baraholka Oidc State
+        description: Одноразовий state потоку OIDC
+      responses:
+        '303':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid OIDC state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Microsoft sign-in rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Local user is blocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Entra ID not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/auth/me:
+    get:
+      tags:
+      - Authentication
+      summary: Отримати поточного користувача
+      operationId: me_api_v1_auth_me_get
+      parameters:
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Local user is blocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Entra ID not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/auth/logout:
+    post:
+      tags:
+      - Authentication
+      summary: Завершити локальну сесію
+      operationId: logout_api_v1_auth_logout_post
+      parameters:
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /health:
     get:
       tags:
@@ -680,6 +810,19 @@ paths:
                 $ref: '#/components/schemas/HealthResponse'
 components:
   schemas:
+    ApiValidationErrorResponse:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationErrorDetail'
+          type: array
+          title: Detail
+          description: Список помилок валідації
+      type: object
+      required:
+      - detail
+      title: ApiValidationErrorResponse
+      description: Узгоджений формат 422 для доменних і Pydantic-помилок API.
     CategoryCreateRequest:
       properties:
         name:
@@ -774,6 +917,31 @@ components:
       type: object
       title: CategoryUpdateRequest
       description: Схема часткового оновлення категорії (адміністративна дія, FR-012).
+    CurrentUserResponse:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+          description: Локальний ID користувача
+        email:
+          type: string
+          title: Email
+          description: Підтверджена адреса @ukma.edu.ua
+        display_name:
+          type: string
+          title: Display Name
+          description: Ім'я з Microsoft Entra ID
+        role:
+          $ref: '#/components/schemas/UserRole'
+          description: Локальна роль користувача
+      type: object
+      required:
+      - user_id
+      - email
+      - display_name
+      - role
+      title: CurrentUserResponse
     ErrorResponse:
       properties:
         detail:
@@ -807,13 +975,10 @@ components:
       properties:
         detail:
           items:
-            $ref: '#/components/schemas/ValidationErrorDetail'
+            $ref: '#/components/schemas/ValidationError'
           type: array
           title: Detail
-          description: Список помилок валідації
       type: object
-      required:
-      - detail
       title: HTTPValidationError
     HealthResponse:
       properties:
@@ -1167,6 +1332,39 @@ components:
           title: Image Urls
       type: object
       title: ListingUpdate
+    UserRole:
+      type: string
+      enum:
+      - USER
+      - ADMIN
+      title: UserRole
+      description: Авторитетні локальні ролі Baraholka NaUKMA.
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
     ValidationErrorDetail:
       properties:
         loc:

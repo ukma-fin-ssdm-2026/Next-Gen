@@ -45,9 +45,10 @@
   - `min_price` і `max_price` (Optional[float], ge=0) — межі ціни.
   - `sort` (`newest` або `oldest`, default `newest`) — порядок за датою публікації (FR-008).
 
-### 2.4 Ідентифікація автора змін до впровадження Microsoft Entra ID (TM-02)
-- **Рішення:** `user_id` завжди призначається на сервері. Захищені операції власника (`GET /api/v1/listings/my`, `POST`, `PATCH`, `DELETE`) вимагають заголовок `X-Actor-Id`.
-- **Обґрунтування:** Клієнт не може підмінити власника в тілі запиту. `X-Actor-Id` — лише прототипна заглушка і не забезпечує автентифікації. За ADR-003 її має замінити перевірена Entra-ідентичність, зв'язана з локальним `User`; `user_id`, email чи роль із запиту клієнта не приймаються як доказ особи. Відсутня/невалідна сесія дає 401, чуже оголошення — 403.
+### 2.4 Microsoft Entra ID та ідентифікація автора змін (TM-02)
+- **Рішення:** `user_id` завжди призначається на сервері. Роутер `/api/v1/auth` реалізує Microsoft Entra ID Authorization Code Flow через MSAL, створює непрозору server-side сесію та повторно читає локального `User` для кожного захищеного запиту.
+- **Обґрунтування:** Microsoft-токени та `client_secret` не потрапляють у React/browser. Cookie містить лише випадковий ID сесії з `HttpOnly` та `SameSite=Lax`; у production додається `Secure`.
+- **Перехідний стан:** endpoints оголошень ще приймають прототипний `X-Actor-Id`, а сесії зберігаються in-memory. Заголовок треба замінити `require_current_user`, а для кількареплічного deployment додати Redis-адаптер.
 
 ### 2.5 Семантика часткового оновлення (PATCH замість PUT)
 - **Рішення:** Використання HTTP методу `PATCH` замість `PUT` для модифікації оголошення.
@@ -80,6 +81,10 @@
 | `GET` | `/api/v1/categories/{id}` | Отримати дані конкретної категорії за ID (`FR-012`) | 200 OK | 404 Not Found, 422 |
 | `POST` | `/api/v1/categories` | Створити нову категорію (Адміністратор, `FR-012`) | 201 Created | 401 Unauthorized, 403 Forbidden, 409 Conflict, 422 |
 | `PATCH` | `/api/v1/categories/{id}` | Оновити або деактивувати категорію (Адміністратор, `FR-012`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict, 422 |
+| `GET` | `/api/v1/auth/login` | Розпочати Microsoft Entra ID Authorization Code Flow | 307 Temporary Redirect | 502 Bad Gateway, 503 Service Unavailable |
+| `GET` | `/api/v1/auth/callback` | Перевірити callback та створити локальну сесію | 303 See Other | 400 Bad Request, 401 Unauthorized, 403 Forbidden |
+| `GET` | `/api/v1/auth/me` | Отримати поточного користувача | 200 OK | 401 Unauthorized, 403 Forbidden |
+| `POST` | `/api/v1/auth/logout` | Завершити локальну сесію | 204 No Content | — |
 
 ---
 
@@ -118,7 +123,7 @@
 
 ---
 > ### Нотатка «Використання ШІ»
-> - **Інструменти:** Gemini
-> - **Етап:** Проєктування API (API Design Review & Refinement)
-> - **Що згенеровано:** Опис полів ресурсу, таблиця полів, розділ ключових проєктних рішень (Code-First, SEC-002, пагінація, PATCH-семантика).
-> - **Що перевірено / відкинуто вручну:** Опис полів перевірено на відповідність фактичним Pydantic-моделям у `src/api/schemas/listings.py`. Таблицю проєктних рішень було вивірено згідно з зауваженнями API Review.
+> - **Інструменти:** Gemini, OpenAI Codex.
+> - **Етап:** Проєктування API та додавання Microsoft Entra ID Authorization Code Flow.
+> - **Що згенеровано:** Опис полів ресурсу, ключових проєктних рішень та контракту `/api/v1/auth` для login, callback, поточного користувача і logout.
+> - **Що перевірено / відкинуто вручну:** Опис звірено з Pydantic-моделями, FastAPI-роутерами та згенерованим OpenAPI; явно залишено перехідний `X-Actor-Id` і не подано in-memory session store як кількареплічне production-сховище.
