@@ -56,29 +56,53 @@ class CategoryService:
         description: str | None = None,
         is_active: bool | None = None,
     ) -> Category:
-        """Оновлює атрибути категорії (FR-012)."""
+        """Оновлює атрибути категорії (FR-012).
+
+        Створює копію сутності без in-place мутації, щоб у разі помилки валідації
+        чи дублювання slug первинний запис у репозиторії не пошкоджувався.
+        """
         category = self.get_by_id(category_id)
+
+        new_name = category.name
         if name is not None:
             clean_name = name.strip()
             if not clean_name:
                 raise InvalidCategoryError("Назва категорії не може бути порожньою")
-            category.name = clean_name
+            new_name = clean_name
+
+        new_slug = category.slug
         if slug is not None:
             clean_slug = slug.strip().lower()
             if not clean_slug:
                 raise InvalidCategoryError("Slug категорії не може бути порожнім")
-            category.slug = clean_slug
+            new_slug = clean_slug
+
+        new_description = category.description
         if description is not None:
-            category.description = description.strip() if description.strip() else None
-        if is_active is not None:
-            category.is_active = is_active
-        return self._repository.update(category)
+            new_description = description.strip() if description.strip() else None
+
+        new_is_active = category.is_active if is_active is None else is_active
+
+        updated_copy = Category(
+            id=category.id,
+            name=new_name,
+            slug=new_slug,
+            description=new_description,
+            is_active=new_is_active,
+        )
+        return self._repository.update(updated_copy)
 
     def deactivate(self, category_id: UUID) -> Category:
         """Деактивує категорію зі збереженням запису в БД (FR-012)."""
         category = self.get_by_id(category_id)
-        category.is_active = False
-        return self._repository.update(category)
+        deactivated_copy = Category(
+            id=category.id,
+            name=category.name,
+            slug=category.slug,
+            description=category.description,
+            is_active=False,
+        )
+        return self._repository.update(deactivated_copy)
 
     def is_valid_category_id(self, category_id: UUID) -> bool:
         """Перевіряє, чи існує активна категорія із зазначеним ID."""

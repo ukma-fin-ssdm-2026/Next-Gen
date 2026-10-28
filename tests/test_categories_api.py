@@ -11,8 +11,10 @@ from fastapi.testclient import TestClient
 from src.domain.listings import SEED_CATEGORY_ID
 
 URL = "/api/v1/categories"
-ADMIN_HEADER = {"X-Actor-Role": "ADMIN"}
-STUDENT_HEADER = {"X-Actor-Role": "STUDENT"}
+ADMIN_ACTOR_ID = uuid4()
+STUDENT_ACTOR_ID = uuid4()
+ADMIN_HEADER = {"X-Actor-Id": str(ADMIN_ACTOR_ID), "X-Actor-Role": "ADMIN"}
+STUDENT_HEADER = {"X-Actor-Id": str(STUDENT_ACTOR_ID), "X-Actor-Role": "STUDENT"}
 
 
 def test_list_categories_returns_200_and_active_categories(
@@ -86,17 +88,17 @@ def test_admin_create_category_success(client: TestClient) -> None:
 
 def test_non_admin_cannot_create_category(client: TestClient) -> None:
     """[TP-017] [FR-012]
-    Не-адміністратор отримує HTTP 403 Forbidden при спробі створення категорії.
+    Спроба створення без сесії повертає 401, не-адміністратором — 403 Forbidden.
     """
     payload = {
         "name": "Недозволена категорія",
         "slug": "unauthorized-cat",
     }
-    # Без заголовка ролі
-    res_no_role = client.post(URL, json=payload)
-    assert res_no_role.status_code == 403
+    # Без заголовка автентифікації X-Actor-Id -> 401
+    res_no_actor = client.post(URL, json=payload)
+    assert res_no_actor.status_code == 401
 
-    # З роллю студента
+    # З роллю студента (автентифікований, але не адмін) -> 403
     res_student = client.post(URL, json=payload, headers=STUDENT_HEADER)
     assert res_student.status_code == 403
 
@@ -147,11 +149,50 @@ def test_admin_update_category_and_deactivate(client: TestClient) -> None:
 
 def test_non_admin_cannot_update_category(client: TestClient) -> None:
     """[TP-017] [FR-012]
-    Не-адміністратор отримує HTTP 403 при спробі оновлення категорії.
+    Спроба оновлення без сесії повертає 401, не-адміністратором — 403.
     """
-    response = client.patch(
+    # Без сесії -> 401
+    res_no_actor = client.patch(
+        f"{URL}/{SEED_CATEGORY_ID}",
+        json={"name": "Хакерське перейменування"},
+    )
+    assert res_no_actor.status_code == 401
+
+    # З роллю студента -> 403
+    res_student = client.patch(
         f"{URL}/{SEED_CATEGORY_ID}",
         json={"name": "Хакерське перейменування"},
         headers=STUDENT_HEADER,
     )
-    assert response.status_code == 403
+    assert res_student.status_code == 403
+
+
+def test_patch_duplicate_slug_returns_409_and_preserves_state(
+    client: TestClient,
+) -> None:
+    """[TP-017] [FR-012] Регресійний API-тест: невдалий PATCH не пошкоджує стан.
+
+    При спробі змінити slug на вже зайнятий ("electronics") сервер повертає
+    HTTP 409 Conflict, а початковий запис не пошкоджується.
+    """
+    before_res = client.get(f"{URL}/{SEED_CATEGORY_ID}")
+    assert before_res.status_code == 200
+    orig_data = before_res.json()
+
+    patch_res = client.patch(
+        f"{URL}/{SEED_CATEGORY_ID}",
+        json={"name": "Нова назва", "slug": "electronics"},
+        headers=ADMIN_HEADER,
+    )
+    assert patch_res.status_code == 409
+
+    # Перевіряємо, що категорія зберегла свої первинні назву та slug
+    after_res = client.get(f"{URL}/{SEED_CATEGORY_ID}")
+    assert after_res.status_code == 200
+    after_data = after_res.json()
+    assert after_data["name"] == orig_data["name"]
+    assert after_data["slug"] == orig_data["slug"]
+
+    # Кількість категорій зі слагом electronics залишається 1
+    all_categories = client.get(URL).json()
+    assert sum(1 for cat in all_categories if cat["slug"] == "electronics") == 1

@@ -166,3 +166,38 @@ def test_category_service_validate_category_exists(
     """[TP-015] [FR-012] Валідація існування активної категорії за ID."""
     assert category_service.is_valid_category_id(SEED_CATEGORY_ID) is True
     assert category_service.is_valid_category_id(uuid4()) is False
+
+
+def test_category_service_update_duplicate_slug_preserves_original_state(
+    category_service: CategoryService, category_repo: InMemoryCategoryRepository
+) -> None:
+    """[TP-015] [FR-012] Регресійний тест: невдалий PATCH не пошкоджує категорію.
+
+    Якщо оновлення завершується DuplicateCategoryError, первинні name і slug
+    категорії в репозиторії не змінюються, а кількість записів не збільшується.
+    """
+    # Arrange: початковий стан категорії SEED_CATEGORY_ID ("textbooks")
+    before = category_repo.get(SEED_CATEGORY_ID)
+    assert before is not None
+    orig_name = before.name
+    orig_slug = before.slug
+
+    # Act & Assert: спроба змінити slug на вже існуючий "electronics"
+    with pytest.raises(DuplicateCategoryError):
+        category_service.update(
+            category_id=SEED_CATEGORY_ID,
+            name="Хакерські підручники",
+            slug="electronics",
+        )
+
+    # Assert: у сховищі категорія не пошкоджена (in-place мутація відсутня)
+    after = category_repo.get(SEED_CATEGORY_ID)
+    assert after is not None
+    assert after.name == orig_name
+    assert after.slug == orig_slug
+
+    # Кількість категорій зі слагом electronics залишається рівно 1
+    electronics_count = sum(
+        1 for cat in category_repo.list_all() if cat.slug == "electronics"
+    )
+    assert electronics_count == 1

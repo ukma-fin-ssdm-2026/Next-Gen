@@ -9,12 +9,14 @@ from src.domain.listings import SEED_LISTING_ID, SEED_OWNER_ID, WITHDRAWN_LISTIN
 
 
 def test_health(client: TestClient) -> None:
+    """[NFR-001] [REL-002] Healthcheck endpoint перевірки працездатності сервісу."""
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 
 
 def test_public_list_omits_contact(client: TestClient) -> None:
+    """[TP-003] [FR-006] [SEC-002] Публічний перегляд каталогу маскує контакти."""
     response = client.get("/api/v1/listings")
     assert response.status_code == 200
     payload = response.json()
@@ -25,12 +27,14 @@ def test_public_list_omits_contact(client: TestClient) -> None:
 
 
 def test_public_detail_omits_contact(client: TestClient) -> None:
+    """[TP-003] [FR-006] [SEC-002] Публічний перегляд деталей маскує контакти."""
     response = client.get(f"/api/v1/listings/{SEED_LISTING_ID}")
     assert response.status_code == 200
     assert "contact" not in response.json()
 
 
 def test_withdrawn_listing_not_in_catalog(client: TestClient) -> None:
+    """[TP-005] [FR-004] [FR-006] Зняті оголошення відсутні в каталозі."""
     response = client.get("/api/v1/listings")
     ids = {item["id"] for item in response.json()}
     assert str(SEED_LISTING_ID) in ids
@@ -38,6 +42,7 @@ def test_withdrawn_listing_not_in_catalog(client: TestClient) -> None:
 
 
 def test_search_query(client: TestClient) -> None:
+    """[TP-003] [FR-007] Пошук оголошень за ключовим словом q."""
     response = client.get("/api/v1/listings", params={"q": "худі"})
     assert response.status_code == 200
     assert len(response.json()) == 1
@@ -67,6 +72,7 @@ def test_patch_foreign_listing_is_403(client: TestClient) -> None:
 
 
 def test_owner_patch_updates_title_and_hides_contact(client: TestClient) -> None:
+    """[TP-008] [FR-003] [SEC-002] PATCH оновлює назву та не повертає контакт."""
     response = client.patch(
         f"/api/v1/listings/{SEED_LISTING_ID}",
         headers={"X-Actor-Id": str(SEED_OWNER_ID)},
@@ -79,6 +85,7 @@ def test_owner_patch_updates_title_and_hides_contact(client: TestClient) -> None
 
 
 def test_patch_with_explicit_null_is_422(client: TestClient) -> None:
+    """[TP-008] [FR-003] PATCH з невалідним null-значенням повертає 422."""
     response = client.patch(
         f"/api/v1/listings/{SEED_LISTING_ID}",
         headers={"X-Actor-Id": str(SEED_OWNER_ID)},
@@ -132,6 +139,7 @@ def test_delete_foreign_listing_is_403_and_preserves_listing(
 
 
 def test_filter_by_price_range_api(client: TestClient) -> None:
+    """[TP-004] [FR-008] Фільтрація оголошень за діапазоном цін через API."""
     res = client.get(
         "/api/v1/listings", params={"min_price": 100.0, "max_price": 200.0}
     )
@@ -163,6 +171,7 @@ def test_catalog_accepts_oldest_sort_order(
     client: TestClient,
     listing_payload: dict[str, object],
 ) -> None:
+    """[TP-003] [FR-008] Каталог підтримує сортування від найстаріших (sort=oldest)."""
     created = client.post(
         "/api/v1/listings",
         headers={"X-Actor-Id": str(SEED_OWNER_ID)},
@@ -191,11 +200,13 @@ def test_catalog_rejects_invalid_query_boundaries(
     client: TestClient,
     params: dict[str, object],
 ) -> None:
+    """[TP-003] [FR-006] [FR-008] Некоректні параметри фільтрів повертають HTTP 422."""
     response = client.get("/api/v1/listings", params=params)
     assert response.status_code == 422
 
 
 def test_get_my_listings_requires_actor(client: TestClient) -> None:
+    """[TP-011] [FR-005] [SEC-001] GET /listings/my без актора повертає 401."""
     response = client.get("/api/v1/listings/my")
     assert response.status_code == 401
 
@@ -224,6 +235,7 @@ def test_create_and_patch_listing_with_images_and_condition(
     client: TestClient,
     listing_payload: dict[str, object],
 ) -> None:
+    """[TP-001] [FR-002] [FR-003] Створення та PATCH оголошення з фотографіями."""
     payload = {
         **listing_payload,
         "condition": "NEW",
@@ -265,6 +277,7 @@ def test_create_listing_rejects_invalid_image_url_with_422(
     client: TestClient,
     listing_payload: dict[str, object],
 ) -> None:
+    """[TP-002] [FR-002] Невалідний URL фотографії відхиляється HTTP 422."""
     payload = {
         **listing_payload,
         "image_urls": ["ftp://invalid-scheme.example.com/photo.jpg"],
@@ -282,6 +295,7 @@ def test_create_listing_rejects_empty_images_list_with_422(
     client: TestClient,
     listing_payload: dict[str, object],
 ) -> None:
+    """[TP-002] [FR-002] Порожній список зображень відхиляється HTTP 422."""
     payload = {**listing_payload, "image_urls": []}
     response = client.post(
         "/api/v1/listings",
@@ -294,6 +308,7 @@ def test_create_listing_rejects_empty_images_list_with_422(
 def test_patch_listing_failed_image_validation_preserves_state(
     client: TestClient,
 ) -> None:
+    """[TP-008] [FR-003] Помилка валідації фото при PATCH зберігає стан оголошення."""
     before = client.get(f"/api/v1/listings/{SEED_LISTING_ID}").json()
 
     response = client.patch(

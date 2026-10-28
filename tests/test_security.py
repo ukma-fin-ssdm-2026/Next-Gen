@@ -8,7 +8,7 @@ LISTING_ID = "3fa85f64-5717-4562-b3fc-2c963f66afa6"
 
 
 def test_get_listing_hides_contact():
-    """[TP-N01] [SEC-002]
+    """[TP-N01] [SEC-002] [FR-010]
     TM-05 / SEC-002: публічний GET не повертає контакт продавця.
     """
     response = client.get(f"/api/v1/listings/{LISTING_ID}")
@@ -17,7 +17,7 @@ def test_get_listing_hides_contact():
 
 
 def test_patch_listing_does_not_leak_contact():
-    """[TP-N01] [SEC-002]
+    """[TP-N01] [SEC-002] [FR-010]
     TM-05 / SEC-002: PATCH без автентифікації не повертає контакт продавця.
     """
     response = client.patch(f"/api/v1/listings/{LISTING_ID}", json={})

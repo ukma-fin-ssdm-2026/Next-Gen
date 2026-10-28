@@ -519,6 +519,19 @@ paths:
         (FR-012). Вимагає ролі ADMIN (заголовок X-Actor-Role: ADMIN).'
       operationId: create_category_api_v1_categories_post
       parameters:
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Тимчасовий ідентифікатор сесії користувача (SEC-001, ADR-003).
+            Після злиття Auth PR замінюється на CurrentUser із серверної сесії.
+          title: X-Actor-Id
+        description: Тимчасовий ідентифікатор сесії користувача (SEC-001, ADR-003).
+          Після злиття Auth PR замінюється на CurrentUser із серверної сесії.
       - name: X-Actor-Role
         in: header
         required: false
@@ -527,10 +540,10 @@ paths:
           - type: string
           - type: 'null'
           description: Тимчасовий заголовок ролі користувача (ADMIN / STUDENT) до
-            впровадження OIDC claims (ADR-003, FR-012).
+            переходу на перевірені серверні сесії (ADR-003, FR-012).
           title: X-Actor-Role
-        description: Тимчасовий заголовок ролі користувача (ADMIN / STUDENT) до впровадження
-          OIDC claims (ADR-003, FR-012).
+        description: Тимчасовий заголовок ролі користувача (ADMIN / STUDENT) до переходу
+          на перевірені серверні сесії (ADR-003, FR-012).
       requestBody:
         required: true
         content:
@@ -544,6 +557,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CategoryResponse'
+        '401':
+          description: Необхідна автентифікація (відсутній X-Actor-Id)
         '403':
           description: Недостатньо прав доступу (потрібна роль ADMIN)
         '409':
@@ -594,6 +609,19 @@ paths:
           type: string
           format: uuid
           title: Category Id
+      - name: X-Actor-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Тимчасовий ідентифікатор сесії користувача (SEC-001, ADR-003).
+            Після злиття Auth PR замінюється на CurrentUser із серверної сесії.
+          title: X-Actor-Id
+        description: Тимчасовий ідентифікатор сесії користувача (SEC-001, ADR-003).
+          Після злиття Auth PR замінюється на CurrentUser із серверної сесії.
       - name: X-Actor-Role
         in: header
         required: false
@@ -602,10 +630,10 @@ paths:
           - type: string
           - type: 'null'
           description: Тимчасовий заголовок ролі користувача (ADMIN / STUDENT) до
-            впровадження OIDC claims (ADR-003, FR-012).
+            переходу на перевірені серверні сесії (ADR-003, FR-012).
           title: X-Actor-Role
-        description: Тимчасовий заголовок ролі користувача (ADMIN / STUDENT) до впровадження
-          OIDC claims (ADR-003, FR-012).
+        description: Тимчасовий заголовок ролі користувача (ADMIN / STUDENT) до переходу
+          на перевірені серверні сесії (ADR-003, FR-012).
       requestBody:
         required: true
         content:
@@ -619,6 +647,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CategoryResponse'
+        '401':
+          description: Необхідна автентифікація (відсутній X-Actor-Id)
         '403':
           description: Недостатньо прав доступу (потрібна роль ADMIN)
         '404':

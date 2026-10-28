@@ -54,6 +54,7 @@ def test_add_active_listing_appears_in_list(service: FavoriteService) -> None:
 
 
 def test_add_twice_does_not_duplicate(service: FavoriteService) -> None:
+    """[TP-012] [FR-009] Повторне додавання не створює дублікатів."""
     first = service.add(BUYER_ID, SEED_LISTING_ID)
     second = service.add(BUYER_ID, SEED_LISTING_ID)
     assert second == first
@@ -61,6 +62,7 @@ def test_add_twice_does_not_duplicate(service: FavoriteService) -> None:
 
 
 def test_add_requires_actor(service: FavoriteService) -> None:
+    """[TP-012] [FR-009] Додавання в обране вимагає авторизованого актора."""
     with pytest.raises(ListingUnauthorizedError):
         service.add(None, SEED_LISTING_ID)
 
@@ -69,28 +71,33 @@ def test_add_requires_actor(service: FavoriteService) -> None:
 def test_add_rejects_withdrawn_or_unknown_listing(
     service: FavoriteService, favorites: InMemoryFavoriteRepository, listing_id
 ) -> None:
+    """[TP-012] [FR-009] Відхилення додавання знятих або неіснуючих оголошень."""
     with pytest.raises(ListingNotFoundError):
         service.add(BUYER_ID, listing_id)
     assert favorites.list_by_user(BUYER_ID) == []
 
 
 def test_favorites_are_private_per_user(service: FavoriteService) -> None:
+    """[TP-013] [FR-009] Список обраного приватний для кожного користувача."""
     service.add(BUYER_ID, SEED_LISTING_ID)
     assert service.list_for(uuid4()) == []
 
 
 def test_list_requires_actor(service: FavoriteService) -> None:
+    """[TP-013] [FR-009] Перегляд обраного вимагає авторизованого актора."""
     with pytest.raises(ListingUnauthorizedError):
         service.list_for(None)
 
 
 def test_remove_deletes_only_this_entry(service: FavoriteService) -> None:
+    """[TP-014] [FR-009] Видалення з обраного видаляє лише обраний запис."""
     service.add(BUYER_ID, SEED_LISTING_ID)
     service.remove(BUYER_ID, SEED_LISTING_ID)
     assert service.list_for(BUYER_ID) == []
 
 
 def test_remove_missing_entry_raises(service: FavoriteService) -> None:
+    """[TP-014] [FR-009] Видалення відсутнього запису викликає FavoriteNotFoundError."""
     with pytest.raises(FavoriteNotFoundError):
         service.remove(BUYER_ID, SEED_LISTING_ID)
 
@@ -98,6 +105,7 @@ def test_remove_missing_entry_raises(service: FavoriteService) -> None:
 def test_listing_withdrawn_after_adding_is_hidden(
     service: FavoriteService, listings: InMemoryListingRepository
 ) -> None:
+    """[TP-014] [FR-009] Зняте після додавання оголошення приховується з обраного."""
     service.add(BUYER_ID, SEED_LISTING_ID)
     listing = listings.get(SEED_LISTING_ID)
     listing.status = ListingStatus.WITHDRAWN
@@ -110,6 +118,7 @@ def test_withdrawing_listing_removes_it_from_all_favorites(
     favorites: InMemoryFavoriteRepository,
     listings: InMemoryListingRepository,
 ) -> None:
+    """[TP-014] [FR-009] Зняття оголошення власником очищає його з усіх списків."""
     # Arrange: два покупці зберегли те саме оголошення
     other_buyer = uuid4()
     service.add(BUYER_ID, SEED_LISTING_ID)
@@ -125,6 +134,7 @@ def test_withdrawing_listing_removes_it_from_all_favorites(
 def test_list_orders_newest_added_first(
     favorites: InMemoryFavoriteRepository, listings: InMemoryListingRepository
 ) -> None:
+    """[TP-013] [FR-009] Список обраного сортується від найновіших доданих."""
     second_listing = listings.get(SEED_LISTING_ID)
     newer = InMemoryListingRepository.with_seed().get(SEED_LISTING_ID)
     newer.id = uuid4()
@@ -149,6 +159,7 @@ def test_list_orders_newest_added_first(
 
 
 def test_repository_delete_reports_missing_entry() -> None:
+    """[TP-014] [FR-009] Репозиторій повертає False при видаленні відсутнього."""
     repo = InMemoryFavoriteRepository()
     assert repo.delete(BUYER_ID, SEED_LISTING_ID) is False
     assert repo.delete_by_listing(SEED_LISTING_ID) == 0

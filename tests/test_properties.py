@@ -18,8 +18,9 @@ from src.services.listings import ListingService
     max_price=st.floats(min_value=0.0, max_value=1000.0),
 )
 def test_property_price_filter_invariant(min_price: float, max_price: float) -> None:
-    """Властивість: при min_price <= max_price всі товари потрапляють в діапазон;
+    """[TP-004] [FR-008] Властивість: фільтрація за ціною зберігає інваріант діапазону.
 
+    При min_price <= max_price всі товари потрапляють в діапазон;
     при min_price > max_price завжди викидається InvalidPriceRangeError.
     """
     owner_id = uuid4()
