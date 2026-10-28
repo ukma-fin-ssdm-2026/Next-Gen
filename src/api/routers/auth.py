@@ -1,0 +1,171 @@
+"""HTTP endpoints Microsoft Entra ID Authorization Code Flow."""
+
+from typing import Annotated
+
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response
+from fastapi import status
+from fastapi.responses import RedirectResponse
+
+from src.api.deps import (
+    OIDC_STATE_COOKIE_NAME,
+    SESSION_COOKIE_NAME,
+    SessionCookie,
+    get_auth_service,
+    get_auth_session_store,
+    get_entra_oidc_client,
+    get_entra_settings,
+    get_oidc_flow_store,
+    require_current_user,
+)
+from src.api.schemas.listings import ErrorResponse
+from src.api.schemas.users import CurrentUserResponse
+from src.config import EntraSettings
+from src.domain.users import CurrentUser
+from src.integrations.entra import EntraOidcClient, EntraOidcError
+from src.services.auth import AuthService, BlockedUserError, InvalidIdentityError
+from src.services.auth_sessions import InMemoryAuthSessionStore, InMemoryOidcFlowStore
+
+router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+OidcStateCookie = Annotated[
+    str | None,
+    Cookie(alias=OIDC_STATE_COOKIE_NAME, description="Одноразовий state потоку OIDC"),
+]
+
+
+@router.get(
+    "/login",
+    summary="Розпочати вхід Microsoft Entra ID",
+    status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+    responses={
+        502: {"model": ErrorResponse, "description": "Microsoft Entra unavailable"},
+        503: {"model": ErrorResponse, "description": "Entra ID not configured"},
+    },
+)
+def login(
+    settings: EntraSettings = Depends(get_entra_settings),
+    oidc: EntraOidcClient = Depends(get_entra_oidc_client),
+    flows: InMemoryOidcFlowStore = Depends(get_oidc_flow_store),
+) -> RedirectResponse:
+    try:
+        flow = oidc.begin()
+    except EntraOidcError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+
+    state_value = str(flow["state"])
+    flows.save(state_value, flow)
+    response = RedirectResponse(str(flow["auth_uri"]))
+    response.set_cookie(
+        key=OIDC_STATE_COOKIE_NAME,
+        value=state_value,
+        max_age=settings.oidc_flow_ttl_seconds,
+        httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite="lax",
+        path="/api/v1/auth",
+    )
+    return response
+
+
+@router.get(
+    "/callback",
+    summary="Завершити Microsoft Entra ID callback",
+    status_code=status.HTTP_303_SEE_OTHER,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid OIDC state"},
+        401: {"model": ErrorResponse, "description": "Microsoft sign-in rejected"},
+        403: {"model": ErrorResponse, "description": "Local user is blocked"},
+        503: {"model": ErrorResponse, "description": "Entra ID not configured"},
+    },
+)
+def callback(
+    request: Request,
+    state: str | None = Query(None, description="state, який повернув Microsoft"),
+    oidc_state: OidcStateCookie = None,
+    settings: EntraSettings = Depends(get_entra_settings),
+    oidc: EntraOidcClient = Depends(get_entra_oidc_client),
+    flows: InMemoryOidcFlowStore = Depends(get_oidc_flow_store),
+    sessions: InMemoryAuthSessionStore = Depends(get_auth_session_store),
+    service: AuthService = Depends(get_auth_service),
+) -> RedirectResponse:
+    if state is None or oidc_state is None or state != oidc_state:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Невалідний OIDC state",
+        )
+    flow = flows.pop(state)
+    if flow is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OIDC flow не знайдено або він завершився",
+        )
+
+    try:
+        claims = oidc.complete(flow, dict(request.query_params))
+        current_user = service.authenticate_verified_claims(claims)
+    except (EntraOidcError, InvalidIdentityError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+        ) from exc
+    except BlockedUserError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
+    session_token = sessions.create(current_user.user_id)
+    response = RedirectResponse(
+        settings.frontend_url, status_code=status.HTTP_303_SEE_OTHER
+    )
+    response.delete_cookie(OIDC_STATE_COOKIE_NAME, path="/api/v1/auth")
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=session_token,
+        max_age=settings.session_ttl_seconds,
+        httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite="lax",
+        path="/",
+    )
+    return response
+
+
+@router.get(
+    "/me",
+    response_model=CurrentUserResponse,
+    summary="Отримати поточного користувача",
+    responses={
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Local user is blocked"},
+        503: {"model": ErrorResponse, "description": "Entra ID not configured"},
+    },
+)
+def me(
+    current_user: CurrentUser = Depends(require_current_user),
+) -> CurrentUserResponse:
+    return CurrentUserResponse(
+        user_id=current_user.user_id,
+        email=current_user.email,
+        display_name=current_user.display_name,
+        role=current_user.role,
+    )
+
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Завершити локальну сесію",
+)
+def logout(
+    session_token: SessionCookie = None,
+    sessions: InMemoryAuthSessionStore = Depends(get_auth_session_store),
+) -> Response:
+    if session_token is not None:
+        sessions.revoke(session_token)
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    response.delete_cookie(SESSION_COOKIE_NAME, path="/")
+    return response

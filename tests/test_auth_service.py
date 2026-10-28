@@ -103,22 +103,36 @@ def test_existing_entra_identity_updates_profile_without_changing_local_id(
             "Потрібна підтверджена адреса @ukma.edu.ua",
         ),
     ],
+    ids=[
+        "wrong-tenant",
+        "wrong-issuer",
+        "wrong-audience",
+        "expired-token",
+        "foreign-email-domain",
+        "empty-email-local-part",
+    ],
 )
-def test_invalid_claims_are_rejected(
+def test_nfr_sec_01_invalid_claims_are_rejected(
     auth_config: EntraAuthConfig,
     valid_claims: VerifiedEntraClaims,
     changed_claims: dict[str, object],
     expected_message: str,
 ) -> None:
-    service = AuthService(InMemoryUserRepository(), auth_config)
+    repository = InMemoryUserRepository()
+    service = AuthService(repository, auth_config)
+    invalid_claims = replace(valid_claims, **changed_claims)
 
     with pytest.raises(InvalidIdentityError) as exc_info:
-        service.authenticate_verified_claims(
-            replace(valid_claims, **changed_claims),
-            now=NOW,
-        )
+        service.authenticate_verified_claims(invalid_claims, now=NOW)
 
     assert str(exc_info.value) == expected_message
+    assert (
+        repository.get_by_entra_identity(
+            invalid_claims.tenant_id,
+            invalid_claims.object_id,
+        )
+        is None
+    )
 
 
 def test_blocked_local_user_is_rejected_without_profile_update(

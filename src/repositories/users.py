@@ -15,6 +15,10 @@ class UserRepository(Protocol):
         """Шукає користувача за стабільною парою tenant ID та object ID."""
         ...
 
+    def get_by_id(self, user_id: UUID) -> User | None:
+        """Шукає локального користувача для перевірки сесії."""
+        ...
+
     def save(self, user: User) -> User:
         """Створює або оновлює локальний профіль."""
         ...
@@ -24,15 +28,22 @@ class InMemoryUserRepository:
     """Ізольоване сховище користувачів для модульних тестів."""
 
     def __init__(self, users: list[User] | None = None) -> None:
-        self._users: dict[tuple[UUID, UUID], User] = {
+        self._users_by_identity: dict[tuple[UUID, UUID], User] = {
             (user.tenant_id, user.entra_object_id): user for user in users or []
+        }
+        self._users_by_id: dict[UUID, User] = {
+            user.user_id: user for user in users or []
         }
 
     def get_by_entra_identity(
         self, tenant_id: UUID, entra_object_id: UUID
     ) -> User | None:
-        return self._users.get((tenant_id, entra_object_id))
+        return self._users_by_identity.get((tenant_id, entra_object_id))
+
+    def get_by_id(self, user_id: UUID) -> User | None:
+        return self._users_by_id.get(user_id)
 
     def save(self, user: User) -> User:
-        self._users[(user.tenant_id, user.entra_object_id)] = user
+        self._users_by_identity[(user.tenant_id, user.entra_object_id)] = user
+        self._users_by_id[user.user_id] = user
         return user

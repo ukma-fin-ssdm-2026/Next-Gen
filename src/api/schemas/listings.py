@@ -133,7 +133,9 @@ class ValidationErrorDetail(BaseModel):
     )
 
 
-class HTTPValidationError(BaseModel):
+class ApiValidationErrorResponse(BaseModel):
+    """Узгоджений формат 422 для доменних і Pydantic-помилок API."""
+
     detail: list[ValidationErrorDetail] = Field(
         ..., description="Список помилок валідації"
     )

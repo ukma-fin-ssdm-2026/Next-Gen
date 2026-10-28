@@ -8,8 +8,8 @@ from src.api.deps import get_favorite_service
 from src.api.routers.listings import ActorId, _to_public
 from src.api.schemas.favorites import FavoriteResponse
 from src.api.schemas.listings import (
+    ApiValidationErrorResponse,
     ErrorResponse,
-    HTTPValidationError,
     ListingPublicResponse,
 )
 from src.domain.exceptions import (
@@ -43,7 +43,7 @@ def _raise_domain(exc: Exception) -> None:
     ),
     responses={
         401: {"model": ErrorResponse, "description": "Unauthorized"},
-        422: {"model": HTTPValidationError, "description": "Validation Error"},
+        422: {"model": ApiValidationErrorResponse, "description": "Validation Error"},
     },
 )
 def get_favorites(
@@ -69,7 +69,7 @@ def get_favorites(
     responses={
         401: {"model": ErrorResponse, "description": "Unauthorized"},
         404: {"model": ErrorResponse, "description": "Not Found"},
-        422: {"model": HTTPValidationError, "description": "Validation Error"},
+        422: {"model": ApiValidationErrorResponse, "description": "Validation Error"},
     },
 )
 def add_favorite(
@@ -94,7 +94,7 @@ def add_favorite(
     responses={
         401: {"model": ErrorResponse, "description": "Unauthorized"},
         404: {"model": ErrorResponse, "description": "Not Found"},
-        422: {"model": HTTPValidationError, "description": "Validation Error"},
+        422: {"model": ApiValidationErrorResponse, "description": "Validation Error"},
     },
 )
 def remove_favorite(
