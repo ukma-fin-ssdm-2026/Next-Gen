@@ -27,3 +27,19 @@ class InvalidListingImageError(ListingError):
 
 class FavoriteNotFoundError(ListingError):
     """Оголошення немає в обраному поточного користувача."""
+
+
+class CategoryError(ListingError):
+    """Базова помилка операцій з категоріями."""
+
+
+class CategoryNotFoundError(CategoryError):
+    """Категорію з указаним ідентифікатором або slug не знайдено."""
+
+
+class DuplicateCategoryError(CategoryError):
+    """Категорія з таким slug вже існує."""
+
+
+class InvalidCategoryError(CategoryError):
+    """Некоректні дані категорії."""

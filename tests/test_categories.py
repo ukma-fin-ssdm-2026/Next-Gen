@@ -5,7 +5,7 @@
 Тест-кейси: TP-015 (модульний рівень).
 """
 
-from uuid import UUID, uuid4
+from uuid import uuid4
 import pytest
 
 from src.domain.categories import Category
@@ -55,10 +55,14 @@ def test_category_slug_normalization_and_validation() -> None:
     assert cat.slug == "merch-naukma"
     assert cat.is_active is True
 
-    with pytest.raises(InvalidCategoryError, match="Назва категорії не може бути порожньою"):
+    with pytest.raises(
+        InvalidCategoryError, match="Назва категорії не може бути порожньою"
+    ):
         Category.create(name="   ", slug="valid-slug")
 
-    with pytest.raises(InvalidCategoryError, match="Slug категорії не може бути порожнім"):
+    with pytest.raises(
+        InvalidCategoryError, match="Slug категорії не може бути порожнім"
+    ):
         Category.create(name="Valid Name", slug="   ")
 
 

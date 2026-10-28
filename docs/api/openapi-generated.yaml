@@ -493,6 +493,53 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/categories:
+    get:
+      tags:
+      - Categories
+      summary: List Categories
+      description: Повертає список доступних активних категорій для перегляду та фільтрації.
+      operationId: list_categories_api_v1_categories_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/CategoryResponse'
+                type: array
+                title: Response List Categories Api V1 Categories Get
+  /api/v1/categories/{category_id}:
+    get:
+      tags:
+      - Categories
+      summary: Get Category
+      description: Повертає інформацію про конкретну категорію за її ID.
+      operationId: get_category_api_v1_categories__category_id__get
+      parameters:
+      - name: category_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Category Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+        '404':
+          description: Категорію не знайдено
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /health:
     get:
       tags:
@@ -510,6 +557,39 @@ paths:
                 $ref: '#/components/schemas/HealthResponse'
 components:
   schemas:
+    CategoryResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Унікальний ідентифікатор категорії
+        name:
+          type: string
+          title: Name
+          description: Назва категорії
+        slug:
+          type: string
+          title: Slug
+          description: Людинозрозумілий ідентифікатор
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+          description: Опис категорії
+        is_active:
+          type: boolean
+          title: Is Active
+          description: Статус активності категорії
+          default: true
+      type: object
+      required:
+      - id
+      - name
+      - slug
+      title: CategoryResponse
+      description: Публічна схема категорії.
     ErrorResponse:
       properties:
         detail:
@@ -543,13 +623,10 @@ components:
       properties:
         detail:
           items:
-            $ref: '#/components/schemas/ValidationErrorDetail'
+            $ref: '#/components/schemas/ValidationError'
           type: array
           title: Detail
-          description: Список помилок валідації
       type: object
-      required:
-      - detail
       title: HTTPValidationError
     HealthResponse:
       properties:
@@ -903,6 +980,32 @@ components:
           title: Image Urls
       type: object
       title: ListingUpdate
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
     ValidationErrorDetail:
       properties:
         loc:
