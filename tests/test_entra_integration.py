@@ -16,6 +16,9 @@ from src.services.auth import InvalidIdentityError
 
 
 def test_verified_claims_from_msal_maps_stable_entra_identity() -> None:
+    """[TP-AUTH-01] [FR-001] [SEC-001]
+    Перетворення MSAL claims на стабільну Entra ідентичність.
+    """
     expires_at = datetime(2026, 10, 27, tzinfo=timezone.utc)
     claims = verified_claims_from_msal(
         {
@@ -39,6 +42,9 @@ def test_verified_claims_from_msal_maps_stable_entra_identity() -> None:
 
 
 def test_verified_claims_from_msal_rejects_missing_stable_object_id() -> None:
+    """[TP-AUTH-02] [FR-001] [SEC-001]
+    Відхилення токена без обов'язкового oid claim.
+    """
     with pytest.raises(InvalidIdentityError) as exc_info:
         verified_claims_from_msal(
             {
@@ -86,6 +92,9 @@ def _oidc_adapter(fake: FakeMsalClient) -> MsalEntraOidcClient:
 
 
 def test_oidc_begin_passes_only_non_reserved_scopes_to_msal() -> None:
+    """[TP-AUTH-01] [FR-001] [SEC-001]
+    Передача лише дозволених scopes у MSAL клієнт.
+    """
     fake = FakeMsalClient()
 
     flow = _oidc_adapter(fake).begin()
@@ -96,5 +105,8 @@ def test_oidc_begin_passes_only_non_reserved_scopes_to_msal() -> None:
 
 
 def test_oidc_begin_wraps_msal_configuration_error() -> None:
+    """[TP-AUTH-01] [FR-001] [SEC-001]
+    Обгортання помилок конфігурації MSAL в EntraOidcError.
+    """
     with pytest.raises(EntraOidcError, match="Не вдалося розпочати"):
         _oidc_adapter(FakeMsalClient(fail=True)).begin()

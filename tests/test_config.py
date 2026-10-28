@@ -22,6 +22,9 @@ def _set_valid_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_localhost_http_configuration_uses_non_secure_development_cookie(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """[TP-AUTH-01] [FR-001] [SEC-001]
+    Localhost HTTP конфігурація використовує cookie розробки.
+    """
     _set_valid_env(monkeypatch)
 
     settings = EntraSettings.from_env()
@@ -30,6 +33,9 @@ def test_localhost_http_configuration_uses_non_secure_development_cookie(
 
 
 def test_non_local_redirect_uri_requires_https(monkeypatch: pytest.MonkeyPatch) -> None:
+    """[TP-AUTH-01] [FR-001] [SEC-001]
+    Не-локальний redirect_uri вимагає обов'язкового HTTPS протоколу.
+    """
     _set_valid_env(monkeypatch)
     monkeypatch.setenv(
         "MICROSOFT_REDIRECT_URI",
@@ -43,6 +49,9 @@ def test_non_local_redirect_uri_requires_https(monkeypatch: pytest.MonkeyPatch) 
 def test_https_redirect_cannot_disable_secure_cookie(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """[TP-AUTH-01] [FR-001] [SEC-001]
+    HTTPS redirect_uri блокує вимкнення захищених session cookies.
+    """
     _set_valid_env(monkeypatch)
     monkeypatch.setenv(
         "MICROSOFT_REDIRECT_URI",

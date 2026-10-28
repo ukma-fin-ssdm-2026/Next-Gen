@@ -93,6 +93,9 @@ def auth_http_client():
 def test_login_callback_me_and_logout_complete_local_session_cycle(
     auth_http_client,
 ) -> None:
+    """[TP-AUTH-01] [FR-001] [SEC-001]
+    Повний цикл входу через OIDC, локальної сесії та logout.
+    """
     client, oidc, _, _ = auth_http_client
 
     login_response = client.get("/api/v1/auth/login", follow_redirects=False)
@@ -133,6 +136,9 @@ def test_login_callback_me_and_logout_complete_local_session_cycle(
 
 
 def test_callback_rejects_state_that_does_not_match_cookie(auth_http_client) -> None:
+    """[TP-AUTH-03] [FR-001] [SEC-001]
+    Відхилення OIDC callback при невідповідності state.
+    """
     client, oidc, _, _ = auth_http_client
     client.get("/api/v1/auth/login", follow_redirects=False)
 
@@ -147,6 +153,7 @@ def test_callback_rejects_state_that_does_not_match_cookie(auth_http_client) -> 
 
 
 def test_me_requires_server_side_session(auth_http_client) -> None:
+    """[TP-AUTH-01] [FR-001] [SEC-001] Отримання профілю /me вимагає серверної сесії."""
     client, _, _, _ = auth_http_client
 
     response = client.get("/api/v1/auth/me")
@@ -156,6 +163,7 @@ def test_me_requires_server_side_session(auth_http_client) -> None:
 
 
 def test_callback_flow_cannot_be_replayed(auth_http_client) -> None:
+    """[TP-AUTH-03] [FR-001] [SEC-001] Захист від повторного використання OIDC flow."""
     client, _, _, _ = auth_http_client
     client.get("/api/v1/auth/login", follow_redirects=False)
     callback_url = (
@@ -174,6 +182,7 @@ def test_callback_flow_cannot_be_replayed(auth_http_client) -> None:
 
 
 def test_blocked_user_loses_existing_session(auth_http_client) -> None:
+    """[TP-AUTH-01] [FR-001] [SEC-001] Заблокований користувач втрачає сесію (403)."""
     client, _, repository, _ = auth_http_client
     client.get("/api/v1/auth/login", follow_redirects=False)
     client.get(
@@ -193,6 +202,7 @@ def test_blocked_user_loses_existing_session(auth_http_client) -> None:
 
 
 def test_login_returns_503_when_entra_configuration_is_missing(monkeypatch) -> None:
+    """[TP-AUTH-01] [FR-001] [SEC-001] Відсутність конфігурації Entra повертає 503."""
     for name in (
         "MICROSOFT_TENANT_ID",
         "MICROSOFT_CLIENT_ID",

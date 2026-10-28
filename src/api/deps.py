@@ -2,11 +2,12 @@
 
 from typing import Annotated
 
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, Request, status
 
 from src.config import ConfigurationError, EntraSettings
 from src.domain.users import CurrentUser
 from src.integrations.entra import EntraOidcClient, MsalEntraOidcClient
+from src.repositories.categories import InMemoryCategoryRepository
 from src.repositories.favorites import InMemoryFavoriteRepository
 from src.repositories.listings import InMemoryListingRepository
 from src.repositories.users import InMemoryUserRepository
@@ -17,12 +18,19 @@ from src.services.auth import (
     InvalidSessionError,
 )
 from src.services.auth_sessions import InMemoryAuthSessionStore, InMemoryOidcFlowStore
+from src.services.categories import CategoryService
 from src.services.favorites import FavoriteService
 from src.services.listings import ListingService
 
+category_repository = InMemoryCategoryRepository.with_seed()
 listing_repository = InMemoryListingRepository.with_seed()
 favorite_repository = InMemoryFavoriteRepository()
-listing_service = ListingService(listing_repository, favorites=favorite_repository)
+category_service = CategoryService(category_repository)
+listing_service = ListingService(
+    listing_repository,
+    favorites=favorite_repository,
+    category_validator=category_service.is_valid_category_id,
+)
 favorite_service = FavoriteService(favorite_repository, listing_repository)
 user_repository = InMemoryUserRepository()
 oidc_flow_store = InMemoryOidcFlowStore()
@@ -30,6 +38,11 @@ auth_session_store = InMemoryAuthSessionStore()
 
 SESSION_COOKIE_NAME = "baraholka_session"
 OIDC_STATE_COOKIE_NAME = "baraholka_oidc_state"
+
+
+def get_category_service() -> CategoryService:
+    """Повертає Category Service для ін'єкції в роутери."""
+    return category_service
 
 
 def get_listing_service() -> ListingService:
@@ -85,10 +98,16 @@ SessionCookie = Annotated[
 ]
 
 
+def _resolve_auth_service(request: Request) -> AuthService:
+    if get_auth_service in request.app.dependency_overrides:
+        return request.app.dependency_overrides[get_auth_service]()
+    return get_auth_service(get_entra_settings())
+
+
 def require_current_user(
+    request: Request,
     session_token: SessionCookie = None,
     sessions: InMemoryAuthSessionStore = Depends(get_auth_session_store),
-    service: AuthService = Depends(get_auth_service),
 ) -> CurrentUser:
     if session_token is None:
         raise HTTPException(
@@ -101,6 +120,7 @@ def require_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Сесія недійсна або завершилася",
         )
+    service = _resolve_auth_service(request)
     try:
         return service.get_current_user(user_id)
     except InvalidSessionError as exc:

@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 
 from src.domain.exceptions import (
+    InvalidCategoryError,
     InvalidListingImageError,
     InvalidPriceRangeError,
     ListingForbiddenError,
@@ -28,6 +29,7 @@ from src.services.listings import ListingService
 
 
 def test_public_catalog_hides_withdrawn(listing_service: ListingService) -> None:
+    """[TP-003] [FR-004] [FR-006] Каталог приховує оголошення зі статусом WITHDRAWN."""
     items = listing_service.list_public()
     ids = {item.id for item in items}
     assert SEED_LISTING_ID in ids
@@ -35,12 +37,14 @@ def test_public_catalog_hides_withdrawn(listing_service: ListingService) -> None
 
 
 def test_search_by_title(listing_service: ListingService) -> None:
+    """[TP-003] [FR-006] Пошук оголошень за ключовим словом у назві."""
     items = listing_service.list_public(query="худі")
     assert len(items) == 1
     assert items[0].id == SEED_LISTING_ID
 
 
 def test_update_requires_owner(listing_service: ListingService) -> None:
+    """[TP-009] [FR-003] [SEC-001] Зміна чужого оголошення заборонена не-власнику."""
     with pytest.raises(ListingForbiddenError) as exc_info:
         listing_service.update(
             SEED_LISTING_ID,
@@ -51,6 +55,7 @@ def test_update_requires_owner(listing_service: ListingService) -> None:
 
 
 def test_create_requires_actor(listing_service: ListingService) -> None:
+    """[TP-002] [FR-002] [SEC-001] Створення оголошення без актора відхиляється."""
     with pytest.raises(ListingUnauthorizedError) as exc_info:
         listing_service.create(
             actor_id=None,
@@ -63,7 +68,31 @@ def test_create_requires_actor(listing_service: ListingService) -> None:
     assert str(exc_info.value) == "Потрібна ідентифікація користувача"
 
 
+def test_create_listing_validates_active_category() -> None:
+    """[TP-001] [FR-002] [FR-012]
+    Створення оголошення перевіряє активність категорії через валідатор.
+    """
+    repo = Mock(spec=ListingRepository)
+    validator = Mock(return_value=False)
+    service = ListingService(repo, category_validator=validator)
+
+    with pytest.raises(InvalidCategoryError) as exc_info:
+        service.create(
+            actor_id=uuid4(),
+            title="Товар у неактивній категорії",
+            description="Опис товару для перевірки валідатора категорії.",
+            price=150.0,
+            category_id=uuid4(),
+            contact="@student",
+        )
+
+    assert "не існує або була деактивована" in str(exc_info.value)
+    validator.assert_called_once()
+    repo.add.assert_not_called()
+
+
 def test_owner_can_update_title(listing_service: ListingService) -> None:
+    """[TP-008] [FR-003] Власник може оновити назву власного оголошення."""
     updated = listing_service.update(
         SEED_LISTING_ID,
         actor_id=SEED_OWNER_ID,
@@ -76,6 +105,7 @@ def test_owner_can_update_title(listing_service: ListingService) -> None:
 def test_owner_can_update_all_editable_fields(
     listing_service: ListingService,
 ) -> None:
+    """[TP-008] [FR-003] Власник може оновити всі доступні поля оголошення."""
     original = listing_service.get_public(SEED_LISTING_ID)
     previous_updated_at = original.updated_at
 
@@ -98,6 +128,9 @@ def test_owner_can_update_all_editable_fields(
 def test_delete_marks_withdrawn_and_preserves_data(
     listing_service: ListingService,
 ) -> None:
+    """[TP-005] [FR-004]
+    Зняття оголошення переводить його у WITHDRAWN зі збереженням даних.
+    """
     previous_updated_at = listing_service.get_public(SEED_LISTING_ID).updated_at
     deleted = listing_service.delete(SEED_LISTING_ID, actor_id=SEED_OWNER_ID)
     assert deleted.status.value == "WITHDRAWN"
@@ -110,12 +143,14 @@ def test_delete_marks_withdrawn_and_preserves_data(
 
 
 def test_get_public_reports_missing_listing(listing_service: ListingService) -> None:
+    """[TP-003] [FR-006] Отримання неіснуючого запису викликає ListingNotFoundError."""
     with pytest.raises(ListingNotFoundError) as exc_info:
         listing_service.get_public(uuid4())
     assert str(exc_info.value) == "Оголошення не знайдено"
 
 
 def test_filter_by_price_range(listing_service: ListingService) -> None:
+    """[TP-004] [FR-008] Фільтрація оголошень за діапазоном цін."""
     matched = listing_service.list_public(min_price=100.0, max_price=200.0)
     assert len(matched) == 1
     assert matched[0].id == SEED_LISTING_ID
@@ -133,7 +168,7 @@ def test_filter_by_price_range(listing_service: ListingService) -> None:
 def test_list_public_rejects_inverted_price_range(
     listing_service: ListingService,
 ) -> None:
-    """Регресійний тест: запит з min_price > max_price відхиляється помилкою."""
+    """[TP-004] [FR-008] Регресійний тест: min_price > max_price відхиляється."""
     with pytest.raises(InvalidPriceRangeError) as exc_info:
         listing_service.list_public(min_price=200.0, max_price=100.0)
     assert (
@@ -143,6 +178,9 @@ def test_list_public_rejects_inverted_price_range(
 
 
 def test_public_catalog_filters_by_category_and_searches_description() -> None:
+    """[TP-003] [FR-006] [FR-007]
+    Каталог фільтрує за категорією та шукає в назві й описі.
+    """
     target_category = uuid4()
     title_match = Listing(
         title="Синій рюкзак",
@@ -178,6 +216,7 @@ def test_public_catalog_filters_by_category_and_searches_description() -> None:
 
 
 def test_public_catalog_uses_default_limit_of_ten() -> None:
+    """[TP-003] [FR-006] Пагінація каталогу за замовчуванням повертає 10 записів."""
     listings = [
         Listing(
             title=f"Оголошення {index}",
@@ -195,6 +234,7 @@ def test_public_catalog_uses_default_limit_of_ten() -> None:
 
 
 def test_public_catalog_can_sort_oldest_first() -> None:
+    """[TP-003] [FR-008] Каталог підтримує сортування від найстаріших оголошень."""
     older = Listing(
         title="Старіше оголошення",
         description="Тестовий опис старішого оголошення.",
@@ -221,6 +261,7 @@ def test_public_catalog_can_sort_oldest_first() -> None:
 
 
 def test_create_delegates_to_repository_and_uses_actor_as_owner() -> None:
+    """[TP-001] [FR-002] Створення оголошення призначає актора власником."""
     repository = Mock(spec=ListingRepository)
     repository.add.side_effect = lambda listing: listing
     service = ListingService(repository)
@@ -244,6 +285,9 @@ def test_create_delegates_to_repository_and_uses_actor_as_owner() -> None:
 def test_list_owner_listings_returns_active_and_withdrawn_for_seller(
     listing_service: ListingService,
 ) -> None:
+    """[TP-010] [FR-005]
+    Історія власних оголошень повертає active та withdrawn для продавця.
+    """
     foreign_owner = uuid4()
     listing_service.create(
         actor_id=foreign_owner,
@@ -266,11 +310,15 @@ def test_list_owner_listings_returns_active_and_withdrawn_for_seller(
 def test_list_owner_listings_requires_actor(
     listing_service: ListingService,
 ) -> None:
+    """[TP-011] [FR-005] [SEC-001] Перегляд власних оголошень вимагає актора."""
     with pytest.raises(ListingUnauthorizedError):
         listing_service.list_owner_listings(actor_id=None)
 
 
 def test_create_and_update_with_images_and_condition() -> None:
+    """[TP-001] [FR-002]
+    Створення та оновлення оголошення з фотографіями та станом товару.
+    """
     storage = InMemoryImageStorage()
     repository = InMemoryListingRepository.with_seed()
     service = ListingService(repository=repository, image_storage=storage)
@@ -326,6 +374,7 @@ def test_image_storage_rejects_invalid_urls_or_too_many_images(
     listing_service: ListingService,
     invalid_urls: list[str],
 ) -> None:
+    """[TP-001] [FR-002] Валідація ліміту (1..10) та URL зображень при створенні."""
     with pytest.raises(InvalidListingImageError):
         listing_service.create(
             actor_id=SEED_OWNER_ID,
@@ -341,6 +390,7 @@ def test_image_storage_rejects_invalid_urls_or_too_many_images(
 def test_failed_image_update_does_not_partially_mutate_listing(
     listing_service: ListingService,
 ) -> None:
+    """[TP-008] [FR-003] Невдале оновлення зображень не змінює інші поля оголошення."""
     original = listing_service.get_public(SEED_LISTING_ID)
     original_title = original.title
     original_price = original.price

@@ -11,6 +11,7 @@ from src.domain.validators import is_ukma_email, is_valid_telegram_handle
     ],
 )
 def test_accepts_ukma_email(email):
+    """[FR-001] [SEC-001] Валідація корпоративної пошти НаУКМА."""
     assert is_ukma_email(email) is True
 
 
@@ -23,6 +24,7 @@ def test_accepts_ukma_email(email):
     ],
 )
 def test_rejects_invalid_email(email):
+    """[FR-001] [SEC-001] Відхилення сторонніх чи невалідних поштових адрес."""
     assert is_ukma_email(email) is False
 
 
@@ -35,6 +37,7 @@ def test_rejects_invalid_email(email):
     ],
 )
 def test_accepts_valid_telegram_handle_format(handle):
+    """[FR-002] [SEC-002] Валідація коректного формату Telegram-контакту."""
     assert is_valid_telegram_handle(handle) is True
 
 
@@ -47,6 +50,7 @@ def test_accepts_valid_telegram_handle_format(handle):
     ],
 )
 def test_rejects_telegram_handle_missing_prefix_or_invalid_length(handle):
+    """[FR-002] [SEC-002] Відхилення Telegram-контакту з невалідною довжиною."""
     assert is_valid_telegram_handle(handle) is False
 
 
@@ -61,4 +65,5 @@ def test_rejects_telegram_handle_missing_prefix_or_invalid_length(handle):
     ],
 )
 def test_rejects_telegram_handle_invalid_characters(handle):
+    """[FR-002] [SEC-002] Відхилення заборонених символів у Telegram-контакті."""
     assert is_valid_telegram_handle(handle) is False

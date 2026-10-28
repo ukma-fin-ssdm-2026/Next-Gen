@@ -110,7 +110,10 @@ def test_catalog_filtering_decision_table(
     expected_included: bool,
     raises_error: bool,
 ) -> None:
-    """Перевіряє правила таблиці рішень DT-01..DT-07 для фільтрації каталогу."""
+    """[DT-01] [DT-02] [DT-03] [DT-04] [DT-05] [DT-06] [DT-07]
+    [FR-006] [FR-007] [FR-008]
+    Перевіряє правила таблиці рішень DT-01..DT-07 для фільтрації каталогу.
+    """
     candidate = Listing(
         id=SEED_LISTING_ID,
         title="Худі з логотипом НаУКМА",

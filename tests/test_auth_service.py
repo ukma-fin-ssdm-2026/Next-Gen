@@ -49,6 +49,9 @@ def test_valid_claims_create_local_user_and_current_user(
     auth_config: EntraAuthConfig,
     valid_claims: VerifiedEntraClaims,
 ) -> None:
+    """[TP-AUTH-01] [FR-001] [SEC-001]
+    Створення локального та CurrentUser за валідними claims.
+    """
     repository = InMemoryUserRepository()
     service = AuthService(repository, auth_config)
 
@@ -66,6 +69,9 @@ def test_existing_entra_identity_updates_profile_without_changing_local_id(
     auth_config: EntraAuthConfig,
     valid_claims: VerifiedEntraClaims,
 ) -> None:
+    """[TP-AUTH-01] [FR-001] [SEC-001]
+    Оновлення профілю існуючого користувача без зміни user_id.
+    """
     existing = User(
         tenant_id=TENANT_ID,
         entra_object_id=OBJECT_ID,
@@ -118,6 +124,9 @@ def test_nfr_sec_01_invalid_claims_are_rejected(
     changed_claims: dict[str, object],
     expected_message: str,
 ) -> None:
+    """[TP-AUTH-02] [FR-001] [SEC-001]
+    Відхилення невалідних claims (NFR security перевірка).
+    """
     repository = InMemoryUserRepository()
     service = AuthService(repository, auth_config)
     invalid_claims = replace(valid_claims, **changed_claims)
@@ -139,6 +148,9 @@ def test_blocked_local_user_is_rejected_without_profile_update(
     auth_config: EntraAuthConfig,
     valid_claims: VerifiedEntraClaims,
 ) -> None:
+    """[TP-AUTH-01] [FR-001] [SEC-001]
+    Відхилення заблокованого локального користувача (403).
+    """
     blocked = User(
         tenant_id=TENANT_ID,
         entra_object_id=OBJECT_ID,

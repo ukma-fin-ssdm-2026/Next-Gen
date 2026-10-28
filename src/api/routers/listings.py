@@ -16,6 +16,7 @@ from src.api.schemas.listings import (
     ListingUpdate,
 )
 from src.domain.exceptions import (
+    InvalidCategoryError,
     InvalidListingImageError,
     InvalidPriceRangeError,
     ListingForbiddenError,
@@ -103,6 +104,8 @@ def _raise_domain(exc: Exception) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     if isinstance(exc, ListingNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    if isinstance(exc, InvalidCategoryError):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     raise exc
 
 
@@ -193,6 +196,7 @@ def get_my_listings(
         "та стану товару (FR-002). Повертає об'єкт з контактами."
     ),
     responses={
+        400: {"model": ErrorResponse, "description": "Bad Request"},
         401: {"model": ErrorResponse, "description": "Unauthorized"},
         422: {
             "model": ApiValidationErrorResponse,
@@ -216,7 +220,11 @@ def create_listing(
             condition=listing.condition,
             image_urls=listing.image_urls,
         )
-    except (ListingUnauthorizedError, InvalidListingImageError) as exc:
+    except (
+        ListingUnauthorizedError,
+        InvalidListingImageError,
+        InvalidCategoryError,
+    ) as exc:
         _raise_domain(exc)
     return _to_private(created)
 

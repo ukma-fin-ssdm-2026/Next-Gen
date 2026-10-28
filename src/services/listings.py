@@ -1,9 +1,11 @@
 """Listing Service: каталог, пошук, створення, історія та зміна власних оголошень."""
 
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
 from src.domain.exceptions import (
+    InvalidCategoryError,
     InvalidPriceRangeError,
     ListingForbiddenError,
     ListingNotFoundError,
@@ -29,9 +31,11 @@ class ListingService:
         repository: ListingRepository,
         image_storage: ImageStorage | None = None,
         favorites: FavoriteRepository | None = None,
+        category_validator: Callable[[UUID], bool] | None = None,
     ) -> None:
         self._repository = repository
         self._favorites = favorites
+        self._category_validator = category_validator
         self._image_storage: ImageStorage = (
             image_storage if image_storage is not None else InMemoryImageStorage()
         )
@@ -96,6 +100,12 @@ class ListingService:
     ) -> Listing:
         """Створює оголошення від імені актора з обов'язковими фотографіями (FR-002)."""
         owner_id = self._require_actor(actor_id)
+        if self._category_validator is not None and not self._category_validator(
+            category_id
+        ):
+            raise InvalidCategoryError(
+                f"Категорія {category_id} не існує або була деактивована"
+            )
         listing_id = uuid4()
         images = self._image_storage.save_images(
             listing_id, image_urls if image_urls is not None else []

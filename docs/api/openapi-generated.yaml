@@ -138,6 +138,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListingResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Unauthorized
           content:
@@ -493,6 +499,139 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/categories:
+    get:
+      tags:
+      - Categories
+      summary: Отримати список активних категорій
+      description: Публічний ендпоінт для отримання списку доступних активних категорій
+        для фільтрації каталогу та створення нових оголошень (FR-012).
+      operationId: list_categories_api_v1_categories_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CategoryResponse'
+                title: Response List Categories Api V1 Categories Get
+    post:
+      tags:
+      - Categories
+      summary: Створити нову категорію (Адміністратор)
+      description: Адміністративний ендпоінт для створення нової категорії оголошень
+        (FR-012). Вимагає валідної серверної сесії та ролі ADMIN.
+      operationId: create_category_api_v1_categories_post
+      parameters:
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryCreateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+        '401':
+          description: Необхідна автентифікація (потрібен вхід через Microsoft)
+        '403':
+          description: Недостатньо прав доступу (потрібна роль ADMIN)
+        '409':
+          description: Категорія з таким slug вже існує
+        '422':
+          description: Невалідні поля категорії
+  /api/v1/categories/{category_id}:
+    get:
+      tags:
+      - Categories
+      summary: Отримати інформацію про категорію за ID
+      description: Повертає метадані конкретної категорії оголошень за її ідентифікатором
+        (FR-012).
+      operationId: get_category_api_v1_categories__category_id__get
+      parameters:
+      - name: category_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Category Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+        '404':
+          description: Категорію не знайдено
+        '422':
+          description: Некоректний формат UUID
+    patch:
+      tags:
+      - Categories
+      summary: Оновити або деактивувати категорію (Адміністратор)
+      description: Адміністративний ендпоінт для зміни назви, опису або деактивації
+        категорії (FR-012). Деактивована категорія зберігається в системі для збереження
+        цілісності наявних оголошень. Вимагає валідної серверної сесії та ролі ADMIN.
+      operationId: update_category_api_v1_categories__category_id__patch
+      parameters:
+      - name: category_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Category Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryUpdateRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+        '401':
+          description: Необхідна автентифікація (потрібен вхід через Microsoft)
+        '403':
+          description: Недостатньо прав доступу (потрібна роль ADMIN)
+        '404':
+          description: Категорію не знайдено
+        '409':
+          description: Новий slug вже використовується
+        '422':
+          description: Невалідні дані оновлення
   /api/v1/auth/login:
     get:
       tags:
@@ -684,6 +823,100 @@ components:
       - detail
       title: ApiValidationErrorResponse
       description: Узгоджений формат 422 для доменних і Pydantic-помилок API.
+    CategoryCreateRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Name
+          description: Назва категорії
+        slug:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Slug
+          description: Slug категорії
+        description:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Description
+          description: Опис категорії
+      type: object
+      required:
+      - name
+      - slug
+      title: CategoryCreateRequest
+      description: Схема створення нової категорії (адміністративна дія, FR-012).
+    CategoryResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Унікальний ідентифікатор категорії
+        name:
+          type: string
+          title: Name
+          description: Назва категорії
+        slug:
+          type: string
+          title: Slug
+          description: Людинозрозумілий ідентифікатор
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+          description: Опис категорії
+        is_active:
+          type: boolean
+          title: Is Active
+          description: Статус активності категорії
+          default: true
+      type: object
+      required:
+      - id
+      - name
+      - slug
+      title: CategoryResponse
+      description: Публічна схема категорії.
+    CategoryUpdateRequest:
+      properties:
+        name:
+          anyOf:
+          - type: string
+            maxLength: 100
+            minLength: 1
+          - type: 'null'
+          title: Name
+          description: Нова назва категорії
+        slug:
+          anyOf:
+          - type: string
+            maxLength: 100
+            minLength: 1
+          - type: 'null'
+          title: Slug
+          description: Новий slug категорії
+        description:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Description
+          description: Новий опис категорії
+        is_active:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Active
+          description: Статус активності (деактивація)
+      type: object
+      title: CategoryUpdateRequest
+      description: Схема часткового оновлення категорії (адміністративна дія, FR-012).
     CurrentUserResponse:
       properties:
         user_id:

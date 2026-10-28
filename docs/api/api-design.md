@@ -58,6 +58,10 @@
 - **Рішення:** Обране — окремий ресурс `/api/v1/favorites`, прив'язаний до поточного користувача з `X-Actor-Id`; `user_id` у запиті не приймається. `POST /api/v1/favorites/{listing_id}` ідемпотентний: повторне додавання повертає наявний запис без дубліката.
 - **Обґрунтування:** Обране одного користувача недоступне іншим (TM-02). Список повертає `ListingPublicResponse`, тож контакти продавців через обране не розкриваються (SEC-002). Додати можна лише активне оголошення (404 для знятого чи неіснуючого), а зняття оголошення власником одразу прибирає його з обраного всіх користувачів.
 
+### 2.7 Категорії оголошень (FR-012)
+- **Рішення:** Ресурс `/api/v1/categories` надає публічний перегляд активних категорій для фільтрації каталогу (`GET /api/v1/categories`, `GET /api/v1/categories/{id}`) та захищені адміністративні маршрути (`POST /api/v1/categories`, `PATCH /api/v1/categories/{id}`) для додавання, перейменування й деактивації категорій з обов'язковою перевіркою активної сесії (`X-Actor-Id`) та адміністративної ролі `ADMIN` (`X-Actor-Role: ADMIN` до підключення server-side OIDC claims у гілці Auth PR).
+- **Обґрунтування:** Публічний каталог категорій необхідний покупцям і продавцям для категоризації товарів НаУКМА. Деактивовані категорії (`is_active=False`) виключаються з публічної видачі для нових оголошень, але фізично зберігаються в базі даних для цілісності зв'язків з раніше створеними оголошеннями. Будь-які модифікації структури категорій захищені: без сесії повертається HTTP 401 Unauthorized, а звичайний користувач отримує HTTP 403 Forbidden. Оновлення категорії здійснюється через створення нової копії, що унеможливлює пошкодження стану при конфлікті slug (HTTP 409 Conflict). До інтеграції серверних сесій вимога FR-012 заявлена як частково реалізована.
+
 ---
 
 ## 3. Кінцеві точки (Endpoints)
@@ -66,10 +70,17 @@
 |---|---|---|---|---|
 | `GET` | `/api/v1/listings` | Отримати список оголошень (з пагінацією, фільтрацією та сортуванням) | 200 OK | 422 Unprocessable Entity |
 | `GET` | `/api/v1/listings/my` | Отримати історію власних оголошень продавця (активні та зняті, `FR-005`) | 200 OK | 401 Unauthorized, 422 |
-| `POST` | `/api/v1/listings` | Створити нове оголошення | 201 Created | 401 Unauthorized, 422 |
+| `POST` | `/api/v1/listings` | Створити нове оголошення | 201 Created | 400 Bad Request, 401 Unauthorized, 422 |
 | `GET` | `/api/v1/listings/{id}` | Отримати деталі конкретного оголошення за ID (без контактів) | 200 OK | 404 Not Found |
 | `PATCH` | `/api/v1/listings/{id}` | Частково оновити дані оголошення | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
 | `DELETE` | `/api/v1/listings/{id}` | Видалити оголошення | 204 No Content | 401 Unauthorized, 403 Forbidden, 404 Not Found |
+| `GET` | `/api/v1/favorites` | Отримати власне обране (активні оголошення без контактів, `FR-009`) | 200 OK | 401 Unauthorized |
+| `POST` | `/api/v1/favorites/{listing_id}` | Додати активне оголошення в обране (без дублікатів) | 201 Created | 401 Unauthorized, 404 Not Found, 422 |
+| `DELETE` | `/api/v1/favorites/{listing_id}` | Прибрати оголошення з обраного | 204 No Content | 401 Unauthorized, 404 Not Found, 422 |
+| `GET` | `/api/v1/categories` | Отримати список активних категорій для фільтрації каталогу (`FR-012`) | 200 OK | - |
+| `GET` | `/api/v1/categories/{id}` | Отримати дані конкретної категорії за ID (`FR-012`) | 200 OK | 404 Not Found, 422 |
+| `POST` | `/api/v1/categories` | Створити нову категорію (Адміністратор, `FR-012`) | 201 Created | 401 Unauthorized, 403 Forbidden, 409 Conflict, 422 |
+| `PATCH` | `/api/v1/categories/{id}` | Оновити або деактивувати категорію (Адміністратор, `FR-012`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict, 422 |
 | `GET` | `/api/v1/auth/login` | Розпочати Microsoft Entra ID Authorization Code Flow | 307 Temporary Redirect | 502 Bad Gateway, 503 Service Unavailable |
 | `GET` | `/api/v1/auth/callback` | Перевірити callback та створити локальну сесію | 303 See Other | 400 Bad Request, 401 Unauthorized, 403 Forbidden |
 | `GET` | `/api/v1/auth/me` | Отримати поточного користувача | 200 OK | 401 Unauthorized, 403 Forbidden |
