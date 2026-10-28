@@ -40,4 +40,5 @@ class CurrentUser:
     tenant_id: UUID
     entra_object_id: UUID
     email: str
+    display_name: str
     role: UserRole

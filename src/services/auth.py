@@ -22,6 +22,10 @@ class BlockedUserError(AuthenticationError):
     """Локальний профіль користувача заблоковано."""
 
 
+class InvalidSessionError(AuthenticationError):
+    """Сесія не вказує на наявного локального користувача."""
+
+
 @dataclass(frozen=True)
 class EntraAuthConfig:
     """Очікувані значення single-tenant реєстрації застосунку."""
@@ -87,7 +91,24 @@ class AuthService:
             tenant_id=saved.tenant_id,
             entra_object_id=saved.entra_object_id,
             email=saved.email,
+            display_name=saved.display_name,
             role=saved.role,
+        )
+
+    def get_current_user(self, user_id: UUID) -> CurrentUser:
+        """Повторно читає локальний профіль для кожного захищеного запиту."""
+        user = self._repository.get_by_id(user_id)
+        if user is None:
+            raise InvalidSessionError("Сесія користувача недійсна")
+        if user.is_blocked:
+            raise BlockedUserError("Обліковий запис користувача заблоковано")
+        return CurrentUser(
+            user_id=user.user_id,
+            tenant_id=user.tenant_id,
+            entra_object_id=user.entra_object_id,
+            email=user.email,
+            display_name=user.display_name,
+            role=user.role,
         )
 
     def _validate_claims(
