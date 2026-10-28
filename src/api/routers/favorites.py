@@ -1,11 +1,15 @@
-"""HTTP-адаптер до Favorite Service (FR-009). Бізнес-правила тут не живуть."""
+"""HTTP-адаптер до Favorite Service (FR-009). Бізнес-правила тут не живуть.
+
+Ідентичність покупця береться лише з серверної сесії (`require_current_user`).
+Заголовок `X-Actor-Id`, `user_id` у path, query чи body не враховуються (SEC-001).
+"""
 
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from src.api.deps import get_favorite_service
-from src.api.routers.listings import ActorId, _to_public
+from src.api.deps import get_favorite_service, require_current_user
+from src.api.routers.listings import _to_public
 from src.api.schemas.favorites import FavoriteResponse
 from src.api.schemas.listings import (
     ApiValidationErrorResponse,
@@ -17,6 +21,7 @@ from src.domain.exceptions import (
     ListingNotFoundError,
     ListingUnauthorizedError,
 )
+from src.domain.users import CurrentUser
 from src.services.favorites import FavoriteService
 
 router = APIRouter(
@@ -42,16 +47,17 @@ def _raise_domain(exc: Exception) -> None:
         "спершу додані останніми (FR-009). Контакти продавців не включаються."
     ),
     responses={
-        401: {"model": ErrorResponse, "description": "Unauthorized"},
+        401: {"model": ErrorResponse, "description": "Немає валідної сесії"},
+        403: {"model": ErrorResponse, "description": "Обліковий запис заблоковано"},
         422: {"model": ApiValidationErrorResponse, "description": "Validation Error"},
     },
 )
 def get_favorites(
-    actor_id: ActorId = None,
+    current_user: CurrentUser = Depends(require_current_user),
     service: FavoriteService = Depends(get_favorite_service),
 ) -> list[ListingPublicResponse]:
     try:
-        items = service.list_for(actor_id)
+        items = service.list_for(current_user.user_id)
     except ListingUnauthorizedError as exc:
         _raise_domain(exc)
     return [_to_public(item) for item in items]
@@ -67,18 +73,19 @@ def get_favorites(
         "Повторне додавання не створює дубліката і повертає наявний запис."
     ),
     responses={
-        401: {"model": ErrorResponse, "description": "Unauthorized"},
+        401: {"model": ErrorResponse, "description": "Немає валідної сесії"},
+        403: {"model": ErrorResponse, "description": "Обліковий запис заблоковано"},
         404: {"model": ErrorResponse, "description": "Not Found"},
         422: {"model": ApiValidationErrorResponse, "description": "Validation Error"},
     },
 )
 def add_favorite(
     listing_id: UUID,
-    actor_id: ActorId = None,
+    current_user: CurrentUser = Depends(require_current_user),
     service: FavoriteService = Depends(get_favorite_service),
 ) -> FavoriteResponse:
     try:
-        favorite = service.add(actor_id, listing_id)
+        favorite = service.add(current_user.user_id, listing_id)
     except (ListingUnauthorizedError, ListingNotFoundError) as exc:
         _raise_domain(exc)
     return FavoriteResponse(
@@ -92,17 +99,18 @@ def add_favorite(
     summary="Прибрати оголошення з обраного",
     description="Видаляє оголошення з обраного поточного користувача (FR-009).",
     responses={
-        401: {"model": ErrorResponse, "description": "Unauthorized"},
+        401: {"model": ErrorResponse, "description": "Немає валідної сесії"},
+        403: {"model": ErrorResponse, "description": "Обліковий запис заблоковано"},
         404: {"model": ErrorResponse, "description": "Not Found"},
         422: {"model": ApiValidationErrorResponse, "description": "Validation Error"},
     },
 )
 def remove_favorite(
     listing_id: UUID,
-    actor_id: ActorId = None,
+    current_user: CurrentUser = Depends(require_current_user),
     service: FavoriteService = Depends(get_favorite_service),
 ) -> None:
     try:
-        service.remove(actor_id, listing_id)
+        service.remove(current_user.user_id, listing_id)
     except (ListingUnauthorizedError, FavoriteNotFoundError) as exc:
         _raise_domain(exc)
