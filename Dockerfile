@@ -7,9 +7,13 @@ WORKDIR /app
 
 RUN addgroup --system app && adduser --system --ingroup app app
 
-COPY requirements.txt ./
-RUN python -m pip install --no-cache-dir --upgrade pip \
-    && python -m pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements.lock ./
+RUN python -m pip install \
+    --no-cache-dir \
+    --disable-pip-version-check \
+    --require-hashes \
+    --only-binary=:all: \
+    -r requirements.lock
 
 COPY --chown=app:app src ./src
 
