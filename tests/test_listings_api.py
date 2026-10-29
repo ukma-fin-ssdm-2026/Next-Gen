@@ -1,11 +1,34 @@
 """HTTP-тести каталогу та контролів безпеки TM-02 / TM-05."""
 
+import io
 from uuid import uuid4
 
+from PIL import Image
 import pytest
 from fastapi.testclient import TestClient
 
 from src.domain.listings import SEED_LISTING_ID, SEED_OWNER_ID, WITHDRAWN_LISTING_ID
+
+
+def _make_dummy_jpeg(w: int = 100, h: int = 100, color=(255, 0, 0)) -> bytes:
+    im = Image.new("RGB", (w, h), color)
+    buf = io.BytesIO()
+    im.save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def _make_dummy_png(w: int = 100, h: int = 100, color=(0, 255, 0)) -> bytes:
+    im = Image.new("RGB", (w, h), color)
+    buf = io.BytesIO()
+    im.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _make_dummy_webp(w: int = 100, h: int = 100, color=(0, 0, 255)) -> bytes:
+    im = Image.new("RGB", (w, h), color)
+    buf = io.BytesIO()
+    im.save(buf, format="WEBP")
+    return buf.getvalue()
 
 
 def test_health(client: TestClient) -> None:
@@ -104,11 +127,9 @@ def test_delete_marks_withdrawn_and_hides_from_public(client: TestClient) -> Non
     )
     assert response.status_code == 204
 
-    # 404 on direct public retrieval
     get_res = client.get(f"/api/v1/listings/{SEED_LISTING_ID}")
     assert get_res.status_code == 404
 
-    # Excluded from public catalog
     list_res = client.get("/api/v1/listings")
     ids = {item["id"] for item in list_res.json()}
     assert str(SEED_LISTING_ID) not in ids
@@ -234,19 +255,28 @@ def test_get_my_listings_returns_active_and_withdrawn_for_owner(
 def test_create_and_patch_listing_with_images_and_condition(
     client: TestClient,
     listing_payload: dict[str, object],
+    login_as,
 ) -> None:
     """[TP-001] [FR-002] [FR-003] Створення та PATCH оголошення з фотографіями."""
+    seller = login_as()
+    upload_res = client.post(
+        "/api/v1/listings/images",
+        files=[
+            ("files", ("test1.jpg", _make_dummy_jpeg(100, 100), "image/jpeg")),
+            ("files", ("test2.png", _make_dummy_png(150, 150), "image/png")),
+        ],
+    )
+    assert upload_res.status_code == 201
+    uploaded_keys = [item["storage_key"] for item in upload_res.json()]
+
     payload = {
         **listing_payload,
         "condition": "NEW",
-        "image_urls": [
-            "https://baraholka.ukma.edu.ua/images/photo-1.jpg",
-            "/uploads/photo-2.jpg",
-        ],
+        "image_urls": uploaded_keys,
     }
     created = client.post(
         "/api/v1/listings",
-        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
+        headers={"X-Actor-Id": str(seller.user_id)},
         json=payload,
     )
     assert created.status_code == 201
@@ -256,21 +286,28 @@ def test_create_and_patch_listing_with_images_and_condition(
     assert body["images"][0]["display_order"] == 0
     assert body["images"][1]["display_order"] == 1
 
+    up_new = client.post(
+        "/api/v1/listings/images",
+        files=[
+            ("files", ("new.webp", _make_dummy_webp(200, 200), "image/webp")),
+        ],
+    )
+    assert up_new.status_code == 201
+    new_key = up_new.json()[0]["storage_key"]
+
     patched = client.patch(
         f"/api/v1/listings/{body['id']}",
-        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
+        headers={"X-Actor-Id": str(seller.user_id)},
         json={
             "condition": "USED",
-            "image_urls": ["https://baraholka.ukma.edu.ua/images/photo-updated.jpg"],
+            "image_urls": [new_key],
         },
     )
     assert patched.status_code == 200
     patched_body = patched.json()
     assert patched_body["condition"] == "USED"
     assert len(patched_body["images"]) == 1
-    assert patched_body["images"][0]["image_url"] == (
-        "https://baraholka.ukma.edu.ua/images/photo-updated.jpg"
-    )
+    assert new_key in patched_body["images"][0]["image_url"]
 
 
 def test_create_listing_rejects_invalid_image_url_with_422(
