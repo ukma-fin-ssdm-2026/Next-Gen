@@ -138,12 +138,24 @@ def test_login_callback_me_and_logout_complete_local_session_cycle(
     assert client.get("/api/v1/auth/me").status_code == 401
 
 
-def test_login_does_not_redirect_to_external_next_url(auth_http_client) -> None:
+@pytest.mark.parametrize(
+    "next_url",
+    [
+        "https://evil.example/phishing",
+        "//evil.example/phishing",
+        r"/\evil.example/phishing",
+    ],
+)
+def test_login_does_not_redirect_to_external_next_url(
+    auth_http_client,
+    next_url: str,
+) -> None:
     """[SEC-001] Зовнішній next URL не створює open redirect."""
     client, _, _, _ = auth_http_client
 
     client.get(
-        "/api/v1/auth/login?next=https%3A%2F%2Fevil.example%2Fphishing",
+        "/api/v1/auth/login",
+        params={"next": next_url},
         follow_redirects=False,
     )
     response = client.get(

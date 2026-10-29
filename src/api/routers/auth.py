@@ -36,12 +36,18 @@ OidcStateCookie = Annotated[
 
 def _safe_return_path(value: str | None) -> str | None:
     """Дозволяє повернення лише на внутрішні маршрути цього сайту."""
-    if not value:
+    if (
+        not value
+        or not value.startswith("/")
+        or value.startswith("//")
+        or "\\" in value
+    ):
         return None
-    parsed = urlsplit(value)
-    if parsed.scheme or parsed.netloc or not value.startswith("/"):
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
         return None
-    if value.startswith("//"):
+    if parsed.scheme or parsed.netloc:
         return None
     return value
 
