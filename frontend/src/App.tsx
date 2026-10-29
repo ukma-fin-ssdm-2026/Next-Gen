@@ -40,6 +40,7 @@ const INITIAL_FILTERS: ListingFilters = {
 };
 
 const CATALOG_PAGE_SIZE = 24;
+const STATS_SAMPLE_SIZE = 100;
 
 const CONDITION_LABELS: Record<ListingCondition, string> = {
   NEW: "Нове",
@@ -54,6 +55,36 @@ function formatPrice(price: number): string {
     currency: "UAH",
     maximumFractionDigits: 0,
   }).format(price);
+}
+
+function formatAge(iso: string): string {
+  const time = Date.parse(iso);
+  if (Number.isNaN(time)) return "";
+  const minutes = Math.max(0, Math.round((Date.now() - time) / 60000));
+  if (minutes < 5) return "щойно";
+  if (minutes < 60) return `${minutes} хв тому`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} год тому`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} дн. тому`;
+  return new Date(time).toLocaleDateString("uk-UA", { day: "numeric", month: "short" });
+}
+
+function freshLabel(count: number): string {
+  const lastTwo = count % 100;
+  const last = count % 10;
+  if (lastTwo >= 11 && lastTwo <= 14) return "нових за добу";
+  if (last === 1) return "нове за добу";
+  if (last >= 2 && last <= 4) return "нові за добу";
+  return "нових за добу";
+}
+
+function SearchIcon() {
+  return (
+    <svg className="search-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="6.5" /><path d="m16.2 16.2 4 4" />
+    </svg>
+  );
 }
 
 function errorText(error: unknown): string {
@@ -189,6 +220,7 @@ function App() {
           path="/"
           element={
             <HomePage
+              categories={categories}
               categoryNames={categoryNames}
               user={user}
               favorites={favorites}
@@ -255,40 +287,96 @@ function Header({ user, authChecked, busy, onLogout }: {
   onLogout: () => void;
 }) {
   const currentLoginUrl = useCurrentLoginUrl();
+  const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+
+  useEffect(() => { setMenuOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setMenuOpen(false); };
+    document.addEventListener("keydown", onKey);
+    document.body.classList.add("menu-open");
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.classList.remove("menu-open");
+    };
+  }, [menuOpen]);
+
   return (
-    <header className="topbar">
-      <Link className="brand" to="/" aria-label="Барахолка НаУКМА — на головну">
-        <span className="brand-mark">Б</span>
-        <span><strong>Барахолка</strong><small>НаУКМА</small></span>
-      </Link>
-      <nav className="topnav" aria-label="Основна навігація">
-        <NavLink to="/listings">Оголошення</NavLink>
-        {user && <NavLink to="/favorites">Обране</NavLink>}
-        {user && <NavLink to="/profile">Профіль</NavLink>}
-      </nav>
-      <div className="account-area">
-        {authChecked && user ? (
-          <>
-            <Link className="user-chip" to="/profile" title={user.email}>
-              <span className="avatar">{user.display_name.slice(0, 1).toUpperCase()}</span>
-              <span className="user-copy">
-                <strong>{user.display_name}</strong>
-                <small>{user.role === "ADMIN" ? "Адміністратор" : "Студент"}</small>
-              </span>
-            </Link>
-            <button className="button button-ghost compact" disabled={busy} onClick={onLogout}>Вийти</button>
-          </>
-        ) : authChecked ? (
-          <a className="button button-primary compact" href={currentLoginUrl}>Увійти через Microsoft</a>
-        ) : (
-          <span className="auth-placeholder" aria-label="Перевіряємо авторизацію" />
+    <>
+      <header className="topbar">
+        <Link className="brand" to="/" aria-label="Барахолка НаУКМА — на головну">
+          <span className="brand-mark">Б</span>
+          <span><strong>Барахолка</strong><small>НаУКМА</small></span>
+        </Link>
+        <nav className="topnav" aria-label="Основна навігація">
+          <NavLink to="/listings">Оголошення</NavLink>
+          {user && <NavLink to="/favorites">Обране</NavLink>}
+          {user && <NavLink to="/profile">Профіль</NavLink>}
+        </nav>
+        <div className="account-area">
+          {authChecked && user ? (
+            <>
+              <Link className="user-chip" to="/profile" title={user.email}>
+                <span className="avatar">{user.display_name.slice(0, 1).toUpperCase()}</span>
+                <span className="user-copy">
+                  <strong>{user.display_name}</strong>
+                  <small>{user.role === "ADMIN" ? "Адміністратор" : "Студент"}</small>
+                </span>
+              </Link>
+              <button className="button button-ghost compact" disabled={busy} onClick={onLogout}>Вийти</button>
+            </>
+          ) : authChecked ? (
+            <a className="button button-primary compact" href={currentLoginUrl}>Увійти через Microsoft</a>
+          ) : (
+            <span className="auth-placeholder" aria-label="Перевіряємо авторизацію" />
+          )}
+        </div>
+        <button
+          className="burger"
+          type="button"
+          aria-label={menuOpen ? "Закрити меню" : "Відкрити меню"}
+          aria-expanded={menuOpen}
+          aria-controls="mobile-menu"
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          <span /><span /><span />
+        </button>
+      </header>
+
+      {menuOpen && <div className="menu-backdrop" onClick={closeMenu} aria-hidden="true" />}
+      <aside id="mobile-menu" className={`mobile-menu${menuOpen ? " open" : ""}`} aria-label="Меню">
+        <div className="drawer-head">
+          <span className="eyebrow dark">Меню</span>
+          <button className="drawer-close" type="button" aria-label="Закрити меню" onClick={closeMenu}>×</button>
+        </div>
+        {authChecked && user && (
+          <Link className="drawer-user" to="/profile">
+            <span className="avatar">{user.display_name.slice(0, 1).toUpperCase()}</span>
+            <span><strong>{user.display_name}</strong><small>{user.email}</small></span>
+          </Link>
         )}
-      </div>
-    </header>
+        <nav className="drawer-nav" aria-label="Мобільна навігація">
+          <NavLink to="/" end>Головна</NavLink>
+          <NavLink to="/listings">Оголошення</NavLink>
+          {user && <NavLink to="/favorites">Обране</NavLink>}
+          {user && <NavLink to="/profile">Профіль</NavLink>}
+        </nav>
+        <div className="drawer-foot">
+          {authChecked && user ? (
+            <button className="button button-light" disabled={busy} onClick={() => { closeMenu(); onLogout(); }}>Вийти</button>
+          ) : authChecked ? (
+            <a className="button button-primary" href={currentLoginUrl}>Увійти через Microsoft</a>
+          ) : null}
+        </div>
+      </aside>
+    </>
   );
 }
 
-function HomePage({ categoryNames, user, favorites, busy, onFavorite, onError }: {
+function HomePage({ categories, categoryNames, user, favorites, busy, onFavorite, onError }: {
+  categories: Category[];
   categoryNames: Map<string, string>;
   user: CurrentUser | null;
   favorites: Set<string>;
@@ -297,15 +385,36 @@ function HomePage({ categoryNames, user, favorites, busy, onFavorite, onError }:
   onError: (message: string) => void;
 }) {
   const currentLoginUrl = useCurrentLoginUrl();
+  const navigate = useNavigate();
   const [recentListings, setRecentListings] = useState<Listing[]>([]);
+  const [totalListings, setTotalListings] = useState<number | null>(null);
+  const [freshStat, setFreshStat] = useState<{ value: string; label: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
-    getListings(INITIAL_FILTERS, 4)
-      .then(setRecentListings)
+    getListings(INITIAL_FILTERS, STATS_SAMPLE_SIZE)
+      .then((items) => {
+        setRecentListings(items.slice(0, 4));
+        setTotalListings(items.length);
+        const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+        const fresh = items.filter((item) => Date.parse(item.created_at) >= dayAgo).length;
+        if (fresh > 0) setFreshStat({ value: String(fresh), label: freshLabel(fresh) });
+        else if (items.length) setFreshStat({ value: formatAge(items[0].created_at), label: "останнє оголошення" });
+      })
       .catch((requestError) => onError(errorText(requestError)))
       .finally(() => setLoading(false));
   }, [onError]);
+
+  function submitSearch(event: FormEvent) {
+    event.preventDefault();
+    const q = query.trim();
+    navigate(q ? `/listings?${new URLSearchParams({ q }).toString()}` : "/listings");
+  }
+
+  const totalLabel = totalListings === null
+    ? "—"
+    : totalListings >= STATS_SAMPLE_SIZE ? `${STATS_SAMPLE_SIZE}+` : String(totalListings);
 
   return (
     <main>
@@ -320,10 +429,27 @@ function HomePage({ categoryNames, user, favorites, busy, onFavorite, onError }:
           </div>
           <div className="trust-row"><span>✓ Вхід через НаУКМА</span><span>✓ Контакти лише для студентів</span></div>
         </div>
-        <div className="hero-card" aria-hidden="true">
-          <div className="hero-orbit orbit-one" /><div className="hero-orbit orbit-two" />
-          <div className="hero-product"><span className="product-icon">⌁</span><strong>Знайшлося!</strong><small>саме те, що треба</small></div>
-          <span className="floating-tag tag-one">Книги</span><span className="floating-tag tag-two">Техніка</span><span className="floating-tag tag-three">Одяг</span>
+        <div className="hero-panel">
+          <span className="panel-eyebrow">Швидкий пошук</span>
+          <h2>Що вам потрібно?</h2>
+          <form className="quick-search" onSubmit={submitSearch} role="search">
+            <label className="sr-only" htmlFor="hero-search">Пошук оголошень</label>
+            <SearchIcon />
+            <input id="hero-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Підручник, ноутбук, куртка…" maxLength={100} />
+            <button className="button button-primary" type="submit">Знайти</button>
+          </form>
+          {categories.length > 0 && (
+            <div className="chip-row" aria-label="Категорії">
+              {categories.slice(0, 6).map((category) => (
+                <Link className="chip" key={category.id} to={`/listings?${new URLSearchParams({ category: category.id }).toString()}`}>{category.name}</Link>
+              ))}
+            </div>
+          )}
+          <dl className="stats">
+            <div><dd>{totalLabel}</dd><dt>оголошень</dt></div>
+            <div><dd>{categories.length || "—"}</dd><dt>категорій</dt></div>
+            <div><dd>{freshStat?.value ?? "—"}</dd><dt>{freshStat?.label ?? "нових за добу"}</dt></div>
+          </dl>
         </div>
       </section>
 
@@ -437,9 +563,12 @@ function CatalogPage({ categories, categoryNames, favorites, busy, onFavorite, o
       <section>
         <div className="section-heading">
           <div><span className="eyebrow dark">Весь маркетплейс</span><h1>Оголошення</h1></div>
-          <span className="result-count">{loading ? "Завантаження…" : `Показано: ${listings.length}`}</span>
         </div>
         <FilterForm filters={draftFilters} categories={categories} onChange={setDraftFilters} onSubmit={applyFilters} onClear={clearFilters} />
+        <div className="results-bar">
+          <span className="result-count">{loading ? "Завантаження…" : `Показано: ${listings.length}`}</span>
+          {searchParams.toString() !== "" && <button className="link-button" type="button" onClick={clearFilters}>Скинути фільтри</button>}
+        </div>
         {loading ? <ListingSkeleton /> : listings.length ? (
           <ListingGrid listings={listings} categoryNames={categoryNames} favorites={favorites} busy={busy} onFavorite={onFavorite} />
         ) : <EmptyState onClear={clearFilters} />}
@@ -467,22 +596,31 @@ function FilterForm({ filters, categories, onChange, onSubmit, onClear }: {
   onSubmit: (event: FormEvent) => void;
   onClear: () => void;
 }) {
+  const [open, setOpen] = useState(false);
   return (
-    <form className="filters" onSubmit={onSubmit}>
+    <form className={`filters${open ? " is-open" : ""}`} onSubmit={onSubmit} role="search">
       <label className="search-field">
-        <span className="sr-only">Пошук</span><span aria-hidden="true">⌕</span>
-        <input value={filters.q} onChange={(event) => onChange({ ...filters, q: event.target.value })} placeholder="Що шукаєте?" minLength={1} maxLength={100} />
+        <span>Пошук</span>
+        <div className="input-icon">
+          <SearchIcon />
+          <input value={filters.q} onChange={(event) => onChange({ ...filters, q: event.target.value })} placeholder="Що шукаєте?" minLength={1} maxLength={100} />
+        </div>
       </label>
-      <label><span>Категорія</span><select value={filters.categoryId} onChange={(event) => onChange({ ...filters, categoryId: event.target.value })}>
-        <option value="">Усі категорії</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-      </select></label>
-      <label><span>Ціна від</span><input type="number" min="0" inputMode="numeric" value={filters.minPrice} onChange={(event) => onChange({ ...filters, minPrice: event.target.value })} placeholder="0" /></label>
-      <label><span>Ціна до</span><input type="number" min="0" inputMode="numeric" value={filters.maxPrice} onChange={(event) => onChange({ ...filters, maxPrice: event.target.value })} placeholder="Будь-яка" /></label>
-      <label><span>Сортування</span><select value={filters.sort} onChange={(event) => onChange({ ...filters, sort: event.target.value as ListingFilters["sort"] })}>
-        <option value="newest">Спочатку нові</option><option value="oldest">Спочатку старі</option>
-      </select></label>
+      <button className="button button-light filters-toggle" type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+        {open ? "Сховати" : "Фільтри"}
+      </button>
+      <div className="filters-extra">
+        <label><span>Категорія</span><select value={filters.categoryId} onChange={(event) => onChange({ ...filters, categoryId: event.target.value })}>
+          <option value="">Усі категорії</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+        </select></label>
+        <label><span>Ціна від</span><input type="number" min="0" inputMode="numeric" value={filters.minPrice} onChange={(event) => onChange({ ...filters, minPrice: event.target.value })} placeholder="0" /></label>
+        <label><span>Ціна до</span><input type="number" min="0" inputMode="numeric" value={filters.maxPrice} onChange={(event) => onChange({ ...filters, maxPrice: event.target.value })} placeholder="Будь-яка" /></label>
+        <label><span>Сортування</span><select value={filters.sort} onChange={(event) => onChange({ ...filters, sort: event.target.value as ListingFilters["sort"] })}>
+          <option value="newest">Спочатку нові</option><option value="oldest">Спочатку старі</option>
+        </select></label>
+      </div>
       <button className="button button-primary filter-submit" type="submit">Знайти</button>
-      <button className="button button-text" type="button" onClick={onClear}>Скинути</button>
+      <button className="button button-text filter-clear" type="button" onClick={onClear}>Скинути</button>
     </form>
   );
 }
@@ -501,8 +639,16 @@ function ListingGrid({ listings, categoryNames, favorites, busy, onFavorite }: {
           <Link className="card-main" to={`/listings/${listing.id}`}>
             <ListingImage listing={listing} />
             <div className="card-body">
-              <div className="card-meta"><span>{categoryNames.get(listing.category_id) ?? "Інше"}</span><span>{CONDITION_LABELS[listing.condition]}</span></div>
-              <h3>{listing.title}</h3><p>{listing.description}</p><strong className="price">{formatPrice(listing.price)}</strong>
+              <div className="card-meta">
+                <span>{categoryNames.get(listing.category_id) ?? "Інше"}</span>
+                <time dateTime={listing.created_at}>{formatAge(listing.created_at)}</time>
+              </div>
+              <h3>{listing.title}</h3>
+              <p>{listing.description}</p>
+              <div className="card-foot">
+                <strong className="price">{formatPrice(listing.price)}</strong>
+                <span className="condition">{CONDITION_LABELS[listing.condition]}</span>
+              </div>
             </div>
           </Link>
           <button className={`favorite-button ${favorites.has(listing.id) ? "active" : ""}`} disabled={busy} onClick={() => onFavorite(listing.id)} aria-label={favorites.has(listing.id) ? "Прибрати з обраного" : "Додати в обране"}>
