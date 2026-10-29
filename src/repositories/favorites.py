@@ -21,6 +21,9 @@ class FavoriteRepository(Protocol):
     def delete(self, user_id: UUID, listing_id: UUID) -> bool:
         """Видаляє запис. True, якщо запис існував."""
 
+    def list_by_listing(self, listing_id: UUID) -> list[Favorite]:
+        """Повертає всі записи обраного з цим оголошенням (для відкату модерації)."""
+
     def delete_by_listing(self, listing_id: UUID) -> int:
         """Прибирає оголошення з обраного всіх користувачів. Повертає кількість."""
 
@@ -45,6 +48,9 @@ class InMemoryFavoriteRepository:
 
     def delete(self, user_id: UUID, listing_id: UUID) -> bool:
         return self._items.pop((user_id, listing_id), None) is not None
+
+    def list_by_listing(self, listing_id: UUID) -> list[Favorite]:
+        return [item for item in self._items.values() if item.listing_id == listing_id]
 
     def delete_by_listing(self, listing_id: UUID) -> int:
         keys = [key for key in self._items if key[1] == listing_id]
