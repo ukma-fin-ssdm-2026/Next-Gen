@@ -112,7 +112,12 @@
 
 5. **Локальний запуск API сервера:**
    ```bash
-   uvicorn src.api.main:app --reload --port 8000
+   set -a; source .env.development; set +a
+   .venv/bin/python -m uvicorn src.api.main:app --reload --port 8000
    ```
+   Файл `.env.development` містить лише несекретні локальні значення. Кнопка входу створює
+   тестову серверну сесію без звернення до Microsoft. Production `.env`
+   не зберігається в репозиторії і не повинен містити `DEV_AUTH_ENABLED=true`.
+
    *Інтерактивна документація FastAPI доступна за адресою:* `http://localhost:8000/docs`
 
