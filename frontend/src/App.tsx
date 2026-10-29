@@ -428,7 +428,7 @@ function HomePage({ categories, categoryNames, user, favorites, busy, onFavorite
             <Link className="button button-primary" to="/listings">Переглянути оголошення</Link>
             {!user && <a className="button button-light" href={currentLoginUrl}>Приєднатися</a>}
           </div>
-          <div className="trust-row"><span>✓ Вхід через НаУКМА</span><span>✓ Контакти лише для студентів</span></div>
+          <div className="trust-row"><span>Вхід з корпоративною поштою НаУКМА</span></div>
         </div>
         <div className="hero-panel">
           <span className="panel-eyebrow">Швидкий пошук</span>
