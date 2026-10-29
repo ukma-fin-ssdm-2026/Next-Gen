@@ -260,8 +260,8 @@ footer p { color: rgba(255,255,255,0.55); font-size: 11px; text-align: right; }
 .header-actions .icon-button { width: 42px; }
 .topnav a:hover, .header-actions .icon-button:hover, .account-trigger:hover, .account-trigger[aria-expanded="true"] { background: rgba(15, 91, 69, 0.07); color: var(--green); }
 .topnav a.active, .header-actions .icon-button.active { color: var(--green); }
-.account-trigger { padding: 0 10px 0 6px; }
-.account-trigger .avatar { width: 30px; height: 30px; }
+.account-trigger { height: 46px; padding: 0 10px 0 3px; }
+.account-trigger .avatar { width: 40px; height: 40px; font-size: 16px; }
 .create-button { height: 42px; padding: 0 18px; border-radius: 12px; display: inline-flex; align-items: center; margin-left: 4px; }
 .fab { display: none; }
 
