@@ -62,8 +62,10 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function loginUrl(): string {
-  return `${API_ROOT}/auth/login`;
+export function loginUrl(returnTo?: string): string {
+  const baseUrl = `${API_ROOT}/auth/login`;
+  if (!returnTo) return baseUrl;
+  return `${baseUrl}?${new URLSearchParams({ next: returnTo }).toString()}`;
 }
 
 export function getCurrentUser(): Promise<CurrentUser> {

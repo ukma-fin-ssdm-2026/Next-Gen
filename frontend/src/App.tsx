@@ -4,6 +4,7 @@ import {
   NavLink,
   Route,
   Routes,
+  useLocation,
   useNavigate,
   useParams,
   useSearchParams,
@@ -79,8 +80,14 @@ function paramsFromFilters(filters: ListingFilters): URLSearchParams {
   return params;
 }
 
+function useCurrentLoginUrl(): string {
+  const location = useLocation();
+  return loginUrl(`${location.pathname}${location.search}${location.hash}`);
+}
+
 function App() {
   const navigate = useNavigate();
+  const currentLoginUrl = useCurrentLoginUrl();
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -139,7 +146,7 @@ function App() {
 
   async function toggleFavorite(listingId: string) {
     if (!user) {
-      window.location.assign(loginUrl());
+      window.location.assign(currentLoginUrl);
       return;
     }
     const isFavorite = favorites.has(listingId);
@@ -233,6 +240,7 @@ function Header({ user, authChecked, busy, onLogout }: {
   busy: boolean;
   onLogout: () => void;
 }) {
+  const currentLoginUrl = useCurrentLoginUrl();
   return (
     <header className="topbar">
       <Link className="brand" to="/" aria-label="Барахолка НаУКМА — на головну">
@@ -257,7 +265,7 @@ function Header({ user, authChecked, busy, onLogout }: {
             <button className="button button-ghost compact" disabled={busy} onClick={onLogout}>Вийти</button>
           </>
         ) : authChecked ? (
-          <a className="button button-primary compact" href={loginUrl()}>Увійти через Microsoft</a>
+          <a className="button button-primary compact" href={currentLoginUrl}>Увійти через Microsoft</a>
         ) : (
           <span className="auth-placeholder" aria-label="Перевіряємо авторизацію" />
         )}
@@ -275,6 +283,7 @@ function CatalogPage({ categories, categoryNames, user, favorites, busy, onFavor
   onFavorite: (id: string) => void;
   onError: (message: string) => void;
 }) {
+  const currentLoginUrl = useCurrentLoginUrl();
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = useMemo(() => filtersFromParams(searchParams), [searchParams]);
   const [draftFilters, setDraftFilters] = useState<ListingFilters>(filters);
@@ -309,7 +318,7 @@ function CatalogPage({ categories, categoryNames, user, favorites, busy, onFavor
           <p>Купуйте й продавайте всередині НаУКМА — без зайвих чатів, випадкових людей і загублених оголошень.</p>
           <div className="hero-actions">
             <a className="button button-primary" href="#catalog">Переглянути оголошення</a>
-            {!user && <a className="button button-light" href={loginUrl()}>Приєднатися</a>}
+            {!user && <a className="button button-light" href={currentLoginUrl}>Приєднатися</a>}
           </div>
           <div className="trust-row"><span>✓ Вхід через НаУКМА</span><span>✓ Контакти лише для студентів</span></div>
         </div>
@@ -409,6 +418,7 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
 }) {
   const { listingId = "" } = useParams();
   const navigate = useNavigate();
+  const currentLoginUrl = useCurrentLoginUrl();
   const [listing, setListing] = useState<Listing | null>(null);
   const [contact, setContact] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -419,7 +429,7 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
   }, [listingId, onError]);
 
   async function revealContact() {
-    if (!user) { window.location.assign(loginUrl()); return; }
+    if (!user) { window.location.assign(currentLoginUrl); return; }
     onBusy(true);
     try { setContact((await getSellerContact(listingId)).contact); }
     catch (requestError) { onError(errorText(requestError)); }
@@ -504,7 +514,8 @@ function ProfilePage({ user, authChecked }: { user: CurrentUser | null; authChec
 }
 
 function SignInRequired({ title }: { title: string }) {
-  return <main className="page-main auth-required"><span className="brand-mark large-mark">Б</span><h1>{title}</h1><p>Увійдіть через корпоративний Microsoft-акаунт НаУКМА.</p><a className="button button-primary" href={loginUrl()}>Увійти через Microsoft</a></main>;
+  const currentLoginUrl = useCurrentLoginUrl();
+  return <main className="page-main auth-required"><span className="brand-mark large-mark">Б</span><h1>{title}</h1><p>Увійдіть через корпоративний Microsoft-акаунт НаУКМА.</p><a className="button button-primary" href={currentLoginUrl}>Увійти через Microsoft</a></main>;
 }
 
 function PageHeading({ eyebrow, title }: { eyebrow: string; title: string }) {
