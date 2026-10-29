@@ -77,7 +77,6 @@ def test_existing_entra_identity_updates_profile_without_changing_local_id(
         entra_object_id=OBJECT_ID,
         email="old@ukma.edu.ua",
         display_name="Старе ім'я",
-        role=UserRole.ADMIN,
     )
     repository = InMemoryUserRepository([existing])
     service = AuthService(repository, auth_config)
@@ -85,7 +84,7 @@ def test_existing_entra_identity_updates_profile_without_changing_local_id(
     current_user = service.authenticate_verified_claims(valid_claims, now=NOW)
 
     assert current_user.user_id == existing.user_id
-    assert current_user.role == UserRole.ADMIN
+    assert current_user.role == UserRole.USER
     assert existing.email == "student@ukma.edu.ua"
     assert existing.display_name == "Студент НаУКМА"
 
@@ -166,3 +165,43 @@ def test_blocked_local_user_is_rejected_without_profile_update(
 
     assert str(exc_info.value) == "Обліковий запис користувача заблоковано"
     assert blocked.email == "blocked@ukma.edu.ua"
+
+
+def test_admin_emails_assign_and_revoke_admin_role(
+    auth_config: EntraAuthConfig,
+    valid_claims: VerifiedEntraClaims,
+) -> None:
+    """[TP-AUTH-05] [FR-001] [SEC-001]
+    Адреса зі списку ADMIN_EMAILS отримує ADMIN, нова без списку — USER,
+    а видалена зі списку повертається до USER при наступному вході.
+    """
+    repository = InMemoryUserRepository()
+    plain = AuthService(repository, auth_config)
+    assert (
+        plain.authenticate_verified_claims(valid_claims, now=NOW).role == UserRole.USER
+    )
+
+    admins = AuthService(repository, auth_config, frozenset({"student@ukma.edu.ua"}))
+    assert (
+        admins.authenticate_verified_claims(valid_claims, now=NOW).role
+        == UserRole.ADMIN
+    )
+    assert repository.get_by_entra_identity(TENANT_ID, OBJECT_ID).role == UserRole.ADMIN
+    assert (
+        plain.authenticate_verified_claims(valid_claims, now=NOW).role == UserRole.USER
+    )
+
+
+def test_admin_emails_do_not_bypass_blocking(
+    auth_config: EntraAuthConfig,
+    valid_claims: VerifiedEntraClaims,
+) -> None:
+    """[TP-AUTH-05] [FR-001] [SEC-001]
+    Заблокований користувач зі списку адміністраторів усе одно не входить.
+    """
+    repository = InMemoryUserRepository()
+    service = AuthService(repository, auth_config, frozenset({"student@ukma.edu.ua"}))
+    service.authenticate_verified_claims(valid_claims, now=NOW)
+    repository.get_by_entra_identity(TENANT_ID, OBJECT_ID).is_blocked = True
+    with pytest.raises(BlockedUserError):
+        service.authenticate_verified_claims(valid_claims, now=NOW)

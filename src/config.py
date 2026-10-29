@@ -39,6 +39,27 @@ def get_image_storage_dir() -> Path:
     return (Path(tempfile.gettempdir()) / "baraholka-uploads").resolve()
 
 
+def get_admin_emails() -> frozenset[str]:
+    """Читає ADMIN_EMAILS: адреси @ukma.edu.ua через кому, пробіл чи крапку з комою.
+
+    Порожня або відсутня змінна означає, що адміністраторів немає. Некоректна
+    адреса зупиняє роботу, щоб помилка в списку не залишилась непоміченою.
+    """
+    raw = os.getenv("ADMIN_EMAILS", "")
+    emails: set[str] = set()
+    for item in raw.replace(";", ",").replace("\n", ",").replace(" ", ",").split(","):
+        email = item.strip().casefold()
+        if not email:
+            continue
+        local_part, separator, domain = email.partition("@")
+        if not local_part or separator != "@" or domain != "ukma.edu.ua":
+            raise ConfigurationError(
+                "ADMIN_EMAILS має містити лише адреси @ukma.edu.ua"
+            )
+        emails.add(email)
+    return frozenset(emails)
+
+
 def development_auth_enabled(settings: "EntraSettings") -> bool:
     """Allows the local login shortcut only in an explicitly local environment."""
     enabled = os.getenv("DEV_AUTH_ENABLED", "false").strip().casefold()
