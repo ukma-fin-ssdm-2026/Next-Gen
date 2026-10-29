@@ -165,6 +165,27 @@ def test_cannot_attach_staged_image_uploaded_by_another_user(
     assert "іншим користувачем" in bad_create.json()["detail"][0]["msg"]
 
 
+def test_upload_images_rate_limit_returns_429(
+    client: TestClient,
+    tmp_path: Path,
+    login_as,
+) -> None:
+    """[TP-023] [FR-002] [TM-08]
+    Перевищення rate limit на завантаження фотографій повертає HTTP 429.
+    """
+    limited_storage = LocalImageStorage(tmp_path, max_requests_per_window=1)
+    app.dependency_overrides[get_image_storage] = lambda: limited_storage
+    try:
+        login_as()
+        files = [("files", ("ok.jpg", make_dummy_jpeg(80, 80), "image/jpeg"))]
+        assert client.post("/api/v1/listings/images", files=files).status_code == 201
+        second = client.post("/api/v1/listings/images", files=files)
+        assert second.status_code == 429
+        assert "ліміт запитів" in second.json()["detail"]
+    finally:
+        app.dependency_overrides.pop(get_image_storage, None)
+
+
 def test_get_uploaded_image_serves_webp(client: TestClient, login_as) -> None:
     """[TP-023] [FR-002]
     Отримання завантаженого зображення за ендпоінтом /uploads/{storage_key}.

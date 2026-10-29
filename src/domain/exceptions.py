@@ -25,6 +25,10 @@ class InvalidListingImageError(ListingError):
     """Некоректні дані або кількість зображень оголошення."""
 
 
+class ImageUploadRateLimitError(InvalidListingImageError):
+    """Перевищено ліміт запитів на завантаження зображень (TM-08)."""
+
+
 class FavoriteNotFoundError(ListingError):
     """Оголошення немає в обраному поточного користувача."""
 

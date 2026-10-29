@@ -13,7 +13,7 @@ import warnings
 from PIL import Image, ImageOps, UnidentifiedImageError
 import pillow_heif
 
-from src.domain.exceptions import InvalidListingImageError
+from src.domain.exceptions import ImageUploadRateLimitError, InvalidListingImageError
 from src.domain.listings import (
     SEED_IMAGE_ID,
     SEED_IMAGE_STORAGE_KEY,
@@ -480,7 +480,7 @@ class BaseImageStorage:
         ]
         if len(history) >= self._max_requests_per_window:
             self._upload_requests[actor_id] = history
-            raise InvalidListingImageError(
+            raise ImageUploadRateLimitError(
                 "Перевищено ліміт запитів на завантаження зображень, спробуйте пізніше"
             )
         history.append(now)

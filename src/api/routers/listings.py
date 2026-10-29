@@ -30,6 +30,7 @@ from src.api.schemas.listings import (
     UploadedImageResponse,
 )
 from src.domain.exceptions import (
+    ImageUploadRateLimitError,
     InvalidCategoryError,
     InvalidListingImageError,
     InvalidPriceRangeError,
@@ -170,6 +171,7 @@ def _iter_upload_bytes(files: Sequence[UploadFile]) -> Iterator[bytes]:
             "model": ApiValidationErrorResponse,
             "description": "Validation Error",
         },
+        429: {"model": ErrorResponse, "description": "Too Many Requests"},
     },
 )
 def upload_listing_images(
@@ -200,6 +202,11 @@ def upload_listing_images(
             _iter_upload_bytes(files),
             actor_id=current_user.user_id,
         )
+    except ImageUploadRateLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc),
+        ) from exc
     except InvalidListingImageError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

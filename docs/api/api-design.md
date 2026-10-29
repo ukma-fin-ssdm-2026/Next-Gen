@@ -91,7 +91,7 @@
 
 | Метод | URL | Опис | Успішний статус | Статуси помилок |
 |---|---|---|---|---|
-| `POST` | `/api/v1/listings/images` | Завантажити фотографії оголошення (multipart/form-data, 1..10 файлів) | 201 Created | 401 Unauthorized, 403 Forbidden, 422 Unprocessable Entity |
+| `POST` | `/api/v1/listings/images` | Завантажити фотографії оголошення (multipart/form-data, 1..10 файлів) | 201 Created | 401 Unauthorized, 403 Forbidden, 422 Unprocessable Entity, 429 Too Many Requests |
 | `GET` | `/api/v1/listings` | Отримати список оголошень (з пагінацією, фільтрацією та сортуванням) | 200 OK | 422 Unprocessable Entity |
 | `GET` | `/api/v1/listings/my` | Отримати історію власних оголошень продавця (активні та зняті, `FR-005`) | 200 OK | 401 Unauthorized, 403 Forbidden, 422 |
 | `POST` | `/api/v1/listings` | Створити нове оголошення | 201 Created | 400 Bad Request, 401 Unauthorized, 403 Forbidden, 422 |
