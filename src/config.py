@@ -54,9 +54,7 @@ def development_auth_enabled(settings: "EntraSettings") -> bool:
     frontend_host = urlparse(settings.frontend_url).hostname
     callback_host = urlparse(settings.redirect_uri).hostname
     if frontend_host not in local_hosts or callback_host not in local_hosts:
-        raise ConfigurationError(
-            "Development auth дозволено лише для localhost URL"
-        )
+        raise ConfigurationError("Development auth дозволено лише для localhost URL")
     return True
 
 
