@@ -33,6 +33,7 @@ from src.repositories.categories import InMemoryCategoryRepository
 from src.repositories.category_suggestions import (
     InMemoryCategorySuggestionRepository,
 )
+from src.repositories.image_storage import InMemoryImageStorage
 from src.repositories.listings import InMemoryListingRepository
 from src.repositories.moderation import InMemoryModerationActionRepository
 from src.services.categories import CategoryService
@@ -316,3 +317,85 @@ def test_atomic_rollback_on_approve_and_listing_create_failure(
 
     with pytest.raises(CategorySuggestionNotFoundError):
         failing_service.approve(admin, uuid4())
+
+
+def test_approve_preserves_concurrent_withdrawal_and_atomic_publication(
+    category_repository: InMemoryCategoryRepository,
+    category_suggestion_repository: InMemoryCategorySuggestionRepository,
+    category_service: CategoryService,
+    listing_repository: InMemoryListingRepository,
+    moderation_actions: InMemoryModerationActionRepository,
+    category_suggestion_service: CategorySuggestionService,
+    listing_service: ListingService,
+) -> None:
+    """[TP-028] [FR-015] [US-010] Конкурентне зняття та атомарна публікація."""
+    seller = _make_user()
+    admin = _make_user(role=UserRole.ADMIN)
+
+    # 1. Якщо власник знімає оголошення під час створення категорії в approve(),
+    # воно має залишитися WITHDRAWN і не ставати знову ACTIVE.
+    withdrawn_during_approve = listing_service.create(
+        actor_id=seller,
+        title="Монітор 27 дюймів",
+        description="IPS",
+        price=4500.0,
+        contact="@mon",
+        image_urls=[SEED_IMAGE_URL],
+        suggested_category_name="Комп'ютерна периферія",
+    )
+    sid = withdrawn_during_approve.suggested_category_id
+    assert sid is not None
+
+    class WithdrawingCategoryService(CategoryService):
+        def create(self, name: str, slug: str, description: str | None = None):
+            created = super().create(name=name, slug=slug, description=description)
+            listing_service.delete(withdrawn_during_approve.id, seller)
+            return created
+
+    interleaved_service = CategorySuggestionService(
+        suggestions=category_suggestion_repository,
+        categories=category_repository,
+        category_service=WithdrawingCategoryService(category_repository),
+        listings=listing_repository,
+        actions=moderation_actions,
+    )
+    approved = interleaved_service.approve(admin, sid)
+    assert approved.status == CategorySuggestionStatus.APPROVED
+    after_approve = listing_repository.get(withdrawn_during_approve.id)
+    assert after_approve is not None
+    assert after_approve.status == ListingStatus.WITHDRAWN
+    assert after_approve.category_id == OTHER_CATEGORY_ID
+
+    # 2. Під час save_images() пропозиція ще не експонується як PENDING без оголошення
+    observed_pending_during_images: list[tuple] = []
+
+    class InspectingImageStorage(InMemoryImageStorage):
+        def save_images(self, listing_id, image_urls, actor_id=None):
+            observed_pending_during_images.extend(
+                category_suggestion_service.list_pending(admin)
+            )
+            return super().save_images(listing_id, image_urls, actor_id=actor_id)
+
+    atomic_listing_service = ListingService(
+        repository=listing_repository,
+        image_storage=InspectingImageStorage(),
+        category_suggestion_service=category_suggestion_service,
+    )
+    created_atomic = atomic_listing_service.create(
+        actor_id=seller,
+        title="Мікрофон USB",
+        description="Студійний",
+        price=1800.0,
+        contact="@mic",
+        image_urls=[SEED_IMAGE_URL],
+        suggested_category_name="Аудіообладнання",
+    )
+    assert observed_pending_during_images == []
+    assert created_atomic.suggested_category_id is not None
+    approved_audio = category_suggestion_service.approve(
+        admin, created_atomic.suggested_category_id
+    )
+    assert (
+        listing_repository.get(created_atomic.id).category_id
+        == approved_audio.category_id
+    )

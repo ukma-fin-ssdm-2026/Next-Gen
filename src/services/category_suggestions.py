@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 from datetime import timedelta
-from threading import Lock
+from threading import RLock
 from uuid import UUID
 
 from src.domain.category_suggestions import (
@@ -31,7 +31,7 @@ from src.domain.moderation import (
 from src.domain.users import CurrentUser, User, UserRole
 from src.repositories.categories import CategoryRepository
 from src.repositories.category_suggestions import CategorySuggestionRepository
-from src.repositories.listings import ListingRepository
+from src.repositories.listings import ListingRepository, get_listing_mutation_lock
 from src.repositories.moderation import ModerationActionRepository
 from src.services.categories import CategoryService
 
@@ -52,7 +52,23 @@ class CategorySuggestionService:
         self._category_service = category_service
         self._listings = listings
         self._actions = actions
-        self._lock = Lock()
+        self._lock = RLock()
+        self._listing_lock = get_listing_mutation_lock(listings)
+
+    @property
+    def lock(self) -> RLock:
+        """Спільний RLock для координації створення пропозиції та оголошення."""
+        return self._lock
+
+    def validate_submission(
+        self, actor: CurrentUser | User | UUID | None, name: str
+    ) -> tuple[UUID, str]:
+        """Перевіряє можливість подання пропозиції без її публікації."""
+        proposer_id = self._resolve_proposer_id(actor)
+        clean_name = normalize_suggestion_name(name)
+        with self._lock:
+            self._validate_submission_locked(proposer_id, clean_name)
+        return proposer_id, clean_name
 
     def submit(
         self, actor: CurrentUser | User | UUID | None, name: str
@@ -61,26 +77,29 @@ class CategorySuggestionService:
         proposer_id = self._resolve_proposer_id(actor)
         clean_name = normalize_suggestion_name(name)
         with self._lock:
-            self._check_duplicate_category(clean_name)
-            existing_pending = self._suggestions.find_pending_by_name(clean_name)
-            if existing_pending is not None:
-                raise DuplicateCategorySuggestionError(
-                    f"Пропозиція категорії '{existing_pending.name}' "
-                    "вже перебуває на розгляді"
-                )
-            pending_by_user = self._suggestions.list_by_proposer(
-                proposer_id, status=CategorySuggestionStatus.PENDING
-            )
-            if len(pending_by_user) >= MAX_PENDING_SUGGESTIONS_PER_USER:
-                raise CategorySuggestionQuotaError(
-                    f"Перевищено ліміт активних пропозицій "
-                    f"({MAX_PENDING_SUGGESTIONS_PER_USER} у статусі PENDING)"
-                )
+            self._validate_submission_locked(proposer_id, clean_name)
             suggestion = CategorySuggestion(
                 name=clean_name,
                 proposer_id=proposer_id,
             )
             return self._suggestions.add(suggestion)
+
+    def _validate_submission_locked(self, proposer_id: UUID, clean_name: str) -> None:
+        self._check_duplicate_category(clean_name)
+        existing_pending = self._suggestions.find_pending_by_name(clean_name)
+        if existing_pending is not None:
+            raise DuplicateCategorySuggestionError(
+                f"Пропозиція категорії '{existing_pending.name}' "
+                "вже перебуває на розгляді"
+            )
+        pending_by_user = self._suggestions.list_by_proposer(
+            proposer_id, status=CategorySuggestionStatus.PENDING
+        )
+        if len(pending_by_user) >= MAX_PENDING_SUGGESTIONS_PER_USER:
+            raise CategorySuggestionQuotaError(
+                f"Перевищено ліміт активних пропозицій "
+                f"({MAX_PENDING_SUGGESTIONS_PER_USER} у статусі PENDING)"
+            )
 
     def list_by_status(
         self,
@@ -89,19 +108,20 @@ class CategorySuggestionService:
     ) -> list[tuple[CategorySuggestion, int]]:
         """Повертає чергу пропозицій із кількістю активних оголошень (ADMIN)."""
         self._require_admin(moderator)
-        items = self._suggestions.list_by_status(status)
-        items.sort(key=lambda item: item.created_at)
-        all_listings = self._listings.list_all()
-        counts: dict[UUID, int] = {}
-        for listing in all_listings:
-            if (
-                listing.suggested_category_id is not None
-                and listing.status == ListingStatus.ACTIVE
-            ):
-                counts[listing.suggested_category_id] = (
-                    counts.get(listing.suggested_category_id, 0) + 1
-                )
-        return [(item, counts.get(item.suggestion_id, 0)) for item in items]
+        with self._lock, self._listing_lock:
+            items = self._suggestions.list_by_status(status)
+            items.sort(key=lambda item: item.created_at)
+            all_listings = self._listings.list_all()
+            counts: dict[UUID, int] = {}
+            for listing in all_listings:
+                if (
+                    listing.suggested_category_id is not None
+                    and listing.status == ListingStatus.ACTIVE
+                ):
+                    counts[listing.suggested_category_id] = (
+                        counts.get(listing.suggested_category_id, 0) + 1
+                    )
+            return [(item, counts.get(item.suggestion_id, 0)) for item in items]
 
     def list_pending(
         self, moderator: CurrentUser | User | None
@@ -133,28 +153,35 @@ class CategorySuggestionService:
                     existing_category_name=slug_collision.name,
                 )
 
-            affected_originals = [
-                replace(item)
-                for item in self._listings.list_all()
-                if item.suggested_category_id == suggestion_id
-                and item.status == ListingStatus.ACTIVE
-                and item.category_id == OTHER_CATEGORY_ID
-            ]
+            affected_originals: list[Listing] = []
             created_category_id: UUID | None = None
             try:
                 created_category = self._category_service.create(
                     name=final_name, slug=slug
                 )
                 created_category_id = created_category.id
-                for snap in affected_originals:
-                    moved = replace(
-                        snap,
-                        category_id=created_category.id,
-                        updated_at=max(
-                            utc_now(), snap.updated_at + timedelta(microseconds=1)
-                        ),
-                    )
-                    self._listings.save(moved)
+                with self._listing_lock:
+                    for candidate in list(self._listings.list_all()):
+                        if candidate.suggested_category_id != suggestion_id:
+                            continue
+                        current = self._listings.get(candidate.id)
+                        if (
+                            current is None
+                            or current.suggested_category_id != suggestion_id
+                            or current.status != ListingStatus.ACTIVE
+                            or current.category_id != OTHER_CATEGORY_ID
+                        ):
+                            continue
+                        affected_originals.append(replace(current))
+                        moved = replace(
+                            current,
+                            category_id=created_category.id,
+                            updated_at=max(
+                                utc_now(),
+                                current.updated_at + timedelta(microseconds=1),
+                            ),
+                        )
+                        self._listings.save(moved)
                 approved = replace(
                     original,
                     name=final_name,
@@ -195,21 +222,28 @@ class CategorySuggestionService:
         clean_reason = normalize_moderation_reason(reason)
         with self._lock:
             original = self._require_pending(suggestion_id)
-            linked_originals = [
-                replace(item)
-                for item in self._listings.list_all()
-                if item.suggested_category_id == suggestion_id
-            ]
+            linked_originals: list[Listing] = []
             try:
-                for snap in linked_originals:
-                    cleared = replace(
-                        snap,
-                        suggested_category_id=None,
-                        updated_at=max(
-                            utc_now(), snap.updated_at + timedelta(microseconds=1)
-                        ),
-                    )
-                    self._listings.save(cleared)
+                with self._listing_lock:
+                    for candidate in list(self._listings.list_all()):
+                        if candidate.suggested_category_id != suggestion_id:
+                            continue
+                        current = self._listings.get(candidate.id)
+                        if (
+                            current is None
+                            or current.suggested_category_id != suggestion_id
+                        ):
+                            continue
+                        linked_originals.append(replace(current))
+                        cleared = replace(
+                            current,
+                            suggested_category_id=None,
+                            updated_at=max(
+                                utc_now(),
+                                current.updated_at + timedelta(microseconds=1),
+                            ),
+                        )
+                        self._listings.save(cleared)
                 rejected = replace(
                     original,
                     status=CategorySuggestionStatus.REJECTED,
@@ -276,8 +310,19 @@ class CategorySuggestionService:
         listing_snapshots: list[Listing],
         created_category_id: UUID | None,
     ) -> None:
-        for snap in listing_snapshots:
-            self._listings.save(snap)
+        with self._listing_lock:
+            for snap in listing_snapshots:
+                current = self._listings.get(snap.id)
+                if current is not None:
+                    restored = replace(
+                        current,
+                        category_id=snap.category_id,
+                        suggested_category_id=snap.suggested_category_id,
+                        updated_at=snap.updated_at,
+                    )
+                    self._listings.save(restored)
+                else:
+                    self._listings.save(snap)
         if created_category_id is not None:
             self._categories.delete(created_category_id)
         self._suggestions.save(original_suggestion)
