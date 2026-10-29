@@ -1,34 +1,12 @@
 """HTTP-тести каталогу та контролів безпеки TM-02 / TM-05."""
 
-import io
 from uuid import uuid4
 
-from PIL import Image
 import pytest
 from fastapi.testclient import TestClient
 
 from src.domain.listings import SEED_LISTING_ID, SEED_OWNER_ID, WITHDRAWN_LISTING_ID
-
-
-def _make_dummy_jpeg(w: int = 100, h: int = 100, color=(255, 0, 0)) -> bytes:
-    im = Image.new("RGB", (w, h), color)
-    buf = io.BytesIO()
-    im.save(buf, format="JPEG")
-    return buf.getvalue()
-
-
-def _make_dummy_png(w: int = 100, h: int = 100, color=(0, 255, 0)) -> bytes:
-    im = Image.new("RGB", (w, h), color)
-    buf = io.BytesIO()
-    im.save(buf, format="PNG")
-    return buf.getvalue()
-
-
-def _make_dummy_webp(w: int = 100, h: int = 100, color=(0, 0, 255)) -> bytes:
-    im = Image.new("RGB", (w, h), color)
-    buf = io.BytesIO()
-    im.save(buf, format="WEBP")
-    return buf.getvalue()
+from tests.conftest import make_dummy_jpeg, make_dummy_png, make_dummy_webp
 
 
 def test_health(client: TestClient) -> None:
@@ -262,8 +240,8 @@ def test_create_and_patch_listing_with_images_and_condition(
     upload_res = client.post(
         "/api/v1/listings/images",
         files=[
-            ("files", ("test1.jpg", _make_dummy_jpeg(100, 100), "image/jpeg")),
-            ("files", ("test2.png", _make_dummy_png(150, 150), "image/png")),
+            ("files", ("test1.jpg", make_dummy_jpeg(100, 100), "image/jpeg")),
+            ("files", ("test2.png", make_dummy_png(150, 150), "image/png")),
         ],
     )
     assert upload_res.status_code == 201
@@ -289,7 +267,7 @@ def test_create_and_patch_listing_with_images_and_condition(
     up_new = client.post(
         "/api/v1/listings/images",
         files=[
-            ("files", ("new.webp", _make_dummy_webp(200, 200), "image/webp")),
+            ("files", ("new.webp", make_dummy_webp(200, 200), "image/webp")),
         ],
     )
     assert up_new.status_code == 201

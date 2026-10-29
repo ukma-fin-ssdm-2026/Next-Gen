@@ -11,20 +11,7 @@ from src.api.main import app
 from src.domain.listings import SEED_CATEGORY_ID
 from src.repositories.image_storage import LocalImageStorage
 from src.services.listings import ListingService
-
-
-def _make_jpeg_file(w: int = 120, h: int = 80, color=(100, 150, 200)) -> bytes:
-    im = Image.new("RGB", (w, h), color)
-    buf = io.BytesIO()
-    im.save(buf, format="JPEG")
-    return buf.getvalue()
-
-
-def _make_png_file(w: int = 150, h: int = 100, color=(50, 100, 150)) -> bytes:
-    im = Image.new("RGB", (w, h), color)
-    buf = io.BytesIO()
-    im.save(buf, format="PNG")
-    return buf.getvalue()
+from tests.conftest import make_dummy_jpeg, make_dummy_png
 
 
 def _make_heic_file(w: int = 160, h: int = 110) -> bytes:
@@ -38,7 +25,7 @@ def test_upload_images_unauthorized_returns_401(client: TestClient) -> None:
     """[TP-023] [FR-002] [SEC-001]
     Завантаження зображень без автентифікованої сесії відхиляється кодом HTTP 401.
     """
-    file_bytes = _make_jpeg_file()
+    file_bytes = make_dummy_jpeg()
     response = client.post(
         "/api/v1/listings/images",
         files=[("files", ("photo.jpg", file_bytes, "image/jpeg"))],
@@ -55,7 +42,7 @@ def test_upload_images_blocked_user_returns_403(
     Заблокований користувач отримує HTTP 403 при спробі завантаження.
     """
     login_as(is_blocked=True)
-    file_bytes = _make_jpeg_file()
+    file_bytes = make_dummy_jpeg()
     response = client.post(
         "/api/v1/listings/images",
         files=[("files", ("photo.jpg", file_bytes, "image/jpeg"))],
@@ -69,8 +56,8 @@ def test_upload_images_success(client: TestClient, login_as) -> None:
     """
     login_as()
     files = [
-        ("files", ("photo1.jpg", _make_jpeg_file(600, 400), "image/jpeg")),
-        ("files", ("photo2.png", _make_png_file(800, 600), "image/png")),
+        ("files", ("photo1.jpg", make_dummy_jpeg(600, 400), "image/jpeg")),
+        ("files", ("photo2.png", make_dummy_png(800, 600), "image/png")),
         ("files", ("photo3.heic", _make_heic_file(400, 300), "image/heic")),
     ]
     response = client.post("/api/v1/listings/images", files=files)
@@ -103,7 +90,7 @@ def test_upload_images_rejects_empty_files_or_more_than_ten(
 
     # 11 файлів
     too_many = [
-        ("files", (f"p{i}.jpg", _make_jpeg_file(50, 50), "image/jpeg"))
+        ("files", (f"p{i}.jpg", make_dummy_jpeg(50, 50), "image/jpeg"))
         for i in range(11)
     ]
     res_many = client.post("/api/v1/listings/images", files=too_many)
@@ -134,7 +121,7 @@ def test_get_uploaded_image_serves_webp(client: TestClient, login_as) -> None:
     login_as()
     upload_res = client.post(
         "/api/v1/listings/images",
-        files=[("files", ("test.jpg", _make_jpeg_file(200, 200), "image/jpeg"))],
+        files=[("files", ("test.jpg", make_dummy_jpeg(200, 200), "image/jpeg"))],
     )
     assert upload_res.status_code == 201
     key = upload_res.json()[0]["storage_key"]
@@ -180,8 +167,8 @@ def test_full_listing_lifecycle_with_local_image_storage(
         up_res = client.post(
             "/api/v1/listings/images",
             files=[
-                ("files", ("f1.jpg", _make_jpeg_file(400, 400), "image/jpeg")),
-                ("files", ("f2.png", _make_png_file(500, 500), "image/png")),
+                ("files", ("f1.jpg", make_dummy_jpeg(400, 400), "image/jpeg")),
+                ("files", ("f2.png", make_dummy_png(500, 500), "image/png")),
             ],
         )
         assert up_res.status_code == 201
@@ -210,7 +197,7 @@ def test_full_listing_lifecycle_with_local_image_storage(
         # 3. Завантаження нового фото та PATCH оновлення (заміна фото)
         up_new = client.post(
             "/api/v1/listings/images",
-            files=[("files", ("f3.jpg", _make_jpeg_file(300, 300), "image/jpeg"))],
+            files=[("files", ("f3.jpg", make_dummy_jpeg(300, 300), "image/jpeg"))],
         )
         assert up_new.status_code == 201
         new_key = up_new.json()[0]["storage_key"]

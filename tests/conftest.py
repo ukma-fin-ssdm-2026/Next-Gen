@@ -1,9 +1,11 @@
 """Спільні фікстури: ізольований Listing Service на кожен тест."""
 
 from collections.abc import Callable
+import io
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
+from PIL import Image
 import pytest
 
 from src.api.deps import (
@@ -31,6 +33,27 @@ from src.services.contacts import SellerContactService
 from src.services.favorites import FavoriteService
 from src.services.listings import ListingService
 from src.services.moderation import ModerationService
+
+
+def make_dummy_jpeg(w: int = 100, h: int = 100, color=(255, 0, 0)) -> bytes:
+    im = Image.new("RGB", (w, h), color)
+    buf = io.BytesIO()
+    im.save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def make_dummy_png(w: int = 100, h: int = 100, color=(0, 255, 0)) -> bytes:
+    im = Image.new("RGB", (w, h), color)
+    buf = io.BytesIO()
+    im.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def make_dummy_webp(w: int = 100, h: int = 100, color=(0, 0, 255)) -> bytes:
+    im = Image.new("RGB", (w, h), color)
+    buf = io.BytesIO()
+    im.save(buf, format="WEBP")
+    return buf.getvalue()
 
 
 @pytest.fixture

@@ -1,11 +1,10 @@
 """Модульні тести Listing Service без HTTP."""
 
 from datetime import datetime, timezone
-import io
 from unittest.mock import Mock
 from uuid import uuid4
 
-from PIL import Image
+from tests.conftest import make_dummy_jpeg, make_dummy_png, make_dummy_webp
 import pytest
 
 from src.domain.exceptions import (
@@ -29,27 +28,6 @@ from src.domain.listings import (
 from src.repositories.image_storage import InMemoryImageStorage
 from src.repositories.listings import InMemoryListingRepository, ListingRepository
 from src.services.listings import ListingService
-
-
-def _make_dummy_jpeg(w: int = 100, h: int = 100, color=(255, 0, 0)) -> bytes:
-    im = Image.new("RGB", (w, h), color)
-    buf = io.BytesIO()
-    im.save(buf, format="JPEG")
-    return buf.getvalue()
-
-
-def _make_dummy_png(w: int = 100, h: int = 100, color=(0, 255, 0)) -> bytes:
-    im = Image.new("RGB", (w, h), color)
-    buf = io.BytesIO()
-    im.save(buf, format="PNG")
-    return buf.getvalue()
-
-
-def _make_dummy_webp(w: int = 100, h: int = 100, color=(0, 0, 255)) -> bytes:
-    im = Image.new("RGB", (w, h), color)
-    buf = io.BytesIO()
-    im.save(buf, format="WEBP")
-    return buf.getvalue()
 
 
 def test_public_catalog_hides_withdrawn(listing_service: ListingService) -> None:
@@ -349,8 +327,8 @@ def test_create_and_update_with_images_and_condition() -> None:
 
     uploaded = storage.upload_images(
         [
-            _make_dummy_jpeg(100, 100),
-            _make_dummy_png(200, 200),
+            make_dummy_jpeg(100, 100),
+            make_dummy_png(200, 200),
         ]
     )
 
@@ -372,7 +350,7 @@ def test_create_and_update_with_images_and_condition() -> None:
     assert created.images[1].display_order == 1
     assert len(storage.get_images(created.id)) == 2
 
-    new_uploaded = storage.upload_images([_make_dummy_webp(150, 150)])
+    new_uploaded = storage.upload_images([make_dummy_webp(150, 150)])
     updated = service.update(
         created.id,
         actor_id=SEED_OWNER_ID,

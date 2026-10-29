@@ -16,9 +16,7 @@ from src.domain.exceptions import InvalidListingImageError
 from src.domain.listings import (
     SEED_IMAGE_ID,
     SEED_IMAGE_STORAGE_KEY,
-    SEED_IMAGE_URL,
     SEED_LISTING_ID,
-    SEED_THUMBNAIL_URL,
     ListingImage,
 )
 
@@ -284,6 +282,106 @@ def process_image_bytes(
     )
 
 
+def create_listing_image(
+    *,
+    image_id: UUID,
+    storage_key: str,
+    listing_id: UUID | None = None,
+    display_order: int = 0,
+    width: int | None = None,
+    height: int | None = None,
+    thumbnail_width: int | None = None,
+    thumbnail_height: int | None = None,
+) -> ListingImage:
+    """Створює екземпляр ListingImage з канонічними URL."""
+    thumb_key = thumbnail_key_for(storage_key)
+    return ListingImage(
+        image_id=image_id,
+        listing_id=listing_id,
+        image_url=f"{PUBLIC_UPLOADS_PREFIX}{storage_key}",
+        thumbnail_url=f"{PUBLIC_UPLOADS_PREFIX}{thumb_key}",
+        storage_key=storage_key,
+        display_order=display_order,
+        width=width,
+        height=height,
+        thumbnail_width=thumbnail_width,
+        thumbnail_height=thumbnail_height,
+    )
+
+
+def create_listing_image_from_proc(
+    *,
+    image_id: UUID,
+    storage_key: str,
+    proc: ProcessedImage,
+    listing_id: UUID | None = None,
+    display_order: int = 0,
+) -> ListingImage:
+    """Створює ListingImage на основі ProcessedImage."""
+    return create_listing_image(
+        image_id=image_id,
+        storage_key=storage_key,
+        listing_id=listing_id,
+        display_order=display_order,
+        width=proc.width,
+        height=proc.height,
+        thumbnail_width=proc.thumbnail_width,
+        thumbnail_height=proc.thumbnail_height,
+    )
+
+
+def validate_images_count(
+    items: Sequence[object],
+    *,
+    min_msg: str,
+    max_msg: str,
+) -> None:
+    """Перевіряє кількість елементів у діапазоні MIN..MAX."""
+    if len(items) < MIN_IMAGES_PER_LISTING:
+        raise InvalidListingImageError(min_msg)
+    if len(items) > MAX_IMAGES_PER_LISTING:
+        raise InvalidListingImageError(max_msg)
+
+
+class BaseImageStorage:
+    """Спільний базовий клас асоціацій зображень та оголошень."""
+
+    def __init__(self) -> None:
+        self._listing_images: dict[UUID, list[ListingImage]] = {}
+        self._key_to_listing: dict[str, UUID] = {}
+
+    def get_images(self, listing_id: UUID) -> list[ListingImage]:
+        return list(self._listing_images.get(listing_id, []))
+
+    def _verify_unbound_or_owned(self, key: str, listing_id: UUID) -> None:
+        bound_to = self._key_to_listing.get(key)
+        if (
+            bound_to is not None
+            and bound_to != listing_id
+            and key != SEED_IMAGE_STORAGE_KEY
+        ):
+            raise InvalidListingImageError(
+                f"Зображення {key} вже прив'язано до іншого оголошення"
+            )
+
+    def _commit_listing_update(
+        self, listing_id: UUID, resolved_items: list[ListingImage]
+    ) -> list[ListingImage]:
+        previous_images = self._listing_images.get(listing_id, [])
+        old_keys = {img.storage_key for img in previous_images if img.storage_key}
+        new_keys = {img.storage_key for img in resolved_items if img.storage_key}
+        keys_to_delete = old_keys - new_keys
+
+        if keys_to_delete:
+            self.delete_images(list(keys_to_delete))
+
+        for key in new_keys:
+            self._key_to_listing[key] = listing_id
+
+        self._listing_images[listing_id] = list(resolved_items)
+        return list(resolved_items)
+
+
 class ImageStorage(Protocol):
     """Контракт збереження та отримання фотографій оголошення (FR-002, TM-03)."""
 
@@ -305,16 +403,13 @@ class ImageStorage(Protocol):
         """Читає бінарні дані зображення за його storage key."""
 
 
-class InMemoryImageStorage:
+class InMemoryImageStorage(BaseImageStorage):
     """In-memory реалізація ImageStorage для тестів."""
 
     def __init__(self) -> None:
+        super().__init__()
         self._blobs: dict[str, bytes] = {}
         self._staged_images: dict[str, ListingImage] = {}
-        self._listing_images: dict[UUID, list[ListingImage]] = {}
-        self._key_to_listing: dict[str, UUID] = {}
-
-        # Ініціалізація початкового seed-зображення
         self._init_seed_image()
 
     def _init_seed_image(self) -> None:
@@ -325,12 +420,10 @@ class InMemoryImageStorage:
         self._blobs[SEED_IMAGE_STORAGE_KEY] = dummy_webp
         thumb_key = thumbnail_key_for(SEED_IMAGE_STORAGE_KEY)
         self._blobs[thumb_key] = dummy_webp
-        seed_item = ListingImage(
+        seed_item = create_listing_image(
             image_id=SEED_IMAGE_ID,
-            listing_id=SEED_LISTING_ID,
-            image_url=SEED_IMAGE_URL,
-            thumbnail_url=SEED_THUMBNAIL_URL,
             storage_key=SEED_IMAGE_STORAGE_KEY,
+            listing_id=SEED_LISTING_ID,
             display_order=0,
             width=800,
             height=600,
@@ -342,46 +435,28 @@ class InMemoryImageStorage:
         self._key_to_listing[SEED_IMAGE_STORAGE_KEY] = SEED_LISTING_ID
 
     def upload_images(self, files: Sequence[bytes]) -> list[ListingImage]:
-        if len(files) < MIN_IMAGES_PER_LISTING:
-            raise InvalidListingImageError(
-                "Потрібно завантажити щонайменше одне фото (FR-002)"
-            )
-        if len(files) > MAX_IMAGES_PER_LISTING:
-            raise InvalidListingImageError(
+        validate_images_count(
+            files,
+            min_msg="Потрібно завантажити щонайменше одне фото (FR-002)",
+            max_msg=(
                 f"Кількість завантажуваних фото не може "
                 f"перевищувати {MAX_IMAGES_PER_LISTING}"
-            )
+            ),
+        )
 
-        processed_batch: list[tuple[UUID, str, str, ProcessedImage]] = []
-        for _ in files:
-            image_id = uuid4()
+        ready_batch = [(uuid4(), process_image_bytes(data)) for data in files]
+
+        results: list[ListingImage] = []
+        for index, (image_id, proc) in enumerate(ready_batch):
             main_key = f"{image_id.hex}.webp"
             thumb_key = f"{image_id.hex}_thumb.webp"
-            processed_batch.append((image_id, main_key, thumb_key, None))
-
-        # Спочатку обробляємо всі файли у пам'яті (атомарність пачки)
-        ready_batch: list[tuple[UUID, str, str, ProcessedImage]] = []
-        for idx, file_data in enumerate(files):
-            image_id, main_key, thumb_key, _ = processed_batch[idx]
-            proc = process_image_bytes(file_data)
-            ready_batch.append((image_id, main_key, thumb_key, proc))
-
-        # Якщо всі успішно оброблені, фіксуємо в сховищі
-        results: list[ListingImage] = []
-        for index, (image_id, main_key, thumb_key, proc) in enumerate(ready_batch):
             self._blobs[main_key] = proc.main_bytes
             self._blobs[thumb_key] = proc.thumbnail_bytes
-            item = ListingImage(
+            item = create_listing_image_from_proc(
                 image_id=image_id,
-                listing_id=None,
-                image_url=f"{PUBLIC_UPLOADS_PREFIX}{main_key}",
-                thumbnail_url=f"{PUBLIC_UPLOADS_PREFIX}{thumb_key}",
                 storage_key=main_key,
+                proc=proc,
                 display_order=index,
-                width=proc.width,
-                height=proc.height,
-                thumbnail_width=proc.thumbnail_width,
-                thumbnail_height=proc.thumbnail_height,
             )
             self._staged_images[main_key] = item
             results.append(item)
@@ -390,22 +465,18 @@ class InMemoryImageStorage:
     def save_images(
         self, listing_id: UUID, images: Sequence[bytes | str]
     ) -> list[ListingImage]:
-        if len(images) < MIN_IMAGES_PER_LISTING:
-            raise InvalidListingImageError(
-                "Оголошення має містити щонайменше одне зображення (FR-002)"
-            )
-        if len(images) > MAX_IMAGES_PER_LISTING:
-            raise InvalidListingImageError(
-                f"Кількість зображень не може перевищувати {MAX_IMAGES_PER_LISTING}"
-            )
+        validate_images_count(
+            images,
+            min_msg="Оголошення має містити щонайменше одне зображення (FR-002)",
+            max_msg=(
+                f"Кількість зображень не може " f"перевищувати {MAX_IMAGES_PER_LISTING}"
+            ),
+        )
 
-        # Перевірка на унікальність ключів у межах списку
         seen_keys: set[str] = set()
         resolved_items: list[ListingImage] = []
-
-        # Етап валідації та підготовки без зміни стану
         new_blobs_to_add: dict[str, bytes] = {}
-        new_items_to_stage: dict[str, ListingImage] = []
+        new_items_to_stage: list[tuple[str, ListingImage]] = []
 
         for index, item in enumerate(images):
             if isinstance(item, (bytes, bytearray)):
@@ -415,17 +486,12 @@ class InMemoryImageStorage:
                 thumb_key = f"{image_id.hex}_thumb.webp"
                 new_blobs_to_add[main_key] = proc.main_bytes
                 new_blobs_to_add[thumb_key] = proc.thumbnail_bytes
-                staged = ListingImage(
+                staged = create_listing_image_from_proc(
                     image_id=image_id,
-                    listing_id=listing_id,
-                    image_url=f"{PUBLIC_UPLOADS_PREFIX}{main_key}",
-                    thumbnail_url=f"{PUBLIC_UPLOADS_PREFIX}{thumb_key}",
                     storage_key=main_key,
+                    proc=proc,
+                    listing_id=listing_id,
                     display_order=index,
-                    width=proc.width,
-                    height=proc.height,
-                    thumbnail_width=proc.thumbnail_width,
-                    thumbnail_height=proc.thumbnail_height,
                 )
                 new_items_to_stage.append((main_key, staged))
                 resolved_items.append(staged)
@@ -438,74 +504,42 @@ class InMemoryImageStorage:
                     )
                 seen_keys.add(key)
 
-                # Перевіряємо наявність у блобах або staged
                 if key not in self._blobs:
                     raise InvalidListingImageError(
                         f"Зображення {key} не знайдено у сховищі"
                     )
 
-                # Перевіряємо, чи ключ не належить іншому оголошенню
-                bound_to = self._key_to_listing.get(key)
-                if (
-                    bound_to is not None
-                    and bound_to != listing_id
-                    and key != SEED_IMAGE_STORAGE_KEY
-                ):
-                    raise InvalidListingImageError(
-                        f"Зображення {key} вже прив'язано до іншого оголошення"
-                    )
+                self._verify_unbound_or_owned(key, listing_id)
 
                 existing_meta = self._staged_images.get(key)
                 img_id = (
                     existing_meta.image_id if existing_meta else UUID(key.split(".")[0])
                 )
-                width = existing_meta.width if existing_meta else None
-                height = existing_meta.height if existing_meta else None
-                thumb_w = existing_meta.thumbnail_width if existing_meta else None
-                thumb_h = existing_meta.thumbnail_height if existing_meta else None
-
-                thumb_key = thumbnail_key_for(key)
                 resolved_items.append(
-                    ListingImage(
+                    create_listing_image(
                         image_id=img_id,
-                        listing_id=listing_id,
-                        image_url=f"{PUBLIC_UPLOADS_PREFIX}{key}",
-                        thumbnail_url=f"{PUBLIC_UPLOADS_PREFIX}{thumb_key}",
                         storage_key=key,
+                        listing_id=listing_id,
                         display_order=index,
-                        width=width,
-                        height=height,
-                        thumbnail_width=thumb_w,
-                        thumbnail_height=thumb_h,
+                        width=existing_meta.width if existing_meta else None,
+                        height=existing_meta.height if existing_meta else None,
+                        thumbnail_width=(
+                            existing_meta.thumbnail_width if existing_meta else None
+                        ),
+                        thumbnail_height=(
+                            existing_meta.thumbnail_height if existing_meta else None
+                        ),
                     )
                 )
             else:
                 raise InvalidListingImageError("Непідтримуваний тип даних зображення")
 
-        # Атомарне застосування змін
         for k, v in new_blobs_to_add.items():
             self._blobs[k] = v
-        for k, item in new_items_to_stage:
-            self._staged_images[k] = item
+        for k, staged_item in new_items_to_stage:
+            self._staged_images[k] = staged_item
 
-        # Очищення старих зображень оголошення, які були замінені при PATCH
-        previous_images = self._listing_images.get(listing_id, [])
-        old_keys = {img.storage_key for img in previous_images if img.storage_key}
-        new_keys = {img.storage_key for img in resolved_items if img.storage_key}
-        keys_to_delete = old_keys - new_keys
-
-        if keys_to_delete:
-            self.delete_images(list(keys_to_delete))
-
-        # Оновлення прив'язки
-        for key in new_keys:
-            self._key_to_listing[key] = listing_id
-
-        self._listing_images[listing_id] = list(resolved_items)
-        return list(resolved_items)
-
-    def get_images(self, listing_id: UUID) -> list[ListingImage]:
-        return list(self._listing_images.get(listing_id, []))
+        return self._commit_listing_update(listing_id, resolved_items)
 
     def delete_images(self, storage_keys: Sequence[str]) -> None:
         for raw_key in storage_keys:
@@ -519,6 +553,7 @@ class InMemoryImageStorage:
             self._blobs.pop(thumb_key, None)
             self._staged_images.pop(key, None)
             self._key_to_listing.pop(key, None)
+            self._key_to_listing.pop(key, None)
 
     def read_image(self, storage_key: str) -> bytes:
         if not STORAGE_KEY_PATTERN.fullmatch(storage_key):
@@ -529,14 +564,13 @@ class InMemoryImageStorage:
         return blob
 
 
-class LocalImageStorage:
+class LocalImageStorage(BaseImageStorage):
     """Файловий адаптер ImageStorage для volume (FR-002, TM-03)."""
 
     def __init__(self, root_dir: Path | str) -> None:
+        super().__init__()
         self._root_dir = Path(root_dir).resolve()
         self._root_dir.mkdir(parents=True, exist_ok=True)
-        self._listing_images: dict[UUID, list[ListingImage]] = {}
-        self._key_to_listing: dict[str, UUID] = {}
         self._meta_cache: dict[str, ListingImage] = {}
 
     def _resolve_safe_path(self, key: str) -> Path:
@@ -549,30 +583,23 @@ class LocalImageStorage:
         return target_path
 
     def upload_images(self, files: Sequence[bytes]) -> list[ListingImage]:
-        if len(files) < MIN_IMAGES_PER_LISTING:
-            raise InvalidListingImageError(
-                "Потрібно завантажити щонайменше одне фото (FR-002)"
-            )
-        if len(files) > MAX_IMAGES_PER_LISTING:
-            raise InvalidListingImageError(
+        validate_images_count(
+            files,
+            min_msg="Потрібно завантажити щонайменше одне фото (FR-002)",
+            max_msg=(
                 f"Кількість завантажуваних фото не може "
                 f"перевищувати {MAX_IMAGES_PER_LISTING}"
-            )
+            ),
+        )
 
-        # Спочатку обробляємо всі зображення у пам'яті
-        prepared: list[tuple[UUID, str, str, ProcessedImage]] = []
-        for file_bytes in files:
-            proc = process_image_bytes(file_bytes)
-            image_id = uuid4()
-            main_key = f"{image_id.hex}.webp"
-            thumb_key = f"{image_id.hex}_thumb.webp"
-            prepared.append((image_id, main_key, thumb_key, proc))
+        prepared = [(uuid4(), process_image_bytes(b)) for b in files]
 
-        # Атомарний запис на диск із відкатом у разі збою
         written_paths: list[Path] = []
         try:
             results: list[ListingImage] = []
-            for index, (image_id, main_key, thumb_key, proc) in enumerate(prepared):
+            for index, (image_id, proc) in enumerate(prepared):
+                main_key = f"{image_id.hex}.webp"
+                thumb_key = f"{image_id.hex}_thumb.webp"
                 main_path = self._resolve_safe_path(main_key)
                 thumb_path = self._resolve_safe_path(thumb_key)
 
@@ -582,23 +609,16 @@ class LocalImageStorage:
                 thumb_path.write_bytes(proc.thumbnail_bytes)
                 written_paths.append(thumb_path)
 
-                item = ListingImage(
+                item = create_listing_image_from_proc(
                     image_id=image_id,
-                    listing_id=None,
-                    image_url=f"{PUBLIC_UPLOADS_PREFIX}{main_key}",
-                    thumbnail_url=f"{PUBLIC_UPLOADS_PREFIX}{thumb_key}",
                     storage_key=main_key,
+                    proc=proc,
                     display_order=index,
-                    width=proc.width,
-                    height=proc.height,
-                    thumbnail_width=proc.thumbnail_width,
-                    thumbnail_height=proc.thumbnail_height,
                 )
                 self._meta_cache[main_key] = item
                 results.append(item)
             return results
         except Exception:
-            # Відкат: видаляємо всі записані у цій пачці файли
             for p in written_paths:
                 try:
                     if p.is_file():
@@ -610,14 +630,13 @@ class LocalImageStorage:
     def save_images(
         self, listing_id: UUID, images: Sequence[bytes | str]
     ) -> list[ListingImage]:
-        if len(images) < MIN_IMAGES_PER_LISTING:
-            raise InvalidListingImageError(
-                "Оголошення має містити щонайменше одне зображення (FR-002)"
-            )
-        if len(images) > MAX_IMAGES_PER_LISTING:
-            raise InvalidListingImageError(
-                f"Кількість зображень не може перевищувати {MAX_IMAGES_PER_LISTING}"
-            )
+        validate_images_count(
+            images,
+            min_msg="Оголошення має містити щонайменше одне зображення (FR-002)",
+            max_msg=(
+                f"Кількість зображень не може " f"перевищувати {MAX_IMAGES_PER_LISTING}"
+            ),
+        )
 
         seen_keys: set[str] = set()
         resolved_items: list[ListingImage] = []
@@ -635,17 +654,12 @@ class LocalImageStorage:
                 new_files_to_write.append((main_path, proc.main_bytes))
                 new_files_to_write.append((thumb_path, proc.thumbnail_bytes))
 
-                staged = ListingImage(
+                staged = create_listing_image_from_proc(
                     image_id=image_id,
-                    listing_id=listing_id,
-                    image_url=f"{PUBLIC_UPLOADS_PREFIX}{main_key}",
-                    thumbnail_url=f"{PUBLIC_UPLOADS_PREFIX}{thumb_key}",
                     storage_key=main_key,
+                    proc=proc,
+                    listing_id=listing_id,
                     display_order=index,
-                    width=proc.width,
-                    height=proc.height,
-                    thumbnail_width=proc.thumbnail_width,
-                    thumbnail_height=proc.thumbnail_height,
                 )
                 new_items_to_cache.append((main_key, staged))
                 resolved_items.append(staged)
@@ -667,43 +681,31 @@ class LocalImageStorage:
                         f"Зображення {key} не знайдено на диску сховища"
                     )
 
-                bound_to = self._key_to_listing.get(key)
-                if (
-                    bound_to is not None
-                    and bound_to != listing_id
-                    and key != SEED_IMAGE_STORAGE_KEY
-                ):
-                    raise InvalidListingImageError(
-                        f"Зображення {key} вже прив'язано до іншого оголошення"
-                    )
+                self._verify_unbound_or_owned(key, listing_id)
 
                 existing_meta = self._meta_cache.get(key)
                 img_id = (
                     existing_meta.image_id if existing_meta else UUID(key.split(".")[0])
                 )
-                width = existing_meta.width if existing_meta else None
-                height = existing_meta.height if existing_meta else None
-                thumb_w = existing_meta.thumbnail_width if existing_meta else None
-                thumb_h = existing_meta.thumbnail_height if existing_meta else None
-
                 resolved_items.append(
-                    ListingImage(
+                    create_listing_image(
                         image_id=img_id,
-                        listing_id=listing_id,
-                        image_url=f"{PUBLIC_UPLOADS_PREFIX}{key}",
-                        thumbnail_url=f"{PUBLIC_UPLOADS_PREFIX}{thumb_key}",
                         storage_key=key,
+                        listing_id=listing_id,
                         display_order=index,
-                        width=width,
-                        height=height,
-                        thumbnail_width=thumb_w,
-                        thumbnail_height=thumb_h,
+                        width=existing_meta.width if existing_meta else None,
+                        height=existing_meta.height if existing_meta else None,
+                        thumbnail_width=(
+                            existing_meta.thumbnail_width if existing_meta else None
+                        ),
+                        thumbnail_height=(
+                            existing_meta.thumbnail_height if existing_meta else None
+                        ),
                     )
                 )
             else:
                 raise InvalidListingImageError("Непідтримуваний тип даних зображення")
 
-        # Запис нових байтів (якщо передавались сирі байти)
         written_paths: list[Path] = []
         try:
             for p, data in new_files_to_write:
@@ -721,23 +723,7 @@ class LocalImageStorage:
         for k, it in new_items_to_cache:
             self._meta_cache[k] = it
 
-        # Очищення замінених файлів при PATCH
-        previous_images = self._listing_images.get(listing_id, [])
-        old_keys = {img.storage_key for img in previous_images if img.storage_key}
-        new_keys = {img.storage_key for img in resolved_items if img.storage_key}
-        keys_to_delete = old_keys - new_keys
-
-        if keys_to_delete:
-            self.delete_images(list(keys_to_delete))
-
-        for key in new_keys:
-            self._key_to_listing[key] = listing_id
-
-        self._listing_images[listing_id] = list(resolved_items)
-        return list(resolved_items)
-
-    def get_images(self, listing_id: UUID) -> list[ListingImage]:
-        return list(self._listing_images.get(listing_id, []))
+        return self._commit_listing_update(listing_id, resolved_items)
 
     def delete_images(self, storage_keys: Sequence[str]) -> None:
         for raw_key in storage_keys:
@@ -747,18 +733,13 @@ class LocalImageStorage:
                 else raw_key
             )
             thumb_key = thumbnail_key_for(key)
-            try:
-                p_main = self._resolve_safe_path(key)
-                if p_main.is_file():
-                    p_main.unlink()
-            except Exception:
-                pass
-            try:
-                p_thumb = self._resolve_safe_path(thumb_key)
-                if p_thumb.is_file():
-                    p_thumb.unlink()
-            except Exception:
-                pass
+            for k in (key, thumb_key):
+                try:
+                    p = self._resolve_safe_path(k)
+                    if p.is_file():
+                        p.unlink()
+                except Exception:
+                    pass
             self._meta_cache.pop(key, None)
             self._key_to_listing.pop(key, None)
 
