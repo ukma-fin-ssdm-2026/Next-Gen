@@ -788,7 +788,7 @@ function ListingImage({ listing, large = false }: { listing: Listing; large?: bo
 }
 
 function Footer() {
-  return <footer><Link className="brand footer-brand" to="/"><span className="brand-mark">Б</span><strong>Барахолка НаУКМА</strong></Link><p>Навчальний проєкт SSDM 2026 · Без платежів і доставки всередині сервісу</p></footer>;
+  return <footer><Link className="brand footer-brand" to="/"><span className="brand-mark">Б</span><strong>Барахолка НаУКМА</strong></Link><p>Проєкт створюється в рамках курсу SSDM 2026 · Без платежів і доставки всередині сервісу</p></footer>;
 }
 
 export default App;
