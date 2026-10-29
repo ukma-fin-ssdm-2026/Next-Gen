@@ -2,9 +2,10 @@
 
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, status
+from fastapi import Depends, FastAPI, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
+from src.api.deps import get_image_storage
 from src.api.routers import (
     auth,
     categories,
@@ -13,6 +14,7 @@ from src.api.routers import (
     listings,
     moderation,
 )
+from src.repositories.image_storage import STORAGE_KEY_PATTERN, ImageStorage
 
 app = FastAPI(
     title="Baraholka NaUKMA API",
@@ -63,3 +65,26 @@ def health_check() -> dict:
         "version": "1.0.0",
         "timestamp": datetime.now(timezone.utc),
     }
+
+
+@app.get(
+    "/uploads/{storage_key}",
+    include_in_schema=False,
+    summary="Отримати завантажене зображення або thumbnail",
+)
+def get_uploaded_image(
+    storage_key: str,
+    storage: ImageStorage = Depends(get_image_storage),
+) -> Response:
+    """Віддає збережене зображення оголошення або thumbnail у форматі WebP (FR-002)."""
+    if not STORAGE_KEY_PATTERN.fullmatch(storage_key):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    try:
+        content = storage.read_image(storage_key)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return Response(
+        content=content,
+        media_type="image/webp",
+        headers={"Cache-Control": "public, max-age=86400, immutable"},
+    )

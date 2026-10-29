@@ -9,12 +9,54 @@ from pydantic import BaseModel, Field, field_validator
 from src.domain.listings import ListingCondition
 
 
+class UploadedImageResponse(BaseModel):
+    image_id: UUID = Field(..., description="Унікальний ідентифікатор зображення")
+    storage_key: str = Field(
+        ...,
+        description="Серверний ключ збереженого WebP-файлу",
+        examples=["11111111222233334444555555555555.webp"],
+    )
+    image_url: str = Field(
+        ...,
+        description="URL або шлях до основного нормалізованого зображення",
+        examples=["/uploads/11111111222233334444555555555555.webp"],
+    )
+    thumbnail_url: str = Field(
+        ...,
+        description="URL або шлях до оптимізованого thumbnail",
+        examples=["/uploads/11111111222233334444555555555555_thumb.webp"],
+    )
+    display_order: int = Field(
+        ...,
+        ge=0,
+        description="Початковий порядок відображення",
+        examples=[0],
+    )
+    width: Optional[int] = Field(
+        None, description="Ширина основного зображення в пікселях"
+    )
+    height: Optional[int] = Field(
+        None, description="Висота основного зображення в пікселях"
+    )
+    thumbnail_width: Optional[int] = Field(
+        None, description="Ширина thumbnail в пікселях"
+    )
+    thumbnail_height: Optional[int] = Field(
+        None, description="Висота thumbnail в пікселях"
+    )
+
+
 class ListingImageResponse(BaseModel):
     image_id: UUID = Field(..., description="Унікальний ідентифікатор зображення")
     image_url: str = Field(
         ...,
         description="URL або шлях до збереженого зображення",
-        examples=["https://baraholka.ukma.edu.ua/images/hoodie-naukma.jpg"],
+        examples=["/uploads/11111111222233334444555555555555.webp"],
+    )
+    thumbnail_url: Optional[str] = Field(
+        None,
+        description="URL або шлях до оптимізованого thumbnail",
+        examples=["/uploads/11111111222233334444555555555555_thumb.webp"],
     )
     display_order: int = Field(
         ...,
@@ -22,6 +64,10 @@ class ListingImageResponse(BaseModel):
         description="Порядок відображення зображення",
         examples=[0],
     )
+    width: Optional[int] = Field(None, description="Ширина в пікселях")
+    height: Optional[int] = Field(None, description="Висота в пікселях")
+    thumbnail_width: Optional[int] = Field(None, description="Ширина thumbnail")
+    thumbnail_height: Optional[int] = Field(None, description="Висота thumbnail")
 
 
 class ListingBase(BaseModel):
@@ -64,8 +110,11 @@ class ListingCreate(ListingBase):
         ...,
         min_length=1,
         max_length=10,
-        description="URL фотографій оголошення (від 1 до 10 зображень, FR-002)",
-        examples=[["https://baraholka.ukma.edu.ua/images/hoodie-naukma.jpg"]],
+        description=(
+            "Ключі або шляхи завантажених фотографій оголошення "
+            "(від 1 до 10 зображень, FR-002)"
+        ),
+        examples=[["/uploads/11111111222233334444555555555555.webp"]],
     )
 
 
