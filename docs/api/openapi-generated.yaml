@@ -792,6 +792,18 @@ paths:
       - Authentication
       summary: Розпочати вхід Microsoft Entra ID
       operationId: login_api_v1_auth_login_get
+      parameters:
+      - name: next
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 2048
+          - type: 'null'
+          description: Внутрішній маршрут для повернення після входу
+          title: Next
+        description: Внутрішній маршрут для повернення після входу
       responses:
         '307':
           description: Successful Response
@@ -810,6 +822,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/auth/callback:
     get:
       tags:

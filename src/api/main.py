@@ -1,8 +1,11 @@
 """Точка входу FastAPI: маршрутизація та службові ендпоінти."""
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Response, status
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src.api.deps import get_image_storage
@@ -33,6 +36,16 @@ app.include_router(favorites.router, prefix="/api/v1")
 app.include_router(categories.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(moderation.router, prefix="/api/v1")
+
+FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+RESERVED_FRONTEND_PREFIXES = (
+    "api/",
+    "docs",
+    "redoc",
+    "openapi.json",
+    "health",
+    "uploads/",
+)
 
 
 class HealthResponse(BaseModel):
@@ -88,3 +101,29 @@ def get_uploaded_image(
         media_type="image/webp",
         headers={"Cache-Control": "public, max-age=86400, immutable"},
     )
+
+
+if FRONTEND_DIST.is_dir():
+    assets_directory = FRONTEND_DIST / "assets"
+    if assets_directory.is_dir():
+        app.mount(
+            "/assets",
+            StaticFiles(directory=assets_directory),
+            name="frontend-assets",
+        )
+
+    @app.get("/{frontend_path:path}", include_in_schema=False)
+    def serve_frontend(frontend_path: str) -> FileResponse:
+        """Віддає React build і підтримує пряме відкриття SPA-маршрутів."""
+        if frontend_path.startswith(RESERVED_FRONTEND_PREFIXES):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+        frontend_root = FRONTEND_DIST.resolve()
+        requested_file = (frontend_root / frontend_path).resolve()
+        if (
+            frontend_path
+            and requested_file.is_file()
+            and requested_file.is_relative_to(frontend_root)
+        ):
+            return FileResponse(requested_file)
+        return FileResponse(frontend_root / "index.html")

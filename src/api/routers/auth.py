@@ -1,6 +1,7 @@
 """HTTP endpoints Microsoft Entra ID Authorization Code Flow."""
 
 from typing import Annotated
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response
 from fastapi import status
@@ -33,6 +34,24 @@ OidcStateCookie = Annotated[
 ]
 
 
+def _safe_return_path(value: str | None) -> str | None:
+    """Дозволяє повернення лише на внутрішні маршрути цього сайту."""
+    if (
+        not value
+        or not value.startswith("/")
+        or value.startswith("//")
+        or "\\" in value
+    ):
+        return None
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return None
+    if parsed.scheme or parsed.netloc:
+        return None
+    return value
+
+
 @router.get(
     "/login",
     summary="Розпочати вхід Microsoft Entra ID",
@@ -43,6 +62,14 @@ OidcStateCookie = Annotated[
     },
 )
 def login(
+    return_to: Annotated[
+        str | None,
+        Query(
+            alias="next",
+            max_length=2048,
+            description="Внутрішній маршрут для повернення після входу",
+        ),
+    ] = None,
     settings: EntraSettings = Depends(get_entra_settings),
     oidc: EntraOidcClient = Depends(get_entra_oidc_client),
     flows: InMemoryOidcFlowStore = Depends(get_oidc_flow_store),
@@ -56,6 +83,7 @@ def login(
         ) from exc
 
     state_value = str(flow["state"])
+    flow["return_to"] = _safe_return_path(return_to)
     flows.save(state_value, flow)
     response = RedirectResponse(str(flow["auth_uri"]))
     response.set_cookie(
@@ -103,6 +131,8 @@ def callback(
             detail="OIDC flow не знайдено або він завершився",
         )
 
+    return_to = _safe_return_path(flow.pop("return_to", None))
+
     try:
         claims = oidc.complete(flow, dict(request.query_params))
         current_user = service.authenticate_verified_claims(claims)
@@ -118,8 +148,18 @@ def callback(
         ) from exc
 
     session_token = sessions.create(current_user.user_id)
+    destination = settings.frontend_url
+    if return_to is not None:
+        frontend = urlsplit(settings.frontend_url)
+        requested = urlsplit(return_to)
+        destination = frontend._replace(
+            path=requested.path,
+            query=requested.query,
+            fragment=requested.fragment,
+        ).geturl()
     response = RedirectResponse(
-        settings.frontend_url, status_code=status.HTTP_303_SEE_OTHER
+        destination,
+        status_code=status.HTTP_303_SEE_OTHER,
     )
     response.delete_cookie(OIDC_STATE_COOKIE_NAME, path="/api/v1/auth")
     response.set_cookie(
