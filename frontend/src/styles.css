@@ -617,3 +617,13 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 @media (max-width: 520px) { .profile-top { grid-template-columns: minmax(0, 1fr); justify-items: start; } }
 
 .card-main-static { cursor: default; }
+
+/* Адмін-панель */
+.admin-inline { display: grid; gap: 10px; margin-top: 12px; }
+.admin-inline label { display: grid; gap: 6px; }
+.admin-inline label > span { color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+.admin-inline textarea { width: 100%; border: 1px solid #d8ddd7; border-radius: 11px; background: #fcfcfa; padding: 10px 12px; font: inherit; resize: vertical; outline: none; }
+.admin-log { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.admin-log li { display: grid; gap: 3px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
+.admin-log code { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.admin-log span { font-size: 14px; }

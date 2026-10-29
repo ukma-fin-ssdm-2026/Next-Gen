@@ -166,6 +166,7 @@
 ---
 > ### Нотатка «Використання ШІ»
 > - **Інструменти:** Gemini, OpenAI Codex.
-> - **Етап:** Проєктування API, розширення контракту завантаження фотографій (FR-002, TM-03, TM-08) та додавання пропозицій категорій і їх модерації (FR-015 / US-010).
-> - **Що згенеровано:** Опис розділів 2.7 і 2.10, квоти 3 `PENDING`-пропозицій з відповіддю HTTP 429, оновлення таблиці полів і ендпоінтів (`/api/v1/category-suggestions`).
-> - **Що перевірено / відкинуто вручну:** Опис звірено з кодом `CategorySuggestionService`, роутерами `/api/v1/category-suggestions` і `/api/v1/listings` та згенерованим `openapi-generated.yaml`.
+> - **Етап:** Проєктування API, розширення контракту завантаження фотографій та збереження в ImageStorage (FR-002, TM-03, TM-08) і додавання пропозицій категорій та їх модерації (FR-015 / US-010).
+> - **Що згенеровано:** Опис розділів 2.7 і 2.10 (завантаження та нормалізація фотографій, захист від decompression bomb, видалення метаданих, thumbnail, UUID ключі, TTL/квоти staged-завантажень, очищення при PATCH, квота 3 `PENDING`-пропозицій з відповіддю HTTP 429), оновлення таблиці полів і ендпоінтів (`/api/v1/category-suggestions`).
+> - **Що перевірено / відкинуто вручну:** Опис звірено з кодом `ImageStorage`, `LocalImageStorage`, `CategorySuggestionService`, роутерами `POST /api/v1/listings/images`, `/api/v1/category-suggestions`, `/api/v1/listings` та згенерованим `openapi-generated.yaml`.
+> - **Доповнення (Артем Солодкий, FR-001, FR-013, FR-014):** Claude (Anthropic) допоміг сформулювати зміни: Додано endpoints профілю (`PATCH /auth/me`, `PUT`/`DELETE /auth/me/avatar`, `GET /users/{id}`) і блокування (`POST /admin/users/{id}/block`, `/unblock`). Звірено вручну з кодом, тестами та згенерованим OpenAPI; повний набір тестів, black, flake8 і перевірку простежуваності запущено.

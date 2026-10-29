@@ -12,6 +12,7 @@ import {
 import {
   ApiError,
   addFavorite,
+  blockUser,
   createListing,
   deleteListing,
   getCategories,
@@ -26,6 +27,7 @@ import {
   logout,
   moderateListing,
   removeFavorite,
+  unblockUser,
   deleteAvatar,
   updateListing,
   updateProfile,
@@ -39,6 +41,7 @@ import type {
   Listing,
   ListingCondition,
   ListingFilters,
+  ModerationAction,
   PublicProfile,
 } from "./types";
 
@@ -307,6 +310,7 @@ function App() {
           }
         />
         <Route path="/profile" element={<ProfilePage user={user} authChecked={authChecked} onUserChange={setUser} onError={setError} onNotice={setNotice} />} />
+        <Route path="/admin" element={<AdminPage user={user} authChecked={authChecked} onError={setError} onNotice={setNotice} />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       <Footer />
@@ -365,6 +369,7 @@ function AccountMenu({ user, busy, onLogout }: { user: CurrentUser; busy: boolea
           </div>
           <Link role="menuitem" to="/my">Мої оголошення</Link>
           <Link role="menuitem" to="/profile">Профіль</Link>
+          {user.role === "ADMIN" && <Link role="menuitem" to="/admin">Адмін-панель</Link>}
           <button role="menuitem" type="button" disabled={busy} onClick={onLogout}>Вийти</button>
         </div>
       )}
@@ -489,6 +494,7 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
           {user && <NavLink to="/my">Мої оголошення</NavLink>}
           {user && <NavLink to="/favorites">Обране{favoritesCount > 0 ? ` (${favoritesCount})` : ""}</NavLink>}
           {user && <NavLink to="/profile">Профіль</NavLink>}
+          {user?.role === "ADMIN" && <NavLink to="/admin">Адмін-панель</NavLink>}
         </nav>
         <div className="drawer-foot">
           {authChecked && user ? (
@@ -1476,6 +1482,8 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
   const [loading, setLoading] = useState(true);
   const [confirmingWithdraw, setConfirmingWithdraw] = useState(false);
   const [seller, setSeller] = useState<PublicProfile | null>(null);
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [blockReason, setBlockReason] = useState("");
   const userId = user?.user_id ?? null;
 
   useEffect(() => {
@@ -1508,6 +1516,18 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
     try { await deleteListing(listingId); onNotice("Оголошення знято з публікації"); navigate("/my"); }
     catch (requestError) { onError(errorText(requestError)); }
     finally { onBusy(false); setConfirmingWithdraw(false); }
+  }
+
+  async function blockSeller() {
+    if (!listing) return;
+    onBusy(true);
+    try {
+      await blockUser(listing.user_id, blockReason.trim());
+      onNotice("Користувача заблоковано");
+      setBlockOpen(false);
+      setBlockReason("");
+    } catch (requestError) { onError(errorText(requestError)); }
+    finally { onBusy(false); }
   }
 
   async function moderate() {
@@ -1585,6 +1605,19 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
               </div>
             ) : (
               <p className="ad-muted">Контакт зараз недоступний.</p>
+            )}
+            {user?.role === "ADMIN" && !isOwner && (
+              blockOpen ? (
+                <form className="admin-inline" onSubmit={(event) => { event.preventDefault(); void blockSeller(); }}>
+                  <label><span>Причина блокування</span><textarea value={blockReason} onChange={(event) => setBlockReason(event.target.value)} minLength={5} maxLength={500} required rows={3} /></label>
+                  <div className="confirm-row">
+                    <button className="button button-danger" type="submit" disabled={busy || blockReason.trim().length < 5}>Заблокувати</button>
+                    <button className="button button-text" type="button" onClick={() => setBlockOpen(false)}>Скасувати</button>
+                  </div>
+                </form>
+              ) : (
+                <button className="button button-light" type="button" disabled={busy} onClick={() => setBlockOpen(true)}>Заблокувати продавця</button>
+              )
             )}
           </div>
         </aside>
@@ -1776,6 +1809,77 @@ function ProfilePage({ user, authChecked, onUserChange, onError, onNotice }: {
           onDone={(blob) => { setCropFile(null); void sendAvatar(new File([blob], "avatar.jpg", { type: "image/jpeg" })); }}
         />
       )}
+    </main>
+  );
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function AdminPage({ user, authChecked, onError, onNotice }: {
+  user: CurrentUser | null;
+  authChecked: boolean;
+  onError: (message: string) => void;
+  onNotice: (message: string) => void;
+}) {
+  const [userId, setUserId] = useState("");
+  const [reason, setReason] = useState("");
+  const [working, setWorking] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [history, setHistory] = useState<ModerationAction[]>([]);
+
+  if (!authChecked) return <PageLoading />;
+  if (!user) return <SignInRequired title="Адмін-панель доступна після входу" />;
+  if (user.role !== "ADMIN") {
+    return <main className="page-main auth-required"><h1>Немає доступу</h1><p>Адмін-панель доступна лише адміністраторам.</p><Link className="button button-primary" to="/">На головну</Link></main>;
+  }
+
+  async function run(action: "block" | "unblock") {
+    setFormError(null);
+    const id = userId.trim();
+    if (!UUID_PATTERN.test(id)) { setFormError("Вкажіть коректний ID користувача (UUID)"); return; }
+    if (reason.trim().length < 5) { setFormError("Причина має містити щонайменше 5 символів"); return; }
+    setWorking(true);
+    try {
+      const result = action === "block" ? await blockUser(id, reason.trim()) : await unblockUser(id, reason.trim());
+      setHistory((items) => [result, ...items]);
+      onNotice(action === "block" ? "Користувача заблоковано" : "Користувача розблоковано");
+      setReason("");
+    } catch (requestError) {
+      onError(errorText(requestError));
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return (
+    <main className="page-main narrow-page">
+      <PageHeading eyebrow="Модерація" title="Адмін-панель" />
+      <form className="profile-form" onSubmit={(event) => event.preventDefault()}>
+        <section className="form-block">
+          <div className="form-block-head"><div><h2>Блокування користувачів</h2><p className="form-hint">Заблокований користувач втрачає чинні сесії й не може входити; його оголошення не видаляються. Зручніше блокувати зі сторінки оголошення кнопкою «Заблокувати продавця».</p></div></div>
+          <label><span>ID користувача</span><input value={userId} onChange={(event) => setUserId(event.target.value)} placeholder="00000000-0000-0000-0000-000000000000" spellCheck={false} /></label>
+          <label><span>Причина <small>5–500 символів</small></span><textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} rows={3} /></label>
+          {formError && <p className="form-error" role="alert">{formError}</p>}
+          <div className="form-actions">
+            <button className="button button-danger" type="button" disabled={working} onClick={() => void run("block")}>Заблокувати</button>
+            <button className="button button-light" type="button" disabled={working} onClick={() => void run("unblock")}>Розблокувати</button>
+          </div>
+        </section>
+        {history.length > 0 && (
+          <section className="form-block">
+            <div className="form-block-head"><div><h2>Дії в цій сесії</h2><p className="form-hint">Журнал на сервері зберігається, але читання журналу через API ще немає.</p></div></div>
+            <ul className="admin-log">
+              {history.map((item) => (
+                <li key={item.id}>
+                  <strong>{item.action_type === "BLOCK_USER" ? "Заблоковано" : "Розблоковано"}</strong>
+                  <code>{item.target_user_id}</code>
+                  <span>{item.reason}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </form>
     </main>
   );
 }
