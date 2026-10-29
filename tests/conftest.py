@@ -14,18 +14,21 @@ from src.api.deps import (
     get_contact_service,
     get_favorite_service,
     get_listing_service,
+    get_moderation_service,
 )
 from src.api.main import app
 from src.domain.listings import SEED_CATEGORY_ID
 from src.domain.users import User, UserRole
 from src.repositories.favorites import InMemoryFavoriteRepository
 from src.repositories.listings import InMemoryListingRepository
+from src.repositories.moderation import InMemoryModerationActionRepository
 from src.repositories.users import InMemoryUserRepository
 from src.services.auth import AuthService, EntraAuthConfig
 from src.services.auth_sessions import InMemoryAuthSessionStore
 from src.services.contacts import SellerContactService
 from src.services.favorites import FavoriteService
 from src.services.listings import ListingService
+from src.services.moderation import ModerationService
 
 
 @pytest.fixture
@@ -66,14 +69,32 @@ def contact_service(
 
 
 @pytest.fixture
+def moderation_actions() -> InMemoryModerationActionRepository:
+    return InMemoryModerationActionRepository()
+
+
+@pytest.fixture
+def moderation_service(
+    listing_repository: InMemoryListingRepository,
+    favorite_repository: InMemoryFavoriteRepository,
+    moderation_actions: InMemoryModerationActionRepository,
+) -> ModerationService:
+    return ModerationService(
+        listing_repository, favorite_repository, moderation_actions
+    )
+
+
+@pytest.fixture
 def client(
     listing_service: ListingService,
     favorite_service: FavoriteService,
     contact_service: SellerContactService,
+    moderation_service: ModerationService,
 ):
     app.dependency_overrides[get_listing_service] = lambda: listing_service
     app.dependency_overrides[get_favorite_service] = lambda: favorite_service
     app.dependency_overrides[get_contact_service] = lambda: contact_service
+    app.dependency_overrides[get_moderation_service] = lambda: moderation_service
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()

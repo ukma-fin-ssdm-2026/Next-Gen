@@ -43,3 +43,11 @@ class DuplicateCategoryError(CategoryError):
 
 class InvalidCategoryError(CategoryError):
     """Некоректні дані категорії."""
+
+
+class ModerationForbiddenError(ListingError):
+    """Поточний користувач не має ролі ADMIN для дії модерації."""
+
+
+class InvalidModerationReasonError(ListingError):
+    """Причина модерації порожня або виходить за межі довжини."""

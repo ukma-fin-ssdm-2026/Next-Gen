@@ -860,6 +860,70 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/listings/{listing_id}/withdraw:
+    post:
+      tags:
+      - Moderation
+      summary: Зняти чуже оголошення з публікації (модерація)
+      description: Адміністратор знімає активне оголошення з обов'язковою причиною
+        (FR-011). Оголошення переходить у WITHDRAWN, зникає з каталогу та обраного,
+        а в журналі модерації створюється незмінний запис. Фізичного видалення немає.
+      operationId: withdraw_listing_api_v1_admin_listings__listing_id__withdraw_post
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Listing Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModerationWithdrawRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModerationActionResponse'
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає ролі ADMIN або обліковий запис заблоковано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Оголошення не існує або вже зняте
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
   /health:
     get:
       tags:
@@ -1399,6 +1463,65 @@ components:
           title: Image Urls
       type: object
       title: ListingUpdate
+    ModerationActionResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Ідентифікатор запису модерації
+        listing_id:
+          type: string
+          format: uuid
+          title: Listing Id
+          description: Зняте оголошення
+        moderator_id:
+          type: string
+          format: uuid
+          title: Moderator Id
+          description: Адміністратор із серверної сесії
+        action_type:
+          $ref: '#/components/schemas/ModerationActionType'
+          description: Тип дії
+        reason:
+          type: string
+          title: Reason
+          description: Зафіксована причина
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Час виконання дії (UTC)
+      type: object
+      required:
+      - id
+      - listing_id
+      - moderator_id
+      - action_type
+      - reason
+      - created_at
+      title: ModerationActionResponse
+    ModerationActionType:
+      type: string
+      enum:
+      - WITHDRAW_LISTING
+      title: ModerationActionType
+      description: Типи адміністративних дій над оголошенням.
+    ModerationWithdrawRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 5
+          title: Reason
+          description: Причина зняття, від 5 до 500 символів після обрізання пробілів
+          examples:
+          - 'Оголошення порушує правила: продаж заборонених товарів'
+      type: object
+      required:
+      - reason
+      title: ModerationWithdrawRequest
+      description: Тіло запиту містить лише причину; модератор береться із сесії.
     SellerContactResponse:
       properties:
         listing_id:

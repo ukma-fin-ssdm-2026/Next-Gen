@@ -10,6 +10,7 @@ from src.integrations.entra import EntraOidcClient, MsalEntraOidcClient
 from src.repositories.categories import InMemoryCategoryRepository
 from src.repositories.favorites import InMemoryFavoriteRepository
 from src.repositories.listings import InMemoryListingRepository
+from src.repositories.moderation import InMemoryModerationActionRepository
 from src.repositories.users import InMemoryUserRepository
 from src.services.auth import (
     AuthService,
@@ -22,6 +23,7 @@ from src.services.categories import CategoryService
 from src.services.contacts import SellerContactService
 from src.services.favorites import FavoriteService
 from src.services.listings import ListingService
+from src.services.moderation import ModerationService
 
 category_repository = InMemoryCategoryRepository.with_seed()
 listing_repository = InMemoryListingRepository.with_seed()
@@ -34,6 +36,10 @@ listing_service = ListingService(
 )
 favorite_service = FavoriteService(favorite_repository, listing_repository)
 contact_service = SellerContactService(listing_repository)
+moderation_action_repository = InMemoryModerationActionRepository()
+moderation_service = ModerationService(
+    listing_repository, favorite_repository, moderation_action_repository
+)
 user_repository = InMemoryUserRepository()
 oidc_flow_store = InMemoryOidcFlowStore()
 auth_session_store = InMemoryAuthSessionStore()
@@ -60,6 +66,11 @@ def get_favorite_service() -> FavoriteService:
 def get_contact_service() -> SellerContactService:
     """Повертає Seller Contact Service, що читає те саме сховище оголошень."""
     return contact_service
+
+
+def get_moderation_service() -> ModerationService:
+    """Повертає Moderation Service зі спільними сховищами оголошень і обраного."""
+    return moderation_service
 
 
 def get_entra_settings() -> EntraSettings:
