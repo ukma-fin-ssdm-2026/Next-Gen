@@ -88,3 +88,13 @@ export interface ListingFilters {
   maxPrice: string;
   sort: "newest" | "oldest";
 }
+
+export interface ModerationAction {
+  id: string;
+  listing_id: string | null;
+  target_user_id: string | null;
+  moderator_id: string;
+  action_type: "WITHDRAW_LISTING" | "BLOCK_USER" | "UNBLOCK_USER";
+  reason: string;
+  created_at: string;
+}
