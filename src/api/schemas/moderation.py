@@ -1,4 +1,4 @@
-"""Схеми адміністративної модерації оголошень (FR-011)."""
+"""Схеми адміністративної модерації оголошень і користувачів (FR-011, FR-013)."""
 
 from datetime import datetime
 from typing import Annotated
@@ -36,9 +36,26 @@ class ModerationWithdrawRequest(BaseModel):
     )
 
 
+class UserModerationRequest(BaseModel):
+    """Тіло блокування/розблокування містить лише причину; адмін — із сесії."""
+
+    reason: ModerationReason = Field(
+        ...,
+        description=(
+            "Причина дії, від "
+            f"{MODERATION_REASON_MIN_LENGTH} до {MODERATION_REASON_MAX_LENGTH} "
+            "символів після обрізання пробілів"
+        ),
+        examples=["Систематичне розміщення заборонених товарів"],
+    )
+
+
 class ModerationActionResponse(BaseModel):
     id: UUID = Field(..., description="Ідентифікатор запису модерації")
-    listing_id: UUID = Field(..., description="Зняте оголошення")
+    listing_id: UUID | None = Field(None, description="Зняте оголошення")
+    target_user_id: UUID | None = Field(
+        None, description="Заблокований або розблокований користувач"
+    )
     moderator_id: UUID = Field(..., description="Адміністратор із серверної сесії")
     action_type: ModerationActionType = Field(..., description="Тип дії")
     reason: str = Field(..., description="Зафіксована причина")

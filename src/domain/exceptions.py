@@ -67,3 +67,11 @@ class InvalidProfileError(ProfileError):
 
 class ProfileNotFoundError(ProfileError):
     """Профіль користувача не знайдено."""
+
+
+class UserNotFoundError(ListingError):
+    """Користувача для адміністративної дії не знайдено."""
+
+
+class InvalidUserModerationError(ListingError):
+    """Дію над користувачем не можна виконати (самоблокування, адміністратор, стан)."""

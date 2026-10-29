@@ -1144,6 +1144,147 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/admin/users/{user_id}/block:
+    post:
+      tags:
+      - Moderation
+      summary: Заблокувати користувача (модерація)
+      description: Адміністратор блокує обліковий запис з обов'язковою причиною (FR-013).
+        Усі сесії користувача відкликаються, вхід і мутуючі дії стають недоступними
+        (403), оголошення не видаляються. Не можна заблокувати себе або іншого адміністратора.
+      operationId: block_user_api_v1_admin_users__user_id__block_post
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: User Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserModerationRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModerationActionResponse'
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає ролі ADMIN або обліковий запис заблоковано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Користувача не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 'Дія неможлива: самоблокування, адміністратор або вже в такому
+            стані'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/admin/users/{user_id}/unblock:
+    post:
+      tags:
+      - Moderation
+      summary: Розблокувати користувача (модерація)
+      description: Адміністратор знімає блокування з обов'язковою причиною (FR-013);
+        користувач може знову входити через Microsoft Entra ID.
+      operationId: unblock_user_api_v1_admin_users__user_id__unblock_post
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: User Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserModerationRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModerationActionResponse'
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає ролі ADMIN або обліковий запис заблоковано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Користувача не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 'Дія неможлива: самоблокування, адміністратор або вже в такому
+            стані'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
   /api/v1/users/{user_id}:
     get:
       tags:
@@ -1813,10 +1954,19 @@ components:
           title: Id
           description: Ідентифікатор запису модерації
         listing_id:
-          type: string
-          format: uuid
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
           title: Listing Id
           description: Зняте оголошення
+        target_user_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Target User Id
+          description: Заблокований або розблокований користувач
         moderator_id:
           type: string
           format: uuid
@@ -1837,7 +1987,6 @@ components:
       type: object
       required:
       - id
-      - listing_id
       - moderator_id
       - action_type
       - reason
@@ -1847,8 +1996,10 @@ components:
       type: string
       enum:
       - WITHDRAW_LISTING
+      - BLOCK_USER
+      - UNBLOCK_USER
       title: ModerationActionType
-      description: Типи адміністративних дій над оголошенням.
+      description: Типи адміністративних дій над оголошенням і користувачем.
     ModerationWithdrawRequest:
       properties:
         reason:
@@ -1988,6 +2139,22 @@ components:
       - thumbnail_url
       - display_order
       title: UploadedImageResponse
+    UserModerationRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 5
+          title: Reason
+          description: Причина дії, від 5 до 500 символів після обрізання пробілів
+          examples:
+          - Систематичне розміщення заборонених товарів
+      type: object
+      required:
+      - reason
+      title: UserModerationRequest
+      description: Тіло блокування/розблокування містить лише причину; адмін — із
+        сесії.
     UserRole:
       type: string
       enum:

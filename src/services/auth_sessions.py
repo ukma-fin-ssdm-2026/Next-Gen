@@ -65,3 +65,13 @@ class InMemoryAuthSessionStore:
     def revoke(self, token: str) -> None:
         with self._lock:
             self._sessions.pop(token, None)
+
+    def revoke_user(self, user_id: UUID) -> int:
+        """Відкликає всі сесії користувача і повертає їх кількість (FR-013)."""
+        with self._lock:
+            tokens = [
+                token for token, item in self._sessions.items() if item.value == user_id
+            ]
+            for token in tokens:
+                self._sessions.pop(token, None)
+        return len(tokens)

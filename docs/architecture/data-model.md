@@ -116,7 +116,7 @@ ER-діаграма зберігається у файлі:
 | `moderator_id` | UUID | FK → `User.user_id`, Required | Адміністратор, який виконав дію |
 | `listing_id` | UUID | FK → `Listing.listing_id`, Nullable | Оголошення, якого стосується дія |
 | `target_user_id` | UUID | FK → `User.user_id`, Nullable | Користувач, якого блокують або розблоковують |
-| `action_type` | enum | Required | `REMOVE_LISTING`, `RESTORE_LISTING`, `BLOCK_USER` або `UNBLOCK_USER` |
+| `action_type` | enum | Required | `REMOVE_LISTING`, `RESTORE_LISTING`, `BLOCK_USER` або `UNBLOCK_USER`; у коді реалізовано `WITHDRAW_LISTING` (зняття оголошення), `BLOCK_USER` та `UNBLOCK_USER` |
 | `reason` | text | Required | Причина модераційного рішення |
 | `created_at` | datetime | Required | Час виконання дії |
 

@@ -26,6 +26,7 @@ from src.services.favorites import FavoriteService
 from src.services.listings import ListingService
 from src.services.moderation import ModerationService
 from src.services.profile import ProfileService
+from src.services.user_moderation import UserModerationService
 
 category_repository = InMemoryCategoryRepository.with_seed()
 listing_repository = InMemoryListingRepository.with_seed()
@@ -47,6 +48,9 @@ moderation_service = ModerationService(
 user_repository = InMemoryUserRepository()
 oidc_flow_store = InMemoryOidcFlowStore()
 auth_session_store = InMemoryAuthSessionStore()
+user_moderation_service = UserModerationService(
+    user_repository, moderation_action_repository, auth_session_store
+)
 
 SESSION_COOKIE_NAME = "baraholka_session"
 OIDC_STATE_COOKIE_NAME = "baraholka_oidc_state"
@@ -103,6 +107,11 @@ def get_auth_service(
             audience=settings.client_id,
         ),
     )
+
+
+def get_user_moderation_service() -> UserModerationService:
+    """Повертає User Moderation Service для ін'єкції в роутери (FR-013)."""
+    return user_moderation_service
 
 
 def get_profile_service() -> ProfileService:

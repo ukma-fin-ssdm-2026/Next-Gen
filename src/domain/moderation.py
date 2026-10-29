@@ -1,4 +1,4 @@
-"""Незмінний запис адміністративної дії модерації (FR-011)."""
+"""Незмінний запис адміністративної дії модерації (FR-011, FR-013)."""
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -13,9 +13,11 @@ MODERATION_REASON_MAX_LENGTH = 500
 
 
 class ModerationActionType(str, Enum):
-    """Типи адміністративних дій над оголошенням."""
+    """Типи адміністративних дій над оголошенням і користувачем."""
 
     WITHDRAW_LISTING = "WITHDRAW_LISTING"
+    BLOCK_USER = "BLOCK_USER"
+    UNBLOCK_USER = "UNBLOCK_USER"
 
 
 def normalize_moderation_reason(reason: str) -> str:
@@ -34,17 +36,26 @@ def normalize_moderation_reason(reason: str) -> str:
 
 @dataclass(frozen=True)
 class ModerationAction:
-    """Аудит-запис: хто, що, над яким оголошенням, чому і коли зробив.
+    """Аудит-запис: хто, що, над яким оголошенням або користувачем, чому і коли.
 
     `frozen=True`: після створення запис не змінюється (історія модерації).
+    Для `WITHDRAW_LISTING` обов'язковий `listing_id`, для `BLOCK_USER` та
+    `UNBLOCK_USER` — `target_user_id`.
     """
 
     moderator_id: UUID
-    listing_id: UUID
     action_type: ModerationActionType
     reason: str
+    listing_id: UUID | None = None
+    target_user_id: UUID | None = None
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=utc_now)
 
     def __post_init__(self) -> None:
         normalize_moderation_reason(self.reason)
+        if self.action_type == ModerationActionType.WITHDRAW_LISTING:
+            valid = self.listing_id is not None and self.target_user_id is None
+        else:
+            valid = self.target_user_id is not None and self.listing_id is None
+        if not valid:
+            raise ValueError("Ціль дії модерації не відповідає її типу")

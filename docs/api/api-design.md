@@ -102,6 +102,8 @@
 | `POST` | `/api/v1/favorites/{listing_id}` | Додати активне оголошення в обране (без дублікатів) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
 | `DELETE` | `/api/v1/favorites/{listing_id}` | Прибрати оголошення з власного обраного | 204 No Content | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
 | `GET` | `/api/v1/listings/{listing_id}/contact` | Отримати контакт продавця активного оголошення (лише з серверною сесією, `FR-010`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
+| `POST` | `/api/v1/admin/users/{user_id}/block` | Заблокувати користувача з причиною 5–500 символів; сесії відкликаються, дія записується в журнал (Адміністратор, `FR-013`) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict (себе, адміністратор, вже заблоковано), 422 |
+| `POST` | `/api/v1/admin/users/{user_id}/unblock` | Розблокувати користувача з причиною (Адміністратор, `FR-013`) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict (не заблоковано), 422 |
 | `POST` | `/api/v1/admin/listings/{listing_id}/withdraw` | Зняти чуже оголошення з публікації з причиною (Адміністратор, `FR-011`) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
 | `GET` | `/api/v1/categories` | Отримати список активних категорій для фільтрації каталогу (`FR-012`) | 200 OK | - |
 | `GET` | `/api/v1/categories/{id}` | Отримати дані конкретної категорії за ID (`FR-012`) | 200 OK | 404 Not Found, 422 |
