@@ -1,3 +1,14 @@
+FROM node:24-alpine AS frontend-build
+
+WORKDIR /frontend
+
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --ignore-scripts
+
+COPY frontend/ ./
+RUN npm run build
+
+
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -16,6 +27,7 @@ RUN python -m pip install \
     -r requirements.lock
 
 COPY --chown=app:app src ./src
+COPY --from=frontend-build --chown=app:app /frontend/dist ./frontend/dist
 
 USER app
 

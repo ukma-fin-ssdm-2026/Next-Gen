@@ -98,7 +98,10 @@ def test_login_callback_me_and_logout_complete_local_session_cycle(
     """
     client, oidc, _, _ = auth_http_client
 
-    login_response = client.get("/api/v1/auth/login", follow_redirects=False)
+    login_response = client.get(
+        "/api/v1/auth/login?next=/favorites%3Fsort%3Dnewest",
+        follow_redirects=False,
+    )
 
     assert login_response.status_code == 307
     assert login_response.headers["location"].startswith(
@@ -114,7 +117,9 @@ def test_login_callback_me_and_logout_complete_local_session_cycle(
     )
 
     assert callback_response.status_code == 303
-    assert callback_response.headers["location"] == "http://localhost:5173"
+    assert callback_response.headers["location"] == (
+        "http://localhost:5173/favorites?sort=newest"
+    )
     assert oidc.completed_response == {
         "code": "authorization-code",
         "state": "state-created-by-msal",
@@ -133,6 +138,35 @@ def test_login_callback_me_and_logout_complete_local_session_cycle(
 
     assert logout_response.status_code == 204
     assert client.get("/api/v1/auth/me").status_code == 401
+
+
+@pytest.mark.parametrize(
+    "next_url",
+    [
+        "https://evil.example/phishing",
+        "//evil.example/phishing",
+        r"/\evil.example/phishing",
+    ],
+)
+def test_login_does_not_redirect_to_external_next_url(
+    auth_http_client,
+    next_url: str,
+) -> None:
+    """[SEC-001] Зовнішній next URL не створює open redirect."""
+    client, _, _, _ = auth_http_client
+
+    client.get(
+        "/api/v1/auth/login",
+        params={"next": next_url},
+        follow_redirects=False,
+    )
+    response = client.get(
+        "/api/v1/auth/callback?code=authorization-code&state=state-created-by-msal",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "http://localhost:5173"
 
 
 def test_callback_rejects_state_that_does_not_match_cookie(auth_http_client) -> None:
