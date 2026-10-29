@@ -16,6 +16,7 @@ from src.api.routers import (
     favorites,
     listings,
     moderation,
+    users,
 )
 from src.repositories.image_storage import STORAGE_KEY_PATTERN, ImageStorage
 
@@ -36,6 +37,7 @@ app.include_router(favorites.router, prefix="/api/v1")
 app.include_router(categories.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(moderation.router, prefix="/api/v1")
+app.include_router(users.router, prefix="/api/v1")
 
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 RESERVED_FRONTEND_PREFIXES = (

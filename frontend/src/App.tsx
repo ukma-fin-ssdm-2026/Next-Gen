@@ -20,12 +20,16 @@ import {
   getListing,
   getListings,
   getMyListings,
+  getPublicProfile,
   getSellerContact,
   loginUrl,
   logout,
   moderateListing,
   removeFavorite,
+  deleteAvatar,
   updateListing,
+  updateProfile,
+  uploadAvatar,
   uploadListingImages,
 } from "./api";
 import { NaukmaLogo } from "./NaukmaLogo";
@@ -35,6 +39,7 @@ import type {
   Listing,
   ListingCondition,
   ListingFilters,
+  PublicProfile,
 } from "./types";
 
 const INITIAL_FILTERS: ListingFilters = {
@@ -301,7 +306,7 @@ function App() {
             />
           }
         />
-        <Route path="/profile" element={<ProfilePage user={user} authChecked={authChecked} />} />
+        <Route path="/profile" element={<ProfilePage user={user} authChecked={authChecked} onUserChange={setUser} onError={setError} onNotice={setNotice} />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       <Footer />
@@ -314,6 +319,14 @@ function HeartIcon() {
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
       <path d="M12 20.3s-7.6-4.5-7.6-10.2A4.4 4.4 0 0 1 12 7.4a4.4 4.4 0 0 1 7.6 2.7c0 5.7-7.6 10.2-7.6 10.2Z" />
     </svg>
+  );
+}
+
+function Avatar({ name, url, className = "" }: { name: string; url?: string | null; className?: string }) {
+  return (
+    <span className={`avatar ${className}`.trim()} aria-hidden="true">
+      {url ? <img src={url} alt="" /> : (name.trim().slice(0, 1) || "?").toUpperCase()}
+    </span>
   );
 }
 
@@ -340,7 +353,7 @@ function AccountMenu({ user, busy, onLogout }: { user: CurrentUser; busy: boolea
   return (
     <div className="account-menu" ref={ref}>
       <button className="account-trigger" type="button" aria-haspopup="menu" aria-expanded={open} aria-label="Меню профілю" title={user.email} onClick={() => setOpen((value) => !value)}>
-        <span className="avatar">{user.display_name.slice(0, 1).toUpperCase()}</span>
+        <Avatar name={user.display_name} url={user.avatar_url} />
         <svg viewBox="0 0 12 8" width="10" height="7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m1 1.5 5 5 5-5" /></svg>
       </button>
       {open && (
@@ -465,7 +478,7 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
         </div>
         {authChecked && user && (
           <Link className="drawer-user" to="/profile">
-            <span className="avatar">{user.display_name.slice(0, 1).toUpperCase()}</span>
+            <Avatar name={user.display_name} url={user.avatar_url} />
             <span><strong>{user.display_name}</strong><small>{user.email}</small></span>
           </Link>
         )}
@@ -531,10 +544,14 @@ const CROP_OUTPUT_WIDTH = 1600;
 
 type CropJob = { id: string; kind: "new"; file: File } | { id: string; kind: "edit"; photoId: string; src: string; name: string; revoke: boolean };
 
-function PhotoCropper({ src, name, queued, onCancel, onSkip, onDone, onUnreadable }: {
+function PhotoCropper({ src, name, queued, aspect = CROP_ASPECT, outputWidth = CROP_OUTPUT_WIDTH, title = "Обріжте фото", hint, onCancel, onSkip, onDone, onUnreadable }: {
   src: string;
   name: string;
   queued: number;
+  aspect?: number;
+  outputWidth?: number;
+  title?: string;
+  hint?: string;
   onCancel: () => void;
   onSkip: () => void;
   onDone: (blob: Blob) => void;
@@ -600,8 +617,8 @@ function PhotoCropper({ src, name, queued, onCancel, onSkip, onDone, onUnreadabl
   const confirm = () => {
     const image = imageRef.current;
     if (!image || !natural) return;
-    const outW = Math.round(Math.min(CROP_OUTPUT_WIDTH, frame.w / scale));
-    const outH = Math.round(outW / CROP_ASPECT);
+    const outW = Math.round(Math.min(outputWidth, frame.w / scale));
+    const outH = Math.round(outW / aspect);
     const k = outW / frame.w;
     const canvas = document.createElement("canvas");
     canvas.width = outW;
@@ -638,11 +655,12 @@ function PhotoCropper({ src, name, queued, onCancel, onSkip, onDone, onUnreadabl
     <div className="crop-overlay" role="dialog" aria-modal="true" aria-label="Обрізання фото" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
       <div className="crop-dialog">
         <div className="crop-head">
-          <h2>Обріжте фото</h2>
-          <p>Кадр 4:3 такий самий, як у каталозі й на сторінці оголошення. Можна заповнити його фото або вписати фото повністю, а порожні місця заповнити полями.{queued > 0 ? ` Ще фото в черзі: ${queued}.` : ""}</p>
+          <h2>{title}</h2>
+          <p>{hint ?? "Кадр 4:3 такий самий, як у каталозі й на сторінці оголошення. Можна заповнити його фото або вписати фото повністю, а порожні місця заповнити полями."}{queued > 0 ? ` Ще фото в черзі: ${queued}.` : ""}</p>
         </div>
         <div
-          className="crop-frame"
+          className={`crop-frame${aspect === 1 ? " crop-frame-square" : ""}`}
+          style={{ aspectRatio: String(aspect) }}
           ref={frameRef}
           tabIndex={0}
           onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); dragRef.current = { x: event.clientX, y: event.clientY, ox: offset.x, oy: offset.y }; }}
@@ -937,7 +955,7 @@ function CreateListingPage({ user, authChecked, categories, onError, onNotice }:
 }) {
   if (!authChecked) return <PageLoading />;
   if (!user) return <SignInRequired title="Створення оголошення доступне після входу" />;
-  return <ListingForm mode="create" categories={categories} onError={onError} onNotice={onNotice} />;
+  return <ListingForm mode="create" initialContact={user.contact ?? ""} categories={categories} onError={onError} onNotice={onNotice} />;
 }
 
 function EditListingPage({ user, authChecked, categories, onError, onNotice }: {
@@ -1442,6 +1460,7 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
   const [contactState, setContactState] = useState<"idle" | "loading" | "failed">("idle");
   const [loading, setLoading] = useState(true);
   const [confirmingWithdraw, setConfirmingWithdraw] = useState(false);
+  const [seller, setSeller] = useState<PublicProfile | null>(null);
   const userId = user?.user_id ?? null;
 
   useEffect(() => {
@@ -1459,6 +1478,15 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
       .catch(() => { if (!cancelled) setContactState("failed"); });
     return () => { cancelled = true; };
   }, [listingId, userId]);
+
+  const sellerId = listing?.user_id ?? null;
+  useEffect(() => {
+    setSeller(null);
+    if (!userId || !sellerId) return;
+    let cancelled = false;
+    getPublicProfile(sellerId).then((item) => { if (!cancelled) setSeller(item); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [userId, sellerId]);
 
   async function withdrawOwn() {
     onBusy(true);
@@ -1480,6 +1508,8 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
   if (!listing) return <NotFoundPage />;
   const isOwner = Boolean(user && user.user_id === listing.user_id);
   const published = new Date(listing.created_at).toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric" });
+  const sellerName = isOwner ? user?.display_name : seller?.display_name;
+  const sellerAvatar = isOwner ? user?.avatar_url : seller?.avatar_url;
   const contactParts = unpackContact(contact ?? "");
   const href = contactParts.main ? contactHref(contactParts.main) : null;
   return (
@@ -1518,10 +1548,14 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
           <div className="ad-card ad-seller">
             <h2>{isOwner ? "Ваш контакт" : "Продавець"}</h2>
             <div className="ad-seller-row">
-              <span className="ad-avatar" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.2 3.6-7 8-7s8 2.8 8 7" /></svg>
-              </span>
-              <div><strong>Студент НаУКМА</strong><small>Вхід через корпоративну пошту</small></div>
+              {sellerName ? (
+                <Avatar name={sellerName} url={sellerAvatar} className="ad-avatar-img" />
+              ) : (
+                <span className="ad-avatar" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.2 3.6-7 8-7s8 2.8 8 7" /></svg>
+                </span>
+              )}
+              <div><strong>{sellerName ?? "Студент НаУКМА"}</strong><small>Вхід через корпоративну пошту</small></div>
             </div>
             {!user ? (
               <a className="button button-primary ad-contact-button" href={currentLoginUrl}>Увійти, щоб побачити контакт</a>
@@ -1584,19 +1618,149 @@ function FavoritesPage({ user, authChecked, categoryNames, favorites, busy, onFa
   );
 }
 
-function ProfilePage({ user, authChecked }: { user: CurrentUser | null; authChecked: boolean }) {
+function ProfilePage({ user, authChecked, onUserChange, onError, onNotice }: {
+  user: CurrentUser | null;
+  authChecked: boolean;
+  onUserChange: (user: CurrentUser) => void;
+  onError: (message: string) => void;
+  onNotice: (message: string) => void;
+}) {
+  const parts = useMemo(() => unpackContact(user?.contact ?? ""), [user?.contact]);
+  const [name, setName] = useState(user?.display_name ?? "");
+  const [contact, setContact] = useState(parts.main);
+  const [phone, setPhone] = useState(parts.phone);
+  const [location, setLocation] = useState(parts.location);
+  const [saving, setSaving] = useState(false);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const loadedFor = useRef<string | null>(user?.user_id ?? null);
+
+  useEffect(() => {
+    if (!user || loadedFor.current === user.user_id) return;
+    loadedFor.current = user.user_id;
+    setName(user.display_name);
+    setContact(parts.main);
+    setPhone(parts.phone);
+    setLocation(parts.location);
+  }, [user, parts]);
+
+  const cropSrc = useMemo(() => (cropFile ? URL.createObjectURL(cropFile) : null), [cropFile]);
+  useEffect(() => () => { if (cropSrc) URL.revokeObjectURL(cropSrc); }, [cropSrc]);
+
   if (!authChecked) return <PageLoading />;
   if (!user) return <SignInRequired title="Профіль доступний після входу" />;
+
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault();
+    setFormError(null);
+    const trimmedName = name.trim();
+    if (!trimmedName) { setFormError("Вкажіть ім’я"); return; }
+    if (phone.trim() && !PHONE_PATTERN.test(phone.trim())) {
+      setFormError("Перевірте номер телефону: лише цифри, пробіли, дужки й дефіс, можна з «+» на початку");
+      return;
+    }
+    const packed = packContact({ main: contact, phone, location });
+    if (packed.length > 200) { setFormError("Контактні дані задовгі, скоротіть їх"); return; }
+    setSaving(true);
+    try {
+      const updated = await updateProfile({ display_name: trimmedName, contact: packed || null });
+      onUserChange(updated);
+      onNotice("Профіль збережено");
+    } catch (requestError) {
+      setFormError(errorText(requestError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function sendAvatar(file: File) {
+    setAvatarBusy(true);
+    try {
+      onUserChange(await uploadAvatar(file));
+      onNotice("Аватарку оновлено");
+    } catch (requestError) {
+      onError(errorText(requestError));
+    } finally {
+      setAvatarBusy(false);
+    }
+  }
+
+  async function removeAvatar() {
+    setAvatarBusy(true);
+    try {
+      onUserChange(await deleteAvatar());
+      onNotice("Аватарку видалено");
+    } catch (requestError) {
+      onError(errorText(requestError));
+    } finally {
+      setAvatarBusy(false);
+    }
+  }
+
   return (
     <main className="page-main narrow-page">
       <PageHeading eyebrow="Ваш обліковий запис" title="Профіль" />
-      <section className="profile-card">
-        <div className="profile-avatar">{user.display_name.slice(0, 1).toUpperCase()}</div>
-        <div><span>Ім’я</span><strong>{user.display_name}</strong></div>
-        <div><span>Email НаУКМА</span><strong>{user.email}</strong></div>
-        <div><span>Роль</span><strong>{user.role === "ADMIN" ? "Адміністратор" : "Студент"}</strong></div>
-      </section>
-      <Link className="button button-light profile-link" to="/my">Мої оголошення</Link>
+      <form className="profile-form" onSubmit={(event) => void onSubmit(event)}>
+        <section className="form-block profile-top">
+          <Avatar name={user.display_name} url={user.avatar_url} className="avatar-xl" />
+          <div className="profile-top-info">
+            <strong>{user.display_name}</strong>
+            <small>{user.email} · {user.role === "ADMIN" ? "Адміністратор" : "Студент"}</small>
+            <div className="profile-avatar-actions">
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                hidden
+                onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) setCropFile(file); }}
+              />
+              <button className="button button-light" type="button" disabled={avatarBusy} onClick={() => fileInput.current?.click()}>{user.avatar_url ? "Змінити фото" : "Додати фото"}</button>
+              {user.avatar_url && <button className="button button-text" type="button" disabled={avatarBusy} onClick={() => void removeAvatar()}>Видалити</button>}
+            </div>
+          </div>
+        </section>
+
+        <section className="form-block">
+          <div className="form-block-head"><div><h2>Особисті дані</h2><p className="form-hint">Ім’я бачать інші користувачі в оголошеннях.</p></div></div>
+          <label><span>Ім’я</span><input value={name} onChange={(event) => setName(event.target.value)} maxLength={100} required /></label>
+        </section>
+
+        <section className="form-block contact-block">
+          <div className="form-block-head"><div><h2>Контакти</h2><p className="form-hint">Автоматично підставляються у нові оголошення; їх побачать лише авторизовані користувачі.</p></div></div>
+          <div className="contact-fields">
+            <label><span>Telegram або пошта</span><input value={contact} onChange={(event) => setContact(event.target.value)} maxLength={100} placeholder="@username або name@ukma.edu.ua" /></label>
+            <div className="contact-extra">
+              <label><span>Телефон <small>необов’язково</small></span><input type="tel" inputMode="tel" value={phone} onChange={(event) => setPhone(event.target.value)} maxLength={20} placeholder="+380 50 123 45 67" /></label>
+              <label><span>Локація <small>необов’язково</small></span><input value={location} onChange={(event) => setLocation(event.target.value)} maxLength={60} placeholder="Київ, Контрактова площа" /></label>
+            </div>
+          </div>
+        </section>
+
+        {formError && <p className="form-error" role="alert">{formError}</p>}
+        <div className="form-actions">
+          <button className="button button-primary" type="submit" disabled={saving}>{saving ? "Зберігаємо…" : "Зберегти профіль"}</button>
+          <Link className="button button-text" to="/my">Мої оголошення</Link>
+        </div>
+      </form>
+
+      {cropFile && cropSrc && (
+        <PhotoCropper
+          key={cropSrc}
+          src={cropSrc}
+          name={cropFile.name}
+          queued={0}
+          aspect={1}
+          outputWidth={512}
+          title="Оберіть кадр аватарки"
+          hint="Квадратний кадр. Перетягніть і змініть масштаб так, щоб обличчя було в центрі."
+          onCancel={() => setCropFile(null)}
+          onSkip={() => { const file = cropFile; setCropFile(null); void sendAvatar(file); }}
+          onUnreadable={() => { setCropFile(null); onError("Не вдалося прочитати це зображення"); }}
+          onDone={(blob) => { setCropFile(null); void sendAvatar(new File([blob], "avatar.jpg", { type: "image/jpeg" })); }}
+        />
+      )}
     </main>
   );
 }

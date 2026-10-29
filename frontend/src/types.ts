@@ -5,6 +5,14 @@ export interface CurrentUser {
   email: string;
   display_name: string;
   role: UserRole;
+  avatar_url?: string | null;
+  contact?: string | null;
+}
+
+export interface PublicProfile {
+  user_id: string;
+  display_name: string;
+  avatar_url: string | null;
 }
 
 export type ListingCondition = "NEW" | "LIKE_NEW" | "GOOD" | "USED";

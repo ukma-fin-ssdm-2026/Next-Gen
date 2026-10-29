@@ -25,6 +25,7 @@ from src.services.contacts import SellerContactService
 from src.services.favorites import FavoriteService
 from src.services.listings import ListingService
 from src.services.moderation import ModerationService
+from src.services.profile import ProfileService
 
 category_repository = InMemoryCategoryRepository.with_seed()
 listing_repository = InMemoryListingRepository.with_seed()
@@ -102,6 +103,11 @@ def get_auth_service(
             audience=settings.client_id,
         ),
     )
+
+
+def get_profile_service() -> ProfileService:
+    """Повертає Profile Service для ін'єкції в роутери (FR-014)."""
+    return ProfileService(user_repository, image_storage)
 
 
 def get_entra_oidc_client(

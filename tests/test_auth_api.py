@@ -168,6 +168,8 @@ def test_development_login_creates_real_local_session(
         "email": "developer@ukma.edu.ua",
         "display_name": "Local Developer",
         "role": "USER",
+        "avatar_url": None,
+        "contact": None,
     }
 
 

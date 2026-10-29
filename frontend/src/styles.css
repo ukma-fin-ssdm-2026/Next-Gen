@@ -534,11 +534,11 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .ad-seller-row > div { display: grid; gap: 2px; }
 .ad-seller-row small { color: var(--muted); font-size: 12px; }
 .ad-avatar { flex: none; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 50%; background: #dfe8df; color: var(--green); }
-.ad-contact { display: grid; gap: 4px; padding: 13px 15px; border-radius: 14px; background: #e9f4dc; border: 1px solid #d5e9bc; }
+.ad-contact { display: grid; gap: 6px; padding-top: 14px; border-top: 1px solid var(--line); }
 .ad-contact > span { color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
 .ad-contact a, .ad-contact strong { color: var(--green); font-size: 17px; font-weight: 800; overflow-wrap: anywhere; }
 .ad-contact a:hover { text-decoration: underline; }
-.ad-contact.skeleton-line { height: 68px; background: linear-gradient(90deg, #eef1ea, #f7f8f3, #eef1ea); }
+.ad-contact.skeleton-line { height: 72px; border-radius: 10px; border-top: 0; margin-top: 14px; padding: 0; background: linear-gradient(90deg, #eef1ea, #f7f8f3, #eef1ea); }
 .ad-contact-button { width: 100%; text-align: center; }
 .ad-muted { margin: 0; color: var(--muted); font-size: 14px; }
 .ad-description { margin: 14px 0 0; color: #3f4a44; font-size: 15px; line-height: 1.75; white-space: pre-line; overflow-wrap: anywhere; }
@@ -601,3 +601,17 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .ad-contact .ad-location::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 7px; border: 2px solid var(--green); border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
 @media (max-width: 760px) { .contact-extra { grid-template-columns: minmax(0, 1fr); } }
 
+
+/* Профіль: аватарка, форма */
+.avatar { overflow: hidden; flex: none; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.avatar-xl { width: 96px; height: 96px; font-family: "Unbounded", sans-serif; font-size: 36px; background: var(--green); color: var(--lime); }
+.ad-avatar-img { width: 46px; height: 46px; font-size: 18px; }
+.profile-form { display: grid; gap: 16px; }
+.profile-top { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 22px; }
+.profile-top-info { display: grid; gap: 6px; min-width: 0; }
+.profile-top-info strong { font-size: 20px; overflow-wrap: anywhere; }
+.profile-top-info small { color: var(--muted); overflow-wrap: anywhere; }
+.profile-avatar-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.crop-frame-square { max-width: 360px; margin: 0 auto; }
+@media (max-width: 520px) { .profile-top { grid-template-columns: minmax(0, 1fr); justify-items: start; } }

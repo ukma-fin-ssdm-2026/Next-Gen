@@ -6,6 +6,7 @@ import type {
   ListingFilters,
   ListingUpdatePayload,
   ListingWithContact,
+  PublicProfile,
   SellerContact,
   UploadedImage,
 } from "./types";
@@ -154,4 +155,22 @@ export function moderateListing(listingId: string, reason: string): Promise<void
     method: "POST",
     body: JSON.stringify({ reason }),
   });
+}
+
+export function updateProfile(payload: { display_name?: string; contact?: string | null }): Promise<CurrentUser> {
+  return apiFetch<CurrentUser>("/auth/me", { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+export function uploadAvatar(file: File): Promise<CurrentUser> {
+  const body = new FormData();
+  body.append("file", file);
+  return apiFetch<CurrentUser>("/auth/me/avatar", { method: "PUT", body });
+}
+
+export function deleteAvatar(): Promise<CurrentUser> {
+  return apiFetch<CurrentUser>("/auth/me/avatar", { method: "DELETE" });
+}
+
+export function getPublicProfile(userId: string): Promise<PublicProfile> {
+  return apiFetch<PublicProfile>(`/users/${userId}`);
 }

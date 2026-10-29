@@ -83,7 +83,8 @@ class AuthService:
             )
         else:
             user.email = normalized_email
-            user.display_name = claims.display_name.strip()
+            if not user.display_name_customized:
+                user.display_name = claims.display_name.strip()
 
         saved = self._repository.save(user)
         return CurrentUser(
@@ -93,6 +94,8 @@ class AuthService:
             email=saved.email,
             display_name=saved.display_name,
             role=saved.role,
+            avatar_url=saved.avatar_url,
+            contact=saved.contact,
         )
 
     def get_current_user(self, user_id: UUID) -> CurrentUser:
@@ -109,6 +112,8 @@ class AuthService:
             email=user.email,
             display_name=user.display_name,
             role=user.role,
+            avatar_url=user.avatar_url,
+            contact=user.contact,
         )
 
     def _validate_claims(

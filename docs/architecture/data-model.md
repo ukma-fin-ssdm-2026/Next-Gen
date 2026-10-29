@@ -35,6 +35,9 @@ ER-діаграма зберігається у файлі:
 | `display_name` | string | Personal Data | Ім'я, яке відображається у маркетплейсі |
 | `role` | enum | Required | Роль `USER` або `ADMIN` |
 | `is_blocked` | boolean | Required, default `false` | Ознака блокування облікового запису |
+| `display_name_customized` | boolean | Required, default `false` | Ознака, що ім'я змінив сам користувач; повторний вхід тоді не перезаписує його іменем з Entra (`FR-014`) |
+| `avatar_url` | string | Nullable | Публічний URL аватарки (`/uploads/{key}.webp`); файл зберігається в сховищі зображень як зображення з псевдо-ідентифікатором `user_id`, тому не підпадає під TTL staged-завантажень (`FR-014`) |
+| `contact` | string | Nullable, ≤ 300 символів, Personal Data | Контакти за замовчуванням (формат як у `Listing.contact`: основний контакт, `Тел.: …`, `Локація: …`); підставляються клієнтом у форму нового оголошення; публічно не віддаються (`FR-014`) |
 | `created_at` | datetime | Required | Час створення облікового запису |
 
 Унікальність зовнішньої ідентичності забезпечує обмеження `UNIQUE (tenant_id, entra_object_id)`. Система не приймає і не зберігає паролі Microsoft.
@@ -227,6 +230,8 @@ ER-діаграма зберігається у файлі:
 |---|---|---|
 | `User` | `email` | Personal Data |
 | `User` | `display_name` | Personal Data |
+| `User` | `contact` | Personal Data |
+| `User` | `avatar_url` | Personal Data (зображення користувача) |
 | `User` | `tenant_id`, `entra_object_id` | Identity Data |
 | `Listing` | `contact` | Personal Data |
 
