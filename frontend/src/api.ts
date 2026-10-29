@@ -180,6 +180,14 @@ export function blockUser(userId: string, reason: string): Promise<ModerationAct
   return apiFetch<ModerationAction>(`/admin/users/${userId}/block`, { method: "POST", body: JSON.stringify({ reason }) });
 }
 
+export function blockUserByEmail(email: string, reason: string): Promise<ModerationAction> {
+  return apiFetch<ModerationAction>("/admin/users/block-by-email", { method: "POST", body: JSON.stringify({ email, reason }) });
+}
+
+export function unblockUserByEmail(email: string, reason: string): Promise<ModerationAction> {
+  return apiFetch<ModerationAction>("/admin/users/unblock-by-email", { method: "POST", body: JSON.stringify({ email, reason }) });
+}
+
 export function unblockUser(userId: string, reason: string): Promise<ModerationAction> {
   return apiFetch<ModerationAction>(`/admin/users/${userId}/unblock`, { method: "POST", body: JSON.stringify({ reason }) });
 }

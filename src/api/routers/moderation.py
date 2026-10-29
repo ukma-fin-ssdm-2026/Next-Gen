@@ -18,6 +18,7 @@ from src.api.schemas.listings import ApiValidationErrorResponse, ErrorResponse
 from src.api.schemas.moderation import (
     ModerationActionResponse,
     ModerationWithdrawRequest,
+    UserEmailModerationRequest,
     UserModerationRequest,
 )
 from src.domain.exceptions import (
@@ -121,9 +122,9 @@ _USER_ACTION_RESPONSES = {
 }
 
 
-def _run_user_action(call, user_id: UUID, request: UserModerationRequest):
+def _run_user_action(call, target, request: UserModerationRequest):
     try:
-        action = call(user_id, request.reason)
+        action = call(target, request.reason)
     except ModerationForbiddenError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except UserNotFoundError as exc:
@@ -186,5 +187,49 @@ def unblock_user(
     return _run_user_action(
         lambda uid, reason: service.unblock_user(moderator, uid, reason),
         user_id,
+        request,
+    )
+
+
+@router.post(
+    "/users/block-by-email",
+    response_model=ModerationActionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Заблокувати користувача за email (модерація)",
+    description=(
+        "Те саме, що блокування за ID (FR-013), але користувач знаходиться за "
+        "адресою @ukma.edu.ua з тіла запиту. Працює лише для тих, хто вже входив "
+        "на сайт; для невідомої адреси повертається 404. Адреса не потрапляє в URL."
+    ),
+    responses=_USER_ACTION_RESPONSES,
+)
+def block_user_by_email(
+    request: UserEmailModerationRequest,
+    moderator: CurrentUser = Depends(require_moderator),
+    service: UserModerationService = Depends(get_user_moderation_service),
+) -> ModerationActionResponse:
+    return _run_user_action(
+        lambda email, reason: service.block_user_by_email(moderator, email, reason),
+        request.email,
+        request,
+    )
+
+
+@router.post(
+    "/users/unblock-by-email",
+    response_model=ModerationActionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Розблокувати користувача за email (модерація)",
+    description="Знімає блокування за адресою @ukma.edu.ua з тіла запиту (FR-013).",
+    responses=_USER_ACTION_RESPONSES,
+)
+def unblock_user_by_email(
+    request: UserEmailModerationRequest,
+    moderator: CurrentUser = Depends(require_moderator),
+    service: UserModerationService = Depends(get_user_moderation_service),
+) -> ModerationActionResponse:
+    return _run_user_action(
+        lambda email, reason: service.unblock_user_by_email(moderator, email, reason),
+        request.email,
         request,
     )

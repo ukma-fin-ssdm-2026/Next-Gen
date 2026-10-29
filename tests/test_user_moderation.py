@@ -130,3 +130,38 @@ def test_failed_audit_rolls_back_block(env) -> None:
         service.block_user(_current(admin), target.user_id, REASON)
     assert users.get_by_id(target.user_id).is_blocked is False
     assert sessions.resolve(token) == target.user_id
+
+
+def test_block_and_unblock_by_email_is_case_insensitive(env) -> None:
+    """[TP-026] [FR-013] Блокування й розблокування за email без урахування регістру."""
+    service, users, actions, _, admin, target = env
+    action = service.block_user_by_email(
+        _current(admin), f"  {target.email.upper()} ", REASON
+    )
+    assert users.get_by_id(target.user_id).is_blocked is True
+    assert action.target_user_id == target.user_id
+    service.unblock_user_by_email(_current(admin), target.email, REASON)
+    assert users.get_by_id(target.user_id).is_blocked is False
+    assert len(actions.list_by_user(target.user_id)) == 2
+
+
+def test_by_email_checks_rights_before_lookup(env) -> None:
+    """[TP-026] [FR-013] [SEC-001]
+    Не-адміністратор отримує Forbidden і для відомої, і для невідомої адреси,
+    тобто не може з'ясувати, чи є адреса в системі.
+    """
+    service, _, _, _, _, target = env
+    plain = _current(_user())
+    for email in (target.email, "nobody@ukma.edu.ua"):
+        with pytest.raises(ModerationForbiddenError):
+            service.block_user_by_email(plain, email, REASON)
+    with pytest.raises(ListingUnauthorizedError):
+        service.block_user_by_email(None, target.email, REASON)
+
+
+def test_by_email_unknown_address_is_not_found(env) -> None:
+    """[TP-026] [FR-013] Невідома адреса — UserNotFoundError без запису аудиту."""
+    service, _, actions, _, admin, _ = env
+    with pytest.raises(UserNotFoundError):
+        service.block_user_by_email(_current(admin), "nobody@ukma.edu.ua", REASON)
+    assert actions._items == []

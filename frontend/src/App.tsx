@@ -13,6 +13,7 @@ import {
   ApiError,
   addFavorite,
   blockUser,
+  blockUserByEmail,
   createListing,
   deleteListing,
   getCategories,
@@ -28,6 +29,7 @@ import {
   moderateListing,
   removeFavorite,
   unblockUser,
+  unblockUserByEmail,
   deleteAvatar,
   updateListing,
   updateProfile,
@@ -1814,6 +1816,7 @@ function ProfilePage({ user, authChecked, onUserChange, onError, onNotice }: {
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UKMA_EMAIL_PATTERN = /^[^@\s]+@ukma\.edu\.ua$/i;
 
 function AdminPage({ user, authChecked, onError, onNotice }: {
   user: CurrentUser | null;
@@ -1836,11 +1839,18 @@ function AdminPage({ user, authChecked, onError, onNotice }: {
   async function run(action: "block" | "unblock") {
     setFormError(null);
     const id = userId.trim();
-    if (!UUID_PATTERN.test(id)) { setFormError("Вкажіть коректний ID користувача (UUID)"); return; }
+    const byEmail = id.includes("@");
+    if (byEmail ? !UKMA_EMAIL_PATTERN.test(id) : !UUID_PATTERN.test(id)) {
+      setFormError(byEmail ? "Вкажіть адресу у форматі name@ukma.edu.ua" : "Вкажіть коректний ID (UUID) або email @ukma.edu.ua");
+      return;
+    }
     if (reason.trim().length < 5) { setFormError("Причина має містити щонайменше 5 символів"); return; }
     setWorking(true);
     try {
-      const result = action === "block" ? await blockUser(id, reason.trim()) : await unblockUser(id, reason.trim());
+      const text = reason.trim();
+      const result = action === "block"
+        ? await (byEmail ? blockUserByEmail(id, text) : blockUser(id, text))
+        : await (byEmail ? unblockUserByEmail(id, text) : unblockUser(id, text));
       setHistory((items) => [result, ...items]);
       onNotice(action === "block" ? "Користувача заблоковано" : "Користувача розблоковано");
       setReason("");
@@ -1857,7 +1867,8 @@ function AdminPage({ user, authChecked, onError, onNotice }: {
       <form className="profile-form" onSubmit={(event) => event.preventDefault()}>
         <section className="form-block">
           <div className="form-block-head"><div><h2>Блокування користувачів</h2><p className="form-hint">Заблокований користувач втрачає чинні сесії й не може входити; його оголошення не видаляються. Зручніше блокувати зі сторінки оголошення кнопкою «Заблокувати продавця».</p></div></div>
-          <label><span>ID користувача</span><input value={userId} onChange={(event) => setUserId(event.target.value)} placeholder="00000000-0000-0000-0000-000000000000" spellCheck={false} /></label>
+          <label><span>Email або ID користувача</span><input value={userId} onChange={(event) => setUserId(event.target.value)} placeholder="student@ukma.edu.ua" spellCheck={false} autoComplete="off" /></label>
+          <p className="form-hint">Email працює лише для тих, хто вже входив на сайт; інакше буде повідомлення «не знайдено».</p>
           <label><span>Причина <small>5–500 символів</small></span><textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} rows={3} /></label>
           {formError && <p className="form-error" role="alert">{formError}</p>}
           <div className="form-actions">
