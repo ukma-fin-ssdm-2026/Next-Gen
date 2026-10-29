@@ -13,16 +13,19 @@ import {
   ApiError,
   addFavorite,
   createListing,
+  deleteListing,
   getCategories,
   getCurrentUser,
   getFavorites,
   getListing,
   getListings,
+  getMyListings,
   getSellerContact,
   loginUrl,
   logout,
   moderateListing,
   removeFavorite,
+  updateListing,
   uploadListingImages,
 } from "./api";
 import { NaukmaLogo } from "./NaukmaLogo";
@@ -248,6 +251,8 @@ function App() {
           }
         />
         <Route path="/listings/new" element={<CreateListingPage user={user} authChecked={authChecked} categories={categories} onError={setError} onNotice={setNotice} />} />
+        <Route path="/listings/:listingId/edit" element={<EditListingPage user={user} authChecked={authChecked} categories={categories} onError={setError} onNotice={setNotice} />} />
+        <Route path="/my" element={<MyListingsPage user={user} authChecked={authChecked} categoryNames={categoryNames} onError={setError} onNotice={setNotice} />} />
         <Route
           path="/listings/:listingId"
           element={
@@ -326,6 +331,7 @@ function AccountMenu({ user, busy, onLogout }: { user: CurrentUser; busy: boolea
             <small>{user.email}</small>
             <small>{user.role === "ADMIN" ? "Адміністратор" : "Студент"}</small>
           </div>
+          <Link role="menuitem" to="/my">Мої оголошення</Link>
           <Link role="menuitem" to="/profile">Профіль</Link>
           <button role="menuitem" type="button" disabled={busy} onClick={onLogout}>Вийти</button>
         </div>
@@ -448,6 +454,7 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
           <NavLink to="/" end>Головна</NavLink>
           <NavLink to="/listings" end>Оголошення</NavLink>
           <NavLink to="/listings/new">Створити оголошення</NavLink>
+          {user && <NavLink to="/my">Мої оголошення</NavLink>}
           {user && <NavLink to="/favorites">Обране{favoritesCount > 0 ? ` (${favoritesCount})` : ""}</NavLink>}
           {user && <NavLink to="/profile">Профіль</NavLink>}
         </nav>
@@ -463,45 +470,63 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
   );
 }
 
-function CreateListingPage({ user, authChecked, categories, onError, onNotice }: {
-  user: CurrentUser | null;
-  authChecked: boolean;
+const STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Активне",
+  RESERVED: "Зарезервоване",
+  SOLD: "Продане",
+  WITHDRAWN: "Знято",
+  REMOVED_BY_MODERATOR: "Знято модератором",
+};
+
+type PhotoItem = { id: string; preview: string; url?: string; file?: File };
+
+function ListingForm({ mode, listing, categories, onError, onNotice }: {
+  mode: "create" | "edit";
+  listing?: Listing;
   categories: Category[];
   onError: (message: string) => void;
   onNotice: (message: string) => void;
 }) {
   const navigate = useNavigate();
-  const [title, setTitle] = useState("");
-  const [categoryId, setCategoryId] = useState("");
-  const [price, setPrice] = useState("");
-  const [condition, setCondition] = useState<ListingCondition>("GOOD");
-  const [description, setDescription] = useState("");
+  const editing = mode === "edit";
+  const [title, setTitle] = useState(listing?.title ?? "");
+  const [categoryId, setCategoryId] = useState(listing?.category_id ?? "");
+  const [price, setPrice] = useState(listing ? String(listing.price) : "");
+  const [condition, setCondition] = useState<ListingCondition>(listing?.condition ?? "GOOD");
+  const [description, setDescription] = useState(listing?.description ?? "");
   const [contact, setContact] = useState("");
-  const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
+  const [photos, setPhotos] = useState<PhotoItem[]>(() =>
+    [...(listing?.images ?? [])]
+      .sort((a, b) => a.display_order - b.display_order)
+      .map((image) => ({ id: image.image_id, preview: image.thumbnail_url || image.image_url, url: image.image_url })),
+  );
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const photosRef = useRef(photos);
   photosRef.current = photos;
 
-  useEffect(() => () => photosRef.current.forEach((photo) => URL.revokeObjectURL(photo.url)), []);
-
-  if (!authChecked) return <PageLoading />;
-  if (!user) return <SignInRequired title="Створення оголошення доступне після входу" />;
+  useEffect(() => () => photosRef.current.forEach((photo) => { if (photo.file) URL.revokeObjectURL(photo.preview); }), []);
 
   const addFiles = (list: FileList | null) => {
     if (!list) return;
-    const room = MAX_PHOTOS - photos.length;
-    const added = Array.from(list).slice(0, Math.max(room, 0)).map((file) => ({ file, url: URL.createObjectURL(file) }));
-    if (list.length > room) setFormError(`Можна додати не більше ${MAX_PHOTOS} фото`);
-    else setFormError(null);
+    const room = Math.max(MAX_PHOTOS - photos.length, 0);
+    const added = Array.from(list).slice(0, room).map((file) => {
+      const preview = URL.createObjectURL(file);
+      return { id: preview, preview, file };
+    });
+    setFormError(list.length > room ? `Можна додати не більше ${MAX_PHOTOS} фото` : null);
     setPhotos((current) => [...current, ...added]);
   };
 
   const removePhoto = (index: number) => {
     setPhotos((current) => {
-      URL.revokeObjectURL(current[index].url);
+      if (current[index].file) URL.revokeObjectURL(current[index].preview);
       return current.filter((_, position) => position !== index);
     });
+  };
+
+  const makeCover = (index: number) => {
+    setPhotos((current) => [current[index], ...current.filter((_, position) => position !== index)]);
   };
 
   const onSubmit = async (event: FormEvent) => {
@@ -513,40 +538,61 @@ function CreateListingPage({ user, authChecked, categories, onError, onNotice }:
     }
     setSubmitting(true);
     try {
-      const uploaded = await uploadListingImages(photos.map((photo) => photo.file));
-      const created = await createListing({
-        title: title.trim(),
-        description: description.trim(),
-        price: Number(price),
-        category_id: categoryId,
-        condition,
-        contact: contact.trim(),
-        image_urls: uploaded.sort((a, b) => a.display_order - b.display_order).map((image) => image.image_url),
-      });
-      onNotice("Оголошення опубліковано");
-      navigate(`/listings/${created.id}`);
+      const newFiles = photos.filter((photo) => photo.file).map((photo) => photo.file as File);
+      const uploaded = newFiles.length > 0
+        ? [...(await uploadListingImages(newFiles))].sort((a, b) => a.display_order - b.display_order)
+        : [];
+      let next = 0;
+      const imageUrls = photos.map((photo) => photo.url ?? uploaded[next++].image_url);
+      if (editing && listing) {
+        await updateListing(listing.id, {
+          title: title.trim(),
+          description: description.trim(),
+          price: Number(price),
+          condition,
+          image_urls: imageUrls,
+          ...(contact.trim() ? { contact: contact.trim() } : {}),
+        });
+        onNotice("Зміни збережено");
+        navigate(`/listings/${listing.id}`);
+      } else {
+        const created = await createListing({
+          title: title.trim(),
+          description: description.trim(),
+          price: Number(price),
+          category_id: categoryId,
+          condition,
+          contact: contact.trim(),
+          image_urls: imageUrls,
+        });
+        onNotice("Оголошення опубліковано");
+        navigate(`/listings/${created.id}`);
+      }
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : "Не вдалося створити оголошення";
+      const message = reason instanceof Error ? reason.message : "Не вдалося зберегти оголошення";
       setFormError(message);
       onError(message);
       setSubmitting(false);
     }
   };
 
+  const backTo = editing && listing ? `/listings/${listing.id}` : "/listings";
   return (
     <main className="page-main narrow-page">
-      <Link className="back-link" to="/listings">← До оголошень</Link>
-      <PageHeading eyebrow="Нове оголошення" title="Створити оголошення" />
+      <Link className="back-link" to={backTo}>{editing ? "← До оголошення" : "← До оголошень"}</Link>
+      <PageHeading eyebrow={editing ? "Редагування" : "Нове оголошення"} title={editing ? "Редагувати оголошення" : "Створити оголошення"} />
       <form className="create-form" onSubmit={(event) => void onSubmit(event)}>
         <section className="form-block">
           <h2>Фото</h2>
           <p className="form-hint">Від 1 до {MAX_PHOTOS} фото. Перше буде обкладинкою оголошення.</p>
           <div className="photo-grid">
             {photos.map((photo, index) => (
-              <div className="photo-tile" key={photo.url}>
-                <img src={photo.url} alt="" />
-                {index === 0 && <span className="photo-cover">Обкладинка</span>}
-                <button type="button" onClick={() => removePhoto(index)} aria-label={`Прибрати фото ${index + 1}`}>×</button>
+              <div className="photo-tile" key={photo.id}>
+                <img src={photo.preview} alt="" />
+                {index === 0
+                  ? <span className="photo-cover">Обкладинка</span>
+                  : <button className="photo-make-cover" type="button" onClick={() => makeCover(index)}>Зробити обкладинкою</button>}
+                <button className="photo-remove" type="button" onClick={() => removePhoto(index)} aria-label={`Прибрати фото ${index + 1}`}>×</button>
               </div>
             ))}
             {photos.length < MAX_PHOTOS && (
@@ -563,7 +609,7 @@ function CreateListingPage({ user, authChecked, categories, onError, onNotice }:
           <h2>Про товар</h2>
           <label><span>Назва</span><input value={title} onChange={(event) => setTitle(event.target.value)} minLength={3} maxLength={100} required placeholder="Наприклад, худі з логотипом НаУКМА" /></label>
           <div className="form-row">
-            <label><span>Категорія</span><select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} required>
+            <label><span>Категорія</span><select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} required disabled={editing}>
               <option value="" disabled>Оберіть категорію</option>
               {categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}
             </select></label>
@@ -572,22 +618,221 @@ function CreateListingPage({ user, authChecked, categories, onError, onNotice }:
             </select></label>
             <label><span>Ціна, грн</span><input type="number" min="0" step="1" inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value)} required placeholder="0" /></label>
           </div>
+          {editing && <p className="form-hint">Категорію після публікації змінити не можна.</p>}
           <label><span>Опис (необов’язково)</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} rows={6} placeholder="Розкажіть про стан, розмір, чому продаєте" /></label>
         </section>
 
         <section className="form-block">
           <h2>Контакт</h2>
           <p className="form-hint">Побачать лише авторизовані користувачі, коли натиснуть «Показати контакт».</p>
-          <label><span>Telegram або пошта</span><input value={contact} onChange={(event) => setContact(event.target.value)} minLength={3} maxLength={200} required placeholder="@username" /></label>
+          <label><span>Telegram або пошта</span><input value={contact} onChange={(event) => setContact(event.target.value)} minLength={3} maxLength={200} required={!editing} placeholder={editing ? "Залиште порожнім, щоб не змінювати" : "@username"} /></label>
         </section>
 
         {formError && <p className="form-error" role="alert">{formError}</p>}
         <div className="form-actions">
-          <button className="button button-primary" type="submit" disabled={submitting}>{submitting ? "Публікуємо…" : "Опублікувати"}</button>
-          <Link className="button button-text" to="/listings">Скасувати</Link>
+          <button className="button button-primary" type="submit" disabled={submitting}>{submitting ? "Зберігаємо…" : editing ? "Зберегти зміни" : "Опублікувати"}</button>
+          <Link className="button button-text" to={backTo}>Скасувати</Link>
         </div>
       </form>
     </main>
+  );
+}
+
+function CreateListingPage({ user, authChecked, categories, onError, onNotice }: {
+  user: CurrentUser | null;
+  authChecked: boolean;
+  categories: Category[];
+  onError: (message: string) => void;
+  onNotice: (message: string) => void;
+}) {
+  if (!authChecked) return <PageLoading />;
+  if (!user) return <SignInRequired title="Створення оголошення доступне після входу" />;
+  return <ListingForm mode="create" categories={categories} onError={onError} onNotice={onNotice} />;
+}
+
+function EditListingPage({ user, authChecked, categories, onError, onNotice }: {
+  user: CurrentUser | null;
+  authChecked: boolean;
+  categories: Category[];
+  onError: (message: string) => void;
+  onNotice: (message: string) => void;
+}) {
+  const { listingId = "" } = useParams();
+  const [listing, setListing] = useState<Listing | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    getListing(listingId).then(setListing).catch(() => setListing(null)).finally(() => setLoading(false));
+  }, [listingId]);
+
+  if (!authChecked || loading) return <PageLoading />;
+  if (!user) return <SignInRequired title="Редагування доступне після входу" />;
+  if (!listing) return <NotFoundPage />;
+  if (listing.user_id !== user.user_id) {
+    return <main className="page-main auth-required"><h1>Це не ваше оголошення</h1><p>Редагувати можна лише власні оголошення.</p><Link className="button button-primary" to={`/listings/${listing.id}`}>До оголошення</Link></main>;
+  }
+  return <ListingForm mode="edit" listing={listing} categories={categories} onError={onError} onNotice={onNotice} />;
+}
+
+function MyListingsPage({ user, authChecked, categoryNames, onError, onNotice }: {
+  user: CurrentUser | null;
+  authChecked: boolean;
+  categoryNames: Map<string, string>;
+  onError: (message: string) => void;
+  onNotice: (message: string) => void;
+}) {
+  const [items, setItems] = useState<Listing[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"active" | "archive">("active");
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [workingId, setWorkingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) { setItems([]); setLoading(false); return; }
+    setLoading(true);
+    getMyListings().then(setItems).catch((reason) => onError(errorText(reason))).finally(() => setLoading(false));
+  }, [user, onError]);
+
+  async function withdraw(id: string) {
+    setWorkingId(id);
+    try {
+      await deleteListing(id);
+      setItems((current) => current.map((item) => (item.id === id ? { ...item, status: "WITHDRAWN" } : item)));
+      setConfirmId(null);
+      onNotice("Оголошення знято з публікації");
+    } catch (reason) {
+      onError(errorText(reason));
+    } finally {
+      setWorkingId(null);
+    }
+  }
+
+  if (!authChecked) return <PageLoading />;
+  if (!user) return <SignInRequired title="Ваші оголошення доступні після входу" />;
+
+  const isLive = (item: Listing) => item.status === "ACTIVE" || item.status === "RESERVED";
+  const sorted = [...items].sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const live = sorted.filter(isLive);
+  const archive = sorted.filter((item) => !isLive(item));
+  const shown = tab === "active" ? live : archive;
+
+  return (
+    <main className="page-main">
+      <PageHeading eyebrow="Ваш кабінет" title="Мої оголошення" />
+      <div className="my-toolbar">
+        <div className="segmented" role="tablist">
+          <button type="button" role="tab" aria-selected={tab === "active"} className={tab === "active" ? "active" : ""} onClick={() => setTab("active")}>Активні <b>{live.length}</b></button>
+          <button type="button" role="tab" aria-selected={tab === "archive"} className={tab === "archive" ? "active" : ""} onClick={() => setTab("archive")}>Знято <b>{archive.length}</b></button>
+        </div>
+        <Link className="button button-primary" to="/listings/new">+ Створити</Link>
+      </div>
+      {loading ? <ListingSkeleton /> : shown.length === 0 ? (
+        <div className="empty-state">
+          <span>{tab === "active" ? "+" : "∅"}</span>
+          <h3>{tab === "active" ? "Активних оголошень немає" : "Знятих оголошень немає"}</h3>
+          <p>{tab === "active" ? "Створіть перше оголошення, і воно зʼявиться тут." : "Тут зʼявляться оголошення, які ви зняли з публікації."}</p>
+          {tab === "active" && <Link className="button button-primary" to="/listings/new">Створити оголошення</Link>}
+        </div>
+      ) : (
+        <div className="listing-grid">
+          {shown.map((listing) => (
+            <article className="listing-card my-card" key={listing.id}>
+              <Link className="card-main" to={`/listings/${listing.id}`}>
+                <ListingImage listing={listing} />
+                <div className="card-body">
+                  <div className="card-meta">
+                    <span>{categoryNames.get(listing.category_id) ?? "Інше"}</span>
+                    <span className={`status-chip status-${listing.status}`}>{STATUS_LABELS[listing.status] ?? listing.status}</span>
+                  </div>
+                  <h3>{listing.title}</h3>
+                  <div className="card-foot">
+                    <strong className="price">{formatPrice(listing.price)}</strong>
+                    <span className="condition">{CONDITION_LABELS[listing.condition]}</span>
+                  </div>
+                </div>
+              </Link>
+              {isLive(listing) && (
+                <div className="my-actions">
+                  {confirmId === listing.id ? (
+                    <>
+                      <span>Зняти з публікації?</span>
+                      <button className="button button-danger" type="button" disabled={workingId === listing.id} onClick={() => void withdraw(listing.id)}>Так, зняти</button>
+                      <button className="button button-text" type="button" onClick={() => setConfirmId(null)}>Ні</button>
+                    </>
+                  ) : (
+                    <>
+                      <Link className="button button-light" to={`/listings/${listing.id}/edit`}>Редагувати</Link>
+                      <button className="button button-text" type="button" onClick={() => setConfirmId(listing.id)}>Зняти</button>
+                    </>
+                  )}
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
+    </main>
+  );
+}
+
+function ListingGallery({ listing }: { listing: Listing }) {
+  const images = useMemo(() => [...listing.images].sort((a, b) => a.display_order - b.display_order), [listing.images]);
+  const [index, setIndex] = useState(0);
+  const [broken, setBroken] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => { setIndex(0); setBroken(new Set()); }, [listing.id]);
+
+  if (images.length === 0) return <ListingImage listing={listing} large />;
+  const count = images.length;
+  const current = images[Math.min(index, count - 1)];
+  const go = (step: number) => setIndex((value) => (value + step + count) % count);
+  const markBroken = (id: string) => setBroken((value) => new Set(value).add(id));
+
+  return (
+    <div
+      className="gallery"
+      tabIndex={0}
+      aria-label="Фотографії оголошення"
+      onKeyDown={(event) => {
+        if (event.key === "ArrowLeft") { event.preventDefault(); go(-1); }
+        if (event.key === "ArrowRight") { event.preventDefault(); go(1); }
+      }}
+    >
+      <div className="gallery-stage">
+        {broken.has(current.image_id)
+          ? <span className="gallery-fallback" aria-hidden="true">Б</span>
+          : <img key={current.image_id} src={current.image_url} alt={`Фото ${index + 1} з ${count}`} onError={() => markBroken(current.image_id)} />}
+        {count > 1 && (
+          <>
+            <button className="gallery-nav prev" type="button" onClick={() => go(-1)} aria-label="Попереднє фото">‹</button>
+            <button className="gallery-nav next" type="button" onClick={() => go(1)} aria-label="Наступне фото">›</button>
+            <span className="gallery-count">{index + 1} / {count}</span>
+          </>
+        )}
+      </div>
+      {count > 1 && (
+        <div className="gallery-thumbs">
+          {images.map((image, position) => (
+            <button
+              className={position === index ? "active" : ""}
+              type="button"
+              key={image.image_id}
+              onClick={() => setIndex(position)}
+              aria-label={`Показати фото ${position + 1}`}
+              aria-current={position === index}
+            >
+              <img
+                src={image.thumbnail_url || image.image_url}
+                alt=""
+                loading="lazy"
+                onError={(event) => { if (event.currentTarget.src !== new URL(image.image_url, window.location.href).href) event.currentTarget.src = image.image_url; }}
+              />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -858,7 +1103,7 @@ function ListingGrid({ listings, categoryNames, favorites, busy, onFavorite }: {
                 <time dateTime={listing.created_at}>{formatAge(listing.created_at)}</time>
               </div>
               <h3>{listing.title}</h3>
-              <p>{listing.description}</p>
+              {listing.description && <p>{listing.description}</p>}
               <div className="card-foot">
                 <strong className="price">{formatPrice(listing.price)}</strong>
                 <span className="condition">{CONDITION_LABELS[listing.condition]}</span>
@@ -890,6 +1135,7 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
   const [listing, setListing] = useState<Listing | null>(null);
   const [contact, setContact] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [confirmingWithdraw, setConfirmingWithdraw] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -904,6 +1150,13 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
     finally { onBusy(false); }
   }
 
+  async function withdrawOwn() {
+    onBusy(true);
+    try { await deleteListing(listingId); onNotice("Оголошення знято з публікації"); navigate("/my"); }
+    catch (requestError) { onError(errorText(requestError)); }
+    finally { onBusy(false); setConfirmingWithdraw(false); }
+  }
+
   async function moderate() {
     const reason = window.prompt("Причина зняття оголошення (5–500 символів):");
     if (!reason) return;
@@ -915,18 +1168,36 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
 
   if (loading) return <PageLoading />;
   if (!listing) return <NotFoundPage />;
+  const isOwner = Boolean(user && user.user_id === listing.user_id);
   return (
     <main className="page-main listing-detail-page">
       <Link className="back-link" to="/listings">← До оголошень</Link>
       <article className="listing-detail">
-        <ListingImage listing={listing} large />
+        <ListingGallery listing={listing} />
         <div className="listing-detail-content">
           <div className="card-meta"><span>{categoryNames.get(listing.category_id) ?? "Інше"}</span><span>{CONDITION_LABELS[listing.condition]}</span></div>
-          <h1>{listing.title}</h1><strong className="price detail-price">{formatPrice(listing.price)}</strong><p className="detail-description">{listing.description}</p>
+          <h1>{listing.title}</h1><strong className="price detail-price">{formatPrice(listing.price)}</strong>{listing.description && <p className="detail-description">{listing.description}</p>}
           {contact && <div className="contact-box"><span>Контакт продавця</span><strong>{contact}</strong></div>}
           <div className="detail-actions">
-            <button className="button button-primary" disabled={busy} onClick={() => void revealContact()}>{user ? "Показати контакт" : "Увійти, щоб побачити контакт"}</button>
-            <button className="button button-light" disabled={busy} onClick={() => onFavorite(listing.id)}>{favorites.has(listing.id) ? "♥ В обраному" : "♡ Додати в обране"}</button>
+            {isOwner ? (
+              <>
+                <Link className="button button-primary" to={`/listings/${listing.id}/edit`}>Редагувати оголошення</Link>
+                {confirmingWithdraw ? (
+                  <div className="confirm-row">
+                    <span>Зняти з публікації?</span>
+                    <button className="button button-danger" disabled={busy} onClick={() => void withdrawOwn()}>Так, зняти</button>
+                    <button className="button button-text" onClick={() => setConfirmingWithdraw(false)}>Ні</button>
+                  </div>
+                ) : (
+                  <button className="button button-light" disabled={busy} onClick={() => setConfirmingWithdraw(true)}>Зняти з публікації</button>
+                )}
+              </>
+            ) : (
+              <>
+                <button className="button button-primary" disabled={busy} onClick={() => void revealContact()}>{user ? "Показати контакт" : "Увійти, щоб побачити контакт"}</button>
+                <button className="button button-light" disabled={busy} onClick={() => onFavorite(listing.id)}>{favorites.has(listing.id) ? "♥ В обраному" : "♡ Додати в обране"}</button>
+              </>
+            )}
             {user?.role === "ADMIN" && <button className="button button-danger" disabled={busy} onClick={() => void moderate()}>Зняти з публікації</button>}
           </div>
         </div>
@@ -977,6 +1248,7 @@ function ProfilePage({ user, authChecked }: { user: CurrentUser | null; authChec
         <div><span>Email НаУКМА</span><strong>{user.email}</strong></div>
         <div><span>Роль</span><strong>{user.role === "ADMIN" ? "Адміністратор" : "Студент"}</strong></div>
       </section>
+      <Link className="button button-light profile-link" to="/my">Мої оголошення</Link>
     </main>
   );
 }
@@ -998,7 +1270,8 @@ function NotFoundPage() { return <main className="page-main auth-required"><span
 function ListingImage({ listing, large = false }: { listing: Listing; large?: boolean }) {
   const source = [...listing.images].sort((a, b) => a.display_order - b.display_order)[0]?.image_url;
   const [failed, setFailed] = useState(false);
-  return <div className={`listing-image ${large ? "large" : ""} ${!source || failed ? "fallback" : ""}`}>{source && !failed ? <img src={source} alt="" onError={() => setFailed(true)} /> : <span aria-hidden="true">Б</span>}</div>;
+  const count = listing.images.length;
+  return <div className={`listing-image ${large ? "large" : ""} ${!source || failed ? "fallback" : ""}`}>{source && !failed ? <img src={source} alt="" onError={() => setFailed(true)} /> : <span aria-hidden="true">Б</span>}{!large && count > 1 && <span className="photo-count" aria-label={`Фото: ${count}`}>{count} фото</span>}</div>;
 }
 
 function Footer() {

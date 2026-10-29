@@ -4,6 +4,7 @@ import type {
   Listing,
   ListingCreatePayload,
   ListingFilters,
+  ListingUpdatePayload,
   ListingWithContact,
   SellerContact,
   UploadedImage,
@@ -115,6 +116,21 @@ export function createListing(payload: ListingCreatePayload): Promise<ListingWit
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function getMyListings(): Promise<Listing[]> {
+  return apiFetch<Listing[]>("/listings/my");
+}
+
+export function updateListing(listingId: string, payload: ListingUpdatePayload): Promise<Listing> {
+  return apiFetch<Listing>(`/listings/${listingId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteListing(listingId: string): Promise<void> {
+  return apiFetch<void>(`/listings/${listingId}`, { method: "DELETE" });
 }
 
 export function getFavorites(): Promise<Listing[]> {

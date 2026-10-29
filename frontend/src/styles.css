@@ -412,7 +412,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
 .photo-tile, .photo-add { position: relative; aspect-ratio: 1; border-radius: 14px; overflow: hidden; }
 .photo-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.photo-tile button { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border: 0; border-radius: 50%; background: rgba(22, 51, 38, 0.78); color: #fff; font-size: 16px; line-height: 1; cursor: pointer; }
+.photo-remove { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border: 0; border-radius: 50%; background: rgba(22, 51, 38, 0.78); color: #fff; font-size: 16px; line-height: 1; cursor: pointer; }
 .photo-cover { position: absolute; left: 6px; bottom: 6px; padding: 3px 8px; border-radius: 999px; background: var(--lime); color: #163326; font-size: 10px; font-weight: 800; }
 .photo-add { display: grid; place-content: center; justify-items: center; gap: 2px; border: 1px dashed #b9c1b9; color: var(--green); cursor: pointer; background: #f9f9f5; }
 .photo-add:hover { border-color: var(--green); }
@@ -422,3 +422,45 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .form-error { margin: 0; padding: 12px 14px; border-radius: 12px; background: #f5dfdc; color: var(--danger); font-size: 14px; font-weight: 700; }
 .form-actions { display: flex; align-items: center; gap: 10px; }
 @media (max-width: 760px) { .form-block { padding: 16px; } .form-row { grid-template-columns: minmax(0, 1fr); } }
+.photo-make-cover { position: absolute; left: 6px; right: 6px; bottom: 6px; padding: 5px 6px; border: 0; border-radius: 999px; background: rgba(255, 255, 255, 0.92); color: var(--green); font-size: 10px; font-weight: 800; cursor: pointer; opacity: 0; transition: opacity 140ms ease; }
+.photo-tile:hover .photo-make-cover, .photo-make-cover:focus-visible { opacity: 1; }
+@media (hover: none) { .photo-make-cover { opacity: 1; } }
+
+/* Галерея на сторінці оголошення */
+.gallery { display: flex; flex-direction: column; min-width: 0; background: #e6e8e2; outline: none; }
+.gallery:focus-visible .gallery-stage { box-shadow: inset 0 0 0 3px rgba(15, 91, 69, 0.45); }
+.gallery-stage { position: relative; flex: 1; min-height: 440px; display: grid; place-items: center; overflow: hidden; }
+.gallery-stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.gallery-fallback { width: 96px; height: 96px; display: grid; place-items: center; border-radius: 30px 30px 10px 30px; background: var(--green); color: var(--lime); font-family: "Unbounded", sans-serif; font-size: 40px; transform: rotate(-5deg); }
+.gallery-nav { position: absolute; top: 50%; width: 42px; height: 42px; margin-top: -21px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.92); color: var(--green); font-size: 26px; line-height: 1; padding-bottom: 3px; cursor: pointer; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16); }
+.gallery-nav:hover { background: var(--lime); color: #163326; }
+.gallery-nav.prev { left: 14px; }
+.gallery-nav.next { right: 14px; }
+.gallery-count { position: absolute; right: 14px; bottom: 14px; padding: 5px 11px; border-radius: 999px; background: rgba(22, 51, 38, 0.78); color: #fff; font-size: 12px; font-weight: 800; }
+.gallery-thumbs { display: flex; gap: 8px; padding: 10px; overflow-x: auto; background: #dfe3dc; }
+.gallery-thumbs button { flex: none; width: 74px; height: 74px; padding: 0; border: 2px solid transparent; border-radius: 12px; overflow: hidden; background: #cfd5cd; cursor: pointer; opacity: 0.72; transition: opacity 140ms ease, border-color 140ms ease; }
+.gallery-thumbs button:hover { opacity: 1; }
+.gallery-thumbs button.active { opacity: 1; border-color: var(--green); }
+.gallery-thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-count { position: absolute; left: 10px; bottom: 10px; padding: 4px 9px; border-radius: 999px; background: rgba(22, 51, 38, 0.78); color: #fff; font-size: 11px; font-weight: 800; }
+.listing-image { position: relative; }
+.confirm-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-radius: 14px; background: #f5dfdc; color: var(--danger); font-size: 14px; font-weight: 700; }
+.confirm-row span { margin-right: auto; }
+
+/* Мої оголошення */
+.my-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.segmented { display: inline-flex; padding: 4px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.segmented button { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 16px; border: 0; border-radius: 10px; background: transparent; color: #3d4842; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.segmented button b { min-width: 22px; padding: 2px 6px; border-radius: 999px; background: #edf0eb; color: #5c6861; font-size: 11px; text-align: center; }
+.segmented button.active { background: var(--green); color: #fff; }
+.segmented button.active b { background: var(--lime); color: #163326; }
+.my-actions { display: flex; align-items: center; gap: 8px; padding: 0 16px 16px; }
+.my-actions > span { margin-right: auto; color: var(--danger); font-size: 13px; font-weight: 700; }
+.my-actions .button { padding: 10px 16px; font-size: 13px; }
+.listing-card.my-card:hover { transform: none; }
+.card-meta .status-chip { background: #e3f3d0; color: #2c6a2a; }
+.card-meta .status-chip.status-WITHDRAWN, .card-meta .status-chip.status-SOLD { background: #ecece7; color: #6a716b; }
+.card-meta .status-chip.status-REMOVED_BY_MODERATOR { background: #f5dfdc; color: var(--danger); }
+.card-meta .status-chip.status-RESERVED { background: #fbeccc; color: #8a5a10; }
+.profile-link { margin-top: 18px; }
+@media (max-width: 760px) { .gallery-stage { min-height: 300px; } .gallery-thumbs button { width: 62px; height: 62px; } }

@@ -12,6 +12,7 @@ export type ListingCondition = "NEW" | "LIKE_NEW" | "GOOD" | "USED";
 export interface ListingImage {
   image_id: string;
   image_url: string;
+  thumbnail_url?: string | null;
   display_order: number;
 }
 
@@ -48,6 +49,15 @@ export interface ListingCreatePayload {
   condition: ListingCondition;
   contact: string;
   image_urls: string[];
+}
+
+export interface ListingUpdatePayload {
+  title?: string;
+  description?: string;
+  price?: number;
+  condition?: ListingCondition;
+  contact?: string;
+  image_urls?: string[];
 }
 
 export interface Category {
