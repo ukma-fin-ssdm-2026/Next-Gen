@@ -186,10 +186,22 @@ function App() {
         <Route
           path="/"
           element={
+            <HomePage
+              categoryNames={categoryNames}
+              user={user}
+              favorites={favorites}
+              busy={busy}
+              onFavorite={(id) => void toggleFavorite(id)}
+              onError={setError}
+            />
+          }
+        />
+        <Route
+          path="/listings"
+          element={
             <CatalogPage
               categories={categories}
               categoryNames={categoryNames}
-              user={user}
               favorites={favorites}
               busy={busy}
               onFavorite={(id) => void toggleFavorite(id)}
@@ -248,7 +260,7 @@ function Header({ user, authChecked, busy, onLogout }: {
         <span><strong>Барахолка</strong><small>НаУКМА</small></span>
       </Link>
       <nav className="topnav" aria-label="Основна навігація">
-        <NavLink to="/" end>Оголошення</NavLink>
+        <NavLink to="/listings">Оголошення</NavLink>
         {user && <NavLink to="/favorites">Обране</NavLink>}
         {user && <NavLink to="/profile">Профіль</NavLink>}
       </nav>
@@ -274,8 +286,7 @@ function Header({ user, authChecked, busy, onLogout }: {
   );
 }
 
-function CatalogPage({ categories, categoryNames, user, favorites, busy, onFavorite, onError }: {
-  categories: Category[];
+function HomePage({ categoryNames, user, favorites, busy, onFavorite, onError }: {
   categoryNames: Map<string, string>;
   user: CurrentUser | null;
   favorites: Set<string>;
@@ -284,6 +295,68 @@ function CatalogPage({ categories, categoryNames, user, favorites, busy, onFavor
   onError: (message: string) => void;
 }) {
   const currentLoginUrl = useCurrentLoginUrl();
+  const [recentListings, setRecentListings] = useState<Listing[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getListings(INITIAL_FILTERS, 4)
+      .then(setRecentListings)
+      .catch((requestError) => onError(errorText(requestError)))
+      .finally(() => setLoading(false));
+  }, [onError]);
+
+  return (
+    <main>
+      <section className="hero">
+        <div className="hero-copy">
+          <span className="eyebrow">Маркетплейс могилянської спільноти</span>
+          <h1>Речі знаходять нових власників тут.</h1>
+          <p>Купуйте й продавайте всередині НаУКМА — без зайвих чатів, випадкових людей і загублених оголошень.</p>
+          <div className="hero-actions">
+            <Link className="button button-primary" to="/listings">Переглянути оголошення</Link>
+            {!user && <a className="button button-light" href={currentLoginUrl}>Приєднатися</a>}
+          </div>
+          <div className="trust-row"><span>✓ Вхід через НаУКМА</span><span>✓ Контакти лише для студентів</span></div>
+        </div>
+        <div className="hero-card" aria-hidden="true">
+          <div className="hero-orbit orbit-one" /><div className="hero-orbit orbit-two" />
+          <div className="hero-product"><span className="product-icon">⌁</span><strong>Знайшлося!</strong><small>саме те, що треба</small></div>
+          <span className="floating-tag tag-one">Книги</span><span className="floating-tag tag-two">Техніка</span><span className="floating-tag tag-three">Одяг</span>
+        </div>
+      </section>
+
+      <section className="catalog-section recent-section">
+        <div className="section-heading">
+          <div><span className="eyebrow dark">Щойно додали</span><h2>Нещодавні оголошення</h2></div>
+          <Link className="button button-light" to="/listings">Весь каталог →</Link>
+        </div>
+        {loading ? <ListingSkeleton /> : recentListings.length ? (
+          <ListingGrid listings={recentListings} categoryNames={categoryNames} favorites={favorites} busy={busy} onFavorite={onFavorite} />
+        ) : (
+          <div className="empty-state"><span>⌁</span><h3>Оголошень поки немає</h3><p>Перші пропозиції з’являться тут.</p></div>
+        )}
+      </section>
+
+      <section className="how-section">
+        <div><span className="eyebrow dark">Без зайвого клопоту</span><h2>Три кроки до вдалої знахідки</h2></div>
+        <div className="steps">
+          <article><span>01</span><h3>Знайдіть</h3><p>Скористайтеся пошуком і фільтрами каталогу.</p></article>
+          <article><span>02</span><h3>Увійдіть</h3><p>Підтвердьте належність до спільноти через Microsoft.</p></article>
+          <article><span>03</span><h3>Домовтеся</h3><p>Отримайте контакт продавця і напишіть напряму.</p></article>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function CatalogPage({ categories, categoryNames, favorites, busy, onFavorite, onError }: {
+  categories: Category[];
+  categoryNames: Map<string, string>;
+  favorites: Set<string>;
+  busy: boolean;
+  onFavorite: (id: string) => void;
+  onError: (message: string) => void;
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = useMemo(() => filtersFromParams(searchParams), [searchParams]);
   const [draftFilters, setDraftFilters] = useState<ListingFilters>(filters);
@@ -310,43 +383,16 @@ function CatalogPage({ categories, categoryNames, user, favorites, busy, onFavor
   }
 
   return (
-    <main>
-      <section className="hero">
-        <div className="hero-copy">
-          <span className="eyebrow">Маркетплейс могилянської спільноти</span>
-          <h1>Речі знаходять нових власників тут.</h1>
-          <p>Купуйте й продавайте всередині НаУКМА — без зайвих чатів, випадкових людей і загублених оголошень.</p>
-          <div className="hero-actions">
-            <a className="button button-primary" href="#catalog">Переглянути оголошення</a>
-            {!user && <a className="button button-light" href={currentLoginUrl}>Приєднатися</a>}
-          </div>
-          <div className="trust-row"><span>✓ Вхід через НаУКМА</span><span>✓ Контакти лише для студентів</span></div>
-        </div>
-        <div className="hero-card" aria-hidden="true">
-          <div className="hero-orbit orbit-one" /><div className="hero-orbit orbit-two" />
-          <div className="hero-product"><span className="product-icon">⌁</span><strong>Знайшлося!</strong><small>саме те, що треба</small></div>
-          <span className="floating-tag tag-one">Книги</span><span className="floating-tag tag-two">Техніка</span><span className="floating-tag tag-three">Одяг</span>
-        </div>
-      </section>
-
-      <section className="catalog-section" id="catalog">
+    <main className="page-main catalog-page">
+      <section>
         <div className="section-heading">
-          <div><span className="eyebrow dark">Актуальні пропозиції</span><h2>Оголошення</h2></div>
+          <div><span className="eyebrow dark">Весь маркетплейс</span><h1>Оголошення</h1></div>
           <span className="result-count">{loading ? "Завантаження…" : `${listings.length} знайдено`}</span>
         </div>
         <FilterForm filters={draftFilters} categories={categories} onChange={setDraftFilters} onSubmit={applyFilters} onClear={clearFilters} />
         {loading ? <ListingSkeleton /> : listings.length ? (
           <ListingGrid listings={listings} categoryNames={categoryNames} favorites={favorites} busy={busy} onFavorite={onFavorite} />
         ) : <EmptyState onClear={clearFilters} />}
-      </section>
-
-      <section className="how-section">
-        <div><span className="eyebrow dark">Без зайвого клопоту</span><h2>Три кроки до вдалої знахідки</h2></div>
-        <div className="steps">
-          <article><span>01</span><h3>Знайдіть</h3><p>Скористайтеся пошуком і фільтрами каталогу.</p></article>
-          <article><span>02</span><h3>Увійдіть</h3><p>Підтвердьте належність до спільноти через Microsoft.</p></article>
-          <article><span>03</span><h3>Домовтеся</h3><p>Отримайте контакт продавця і напишіть напряму.</p></article>
-        </div>
       </section>
     </main>
   );
@@ -440,7 +486,7 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
     const reason = window.prompt("Причина зняття оголошення (5–500 символів):");
     if (!reason) return;
     onBusy(true);
-    try { await moderateListing(listingId, reason); onNotice("Оголошення знято з публікації"); navigate("/"); }
+    try { await moderateListing(listingId, reason); onNotice("Оголошення знято з публікації"); navigate("/listings"); }
     catch (requestError) { onError(errorText(requestError)); }
     finally { onBusy(false); }
   }
@@ -449,7 +495,7 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
   if (!listing) return <NotFoundPage />;
   return (
     <main className="page-main listing-detail-page">
-      <Link className="back-link" to="/">← До оголошень</Link>
+      <Link className="back-link" to="/listings">← До оголошень</Link>
       <article className="listing-detail">
         <ListingImage listing={listing} large />
         <div className="listing-detail-content">
@@ -491,7 +537,7 @@ function FavoritesPage({ user, authChecked, categoryNames, favorites, busy, onFa
       {loading ? <ListingSkeleton /> : items.length ? (
         <ListingGrid listings={items} categoryNames={categoryNames} favorites={favorites} busy={busy} onFavorite={onFavorite} />
       ) : (
-        <div className="empty-state"><span>♡</span><h3>Тут поки порожньо</h3><p>Зберігайте цікаві оголошення, щоб не загубити їх.</p><Link className="button button-primary" to="/">Перейти до каталогу</Link></div>
+        <div className="empty-state"><span>♡</span><h3>Тут поки порожньо</h3><p>Зберігайте цікаві оголошення, щоб не загубити їх.</p><Link className="button button-primary" to="/listings">Перейти до каталогу</Link></div>
       )}
     </main>
   );

@@ -110,8 +110,16 @@ button { color: inherit; }
 
 .catalog-section, .how-section { padding: 76px clamp(22px, 6vw, 94px); }
 .section-heading { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin-bottom: 32px; }
-.section-heading h2, .how-section h2 { font-size: clamp(30px, 4vw, 48px); margin-top: 10px; }
+.section-heading h1, .section-heading h2, .how-section h2 {
+  font-family: "Unbounded", sans-serif;
+  letter-spacing: -0.055em;
+  font-size: clamp(30px, 4vw, 48px);
+  margin: 10px 0 0;
+}
 .result-count { color: var(--muted); font-size: 13px; font-weight: 700; }
+.recent-section { background: #f2f1eb; }
+.recent-section .listing-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.catalog-page { background: #f6f4ee; }
 
 .filters { display: grid; grid-template-columns: minmax(220px, 1.6fr) repeat(4, minmax(120px, 0.75fr)) auto auto; gap: 10px; align-items: end; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 14px; margin-bottom: 30px; }
 .filters label { display: grid; gap: 7px; }
@@ -215,6 +223,7 @@ footer p { color: rgba(255,255,255,0.55); font-size: 11px; text-align: right; }
   .filters { grid-template-columns: repeat(3, 1fr); }
   .search-field { grid-column: span 2; }
   .listing-grid { grid-template-columns: repeat(3, 1fr); }
+  .recent-section .listing-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .how-section { grid-template-columns: 1fr; gap: 34px; }
 }
 
@@ -238,6 +247,7 @@ footer p { color: rgba(255,255,255,0.55); font-size: 11px; text-align: right; }
   .search-field, .filters label:nth-of-type(2), .filters label:nth-of-type(5) { grid-column: span 2; }
   .filter-submit { grid-column: span 1; }
   .listing-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .recent-section .listing-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .listing-card { min-height: 365px; border-radius: 16px; }
   .listing-image { height: 170px; }
   .card-body { padding: 14px; }
@@ -263,6 +273,7 @@ footer p { color: rgba(255,255,255,0.55); font-size: 11px; text-align: right; }
   .brand > span:last-child { display: none; }
   .hero h1 { font-size: 38px; }
   .listing-grid { grid-template-columns: 1fr; }
+  .recent-section .listing-grid { grid-template-columns: 1fr; }
   .listing-card { min-height: 390px; }
   .listing-image { height: 210px; }
   .section-heading { align-items: flex-start; flex-direction: column; gap: 8px; }

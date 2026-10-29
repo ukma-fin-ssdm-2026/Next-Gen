@@ -80,8 +80,11 @@ export function getCategories(): Promise<Category[]> {
   return apiFetch<Category[]>("/categories");
 }
 
-export function getListings(filters: ListingFilters): Promise<Listing[]> {
-  const params = new URLSearchParams({ limit: "100", sort: filters.sort });
+export function getListings(
+  filters: ListingFilters,
+  limit = 100,
+): Promise<Listing[]> {
+  const params = new URLSearchParams({ limit: String(limit), sort: filters.sort });
   if (filters.q.trim()) params.set("q", filters.q.trim());
   if (filters.categoryId) params.set("category_id", filters.categoryId);
   if (filters.minPrice) params.set("min_price", filters.minPrice);
