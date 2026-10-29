@@ -252,6 +252,17 @@ footer p { color: rgba(255,255,255,0.55); font-size: 11px; text-align: right; }
 .account-head small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-dropdown a, .account-dropdown button { padding: 10px 12px; border: 0; border-radius: 10px; background: none; color: var(--ink); font-size: 14px; font-weight: 700; text-align: left; cursor: pointer; }
 .account-dropdown a:hover, .account-dropdown button:hover { background: #f1f3ee; }
+/* Єдиний стиль у шапці: плаский, як «Оголошення»; виділяється лише «Створити» */
+.header-actions { gap: 6px; }
+.topnav { margin: 0; }
+.topnav a, .header-actions .icon-button, .account-trigger { height: 42px; border: 0; border-radius: 12px; background: transparent; color: #3d4842; transition: background 160ms ease, color 160ms ease; }
+.topnav a { display: inline-flex; align-items: center; padding: 0 14px; }
+.header-actions .icon-button { width: 42px; }
+.topnav a:hover, .header-actions .icon-button:hover, .account-trigger:hover, .account-trigger[aria-expanded="true"] { background: rgba(15, 91, 69, 0.07); color: var(--green); }
+.topnav a.active, .header-actions .icon-button.active { color: var(--green); }
+.account-trigger { padding: 0 10px 0 6px; }
+.account-trigger .avatar { width: 30px; height: 30px; }
+.create-button { height: 42px; padding: 0 18px; border-radius: 12px; display: inline-flex; align-items: center; margin-left: 4px; }
 .fab { display: none; }
 
 /* ===== Бургер-меню ===== */
