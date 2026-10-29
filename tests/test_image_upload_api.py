@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from src.api.deps import category_service, get_image_storage, get_listing_service
 from src.api.main import app
 from src.domain.listings import SEED_CATEGORY_ID
-from src.repositories.image_storage import LocalImageStorage
+from src.repositories.image_storage import LocalImageStorage, MAX_IMAGE_FILE_SIZE_BYTES
 from src.services.listings import ListingService
 from tests.conftest import make_dummy_jpeg, make_dummy_png
 
@@ -114,6 +114,57 @@ def test_upload_images_rejects_corrupted_file_with_422(
     assert "detail" in response.json()
 
 
+def test_upload_oversized_file_rejected_and_rolls_back_batch(
+    client: TestClient,
+    tmp_path: Path,
+    login_as,
+) -> None:
+    """[TP-023] [FR-002] [TM-08]
+    Потокова перевірка відхиляє файл >10 МБ і відкочує вже записані файли пакета.
+    """
+    local_storage = LocalImageStorage(tmp_path)
+    app.dependency_overrides[get_image_storage] = lambda: local_storage
+    try:
+        login_as()
+        oversized = b"x" * (MAX_IMAGE_FILE_SIZE_BYTES + 1024)
+        response = client.post(
+            "/api/v1/listings/images",
+            files=[
+                ("files", ("ok.jpg", make_dummy_jpeg(80, 80), "image/jpeg")),
+                ("files", ("huge.jpg", oversized, "image/jpeg")),
+            ],
+        )
+        assert response.status_code == 422
+        assert list(tmp_path.glob("*.webp")) == []
+    finally:
+        app.dependency_overrides.pop(get_image_storage, None)
+
+
+def test_cannot_attach_staged_image_uploaded_by_another_user(
+    client: TestClient,
+    listing_payload: dict[str, object],
+    login_as,
+) -> None:
+    """[TP-023] [SEC-001] [TM-02] [TM-08]
+    Користувач B не може створити оголошення з фотографією, яку завантажив користувач A.
+    """
+    login_as()
+    up_res = client.post(
+        "/api/v1/listings/images",
+        files=[("files", ("a.jpg", make_dummy_jpeg(90, 90), "image/jpeg"))],
+    )
+    assert up_res.status_code == 201
+    key_a = up_res.json()[0]["storage_key"]
+
+    login_as()
+    bad_create = client.post(
+        "/api/v1/listings",
+        json={**listing_payload, "image_urls": [key_a]},
+    )
+    assert bad_create.status_code == 422
+    assert "іншим користувачем" in bad_create.json()["detail"][0]["msg"]
+
+
 def test_get_uploaded_image_serves_webp(client: TestClient, login_as) -> None:
     """[TP-023] [FR-002]
     Отримання завантаженого зображення за ендпоінтом /uploads/{storage_key}.
@@ -161,7 +212,7 @@ def test_full_listing_lifecycle_with_local_image_storage(
     app.dependency_overrides[get_listing_service] = lambda: custom_service
 
     try:
-        user = login_as()
+        login_as()
 
         # 1. Завантаження двох зображень у LocalImageStorage
         up_res = client.post(
@@ -186,11 +237,7 @@ def test_full_listing_lifecycle_with_local_image_storage(
             "condition": "GOOD",
             "image_urls": keys,
         }
-        create_res = client.post(
-            "/api/v1/listings",
-            headers={"X-Actor-Id": str(user.user_id)},
-            json=payload,
-        )
+        create_res = client.post("/api/v1/listings", json=payload)
         assert create_res.status_code == 201
         listing_id = create_res.json()["id"]
 
@@ -205,7 +252,6 @@ def test_full_listing_lifecycle_with_local_image_storage(
         # Замінюємо: залишаємо keys[0], видаляємо keys[1], додаємо new_key
         patch_res = client.patch(
             f"/api/v1/listings/{listing_id}",
-            headers={"X-Actor-Id": str(user.user_id)},
             json={"image_urls": [keys[0], new_key]},
         )
         assert patch_res.status_code == 200

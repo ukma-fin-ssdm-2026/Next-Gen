@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 import io
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -170,9 +170,14 @@ def login_as(client: TestClient) -> LoginAs:
     app.dependency_overrides[get_auth_session_store] = lambda: sessions
     app.dependency_overrides[get_auth_service] = lambda: service
 
-    def _login(role: UserRole = UserRole.USER, is_blocked: bool = False) -> User:
+    def _login(
+        role: UserRole = UserRole.USER,
+        is_blocked: bool = False,
+        user_id: UUID | None = None,
+    ) -> User:
         user = users.save(
             User(
+                user_id=user_id or uuid4(),
                 tenant_id=uuid4(),
                 entra_object_id=uuid4(),
                 email=f"user-{uuid4().hex[:8]}@ukma.edu.ua",

@@ -13,7 +13,7 @@ paths:
       description: Приймає від 1 до 10 файлів через multipart/form-data, перевіряє
         фактичне декодування (JPEG, PNG, WebP, HEIC/HEIF), видаляє метадані (EXIF/GPS/XMP),
         оптимізує розмір (до 1600 px) та створює thumbnail (до 400 px) у WebP quality=80
-        (FR-002, TM-03).
+        (FR-002, TM-03, TM-08).
       operationId: upload_listing_images_api_v1_listings_images_post
       parameters:
       - name: baraholka_session
@@ -167,17 +167,6 @@ paths:
         фотографій та стану товару (FR-002). Повертає об'єкт з контактами.
       operationId: create_listing_api_v1_listings_post
       parameters:
-      - name: X-Actor-Id
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          description: Тимчасовий заголовок ідентифікації користувача (прототип)
-          title: X-Actor-Id
-        description: Тимчасовий заголовок ідентифікації користувача (прототип)
       - name: baraholka_session
         in: cookie
         required: false
@@ -213,6 +202,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Validation Error
           content:
@@ -228,17 +223,6 @@ paths:
         користувача з відповідним статусом кожного оголошення (FR-005).
       operationId: get_my_listings_api_v1_listings_my_get
       parameters:
-      - name: X-Actor-Id
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          description: Тимчасовий заголовок ідентифікації користувача (прототип)
-          title: X-Actor-Id
-        description: Тимчасовий заголовок ідентифікації користувача (прототип)
       - name: baraholka_session
         in: cookie
         required: false
@@ -261,6 +245,12 @@ paths:
                 title: Response Get My Listings Api V1 Listings My Get
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -319,17 +309,6 @@ paths:
           type: string
           format: uuid
           title: Listing Id
-      - name: X-Actor-Id
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          description: Тимчасовий заголовок ідентифікації користувача (прототип)
-          title: X-Actor-Id
-        description: Тимчасовий заголовок ідентифікації користувача (прототип)
       - name: baraholka_session
         in: cookie
         required: false
@@ -392,17 +371,6 @@ paths:
           type: string
           format: uuid
           title: Listing Id
-      - name: X-Actor-Id
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          description: Тимчасовий заголовок ідентифікації користувача (прототип)
-          title: X-Actor-Id
-        description: Тимчасовий заголовок ідентифікації користувача (прототип)
       - name: baraholka_session
         in: cookie
         required: false

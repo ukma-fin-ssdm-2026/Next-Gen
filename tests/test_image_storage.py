@@ -1,5 +1,6 @@
-"""Модульні тести обробки зображень та сховища LocalImageStorage (FR-002, TM-03)."""
+"""Модульні тести обробки зображень і LocalImageStorage (FR-002, TM-03, TM-08)."""
 
+from datetime import datetime, timedelta, timezone
 import io
 from pathlib import Path
 from uuid import uuid4
@@ -333,3 +334,96 @@ def test_local_image_storage_read_image(tmp_path: Path) -> None:
 
     with pytest.raises(InvalidListingImageError):
         storage.read_image("nonexistent_0000000000000000.webp")
+
+
+def test_staged_upload_ownership_prevents_foreign_user_attaching(
+    tmp_path: Path,
+) -> None:
+    """[TP-022] [SEC-001] [TM-02] [TM-08]
+    Staged upload прив'язаний до власника; чужий користувач не прикріпить фото.
+    """
+    storage = LocalImageStorage(tmp_path)
+    user_a = uuid4()
+    user_b = uuid4()
+
+    uploaded = storage.upload_images(
+        [_make_image_bytes("JPEG", size=(90, 90))],
+        actor_id=user_a,
+    )
+    key = uploaded[0].storage_key
+    assert key is not None
+
+    with pytest.raises(InvalidListingImageError, match="іншим користувачем"):
+        storage.save_images(uuid4(), [key], actor_id=user_b)
+
+    bound = storage.save_images(uuid4(), [key], actor_id=user_a)
+    assert len(bound) == 1
+
+
+def test_staged_upload_ttl_cleanup_deletes_uncommitted_files(
+    tmp_path: Path,
+) -> None:
+    """[TP-022] [TM-08]
+    Незавершені staged-завантаження автоматично видаляються після завершення TTL.
+    """
+    clock = [datetime(2026, 10, 29, 12, 0, 0, tzinfo=timezone.utc)]
+    storage = LocalImageStorage(
+        tmp_path,
+        staged_ttl_seconds=300,
+        now_fn=lambda: clock[0],
+    )
+    user_id = uuid4()
+    uncommitted = storage.upload_images(
+        [_make_image_bytes("JPEG", size=(80, 80))],
+        actor_id=user_id,
+    )[0].storage_key
+    committed = storage.upload_images(
+        [_make_image_bytes("PNG", size=(80, 80))],
+        actor_id=user_id,
+    )[0].storage_key
+    assert uncommitted is not None and committed is not None
+    storage.save_images(uuid4(), [committed], actor_id=user_id)
+
+    clock[0] += timedelta(seconds=301)
+    expired = storage.cleanup_expired_staged()
+
+    assert uncommitted in expired
+    assert not (tmp_path / uncommitted).is_file()
+    assert not (tmp_path / f"{uncommitted[:-5]}_thumb.webp").is_file()
+    assert (tmp_path / committed).is_file()
+
+
+def test_staged_upload_quota_and_rate_limit(tmp_path: Path) -> None:
+    """[TP-022] [TM-08]
+    Квота незавершених staged-завантажень і rate limit захищають сховище від виснаження.
+    """
+    clock = [datetime(2026, 10, 29, 12, 0, 0, tzinfo=timezone.utc)]
+    storage = LocalImageStorage(
+        tmp_path,
+        max_staged_per_user=2,
+        max_requests_per_window=2,
+        rate_window_seconds=60,
+        now_fn=lambda: clock[0],
+    )
+    user_id = uuid4()
+    img = _make_image_bytes("JPEG", size=(60, 60))
+
+    first = storage.upload_images([img, img], actor_id=user_id)
+    assert len(first) == 2
+
+    with pytest.raises(InvalidListingImageError, match="квоту"):
+        storage.upload_images([img], actor_id=user_id)
+
+    # Прив'язуємо фото до оголошення — квота звільняється,
+    # але спрацьовує rate limit (2 запити за 60с)
+    storage.save_images(
+        uuid4(), [it.storage_key for it in first if it.storage_key], actor_id=user_id
+    )
+    storage.upload_images([img], actor_id=user_id)
+
+    with pytest.raises(InvalidListingImageError, match="ліміт запитів"):
+        storage.upload_images([img], actor_id=user_id)
+
+    clock[0] += timedelta(seconds=61)
+    after_window = storage.upload_images([img], actor_id=user_id)
+    assert len(after_window) == 1

@@ -16,7 +16,7 @@
 | `price` | `number` (float) | ge: 0 (негативні значення заборонені) | Ціна в гривнях | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `category_id` | `UUID` | Valid UUID | Унікальний ідентифікатор категорії | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `condition` | `string` | Enum: `NEW`, `LIKE_NEW`, `GOOD`, `USED` | Стан товару в оголошенні (`FR-002`) | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
-| `image_urls` / `images` | `array` | min: 1, max: 10, валідні серверні ключі або `/uploads/` | Фотографії оголошення з thumbnail та порядком відображення (`FR-002`, `TM-03`). Довільні зовнішні URL відхиляються | `image_urls` у `Create`/`Update`; `images` (`ListingImageResponse`) у відповідях |
+| `image_urls` / `images` | `array` | min: 1, max: 10, валідні серверні ключі або `/uploads/` | Фотографії оголошення з thumbnail та порядком відображення (`FR-002`, `TM-03`). Довільні зовнішні URL відхиляються | `image_urls` у `ListingCreate`/`ListingUpdate`; `images` (`ListingImageResponse`) у відповідях |
 | `contact` | `string` | Required on create | Контактні дані продавця (Telegram / Email) | **Приватне поле:** `ListingCreate`, `ListingUpdate`, `ListingResponse`. **Відсутнє в `ListingPublicResponse`** |
 | `user_id` | `UUID` | Auto UUID v4 | Унікальний ідентифікатор автора | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
 | `status` | `string` | Enum: `ACTIVE`, `WITHDRAWN`, `REMOVED_BY_MODERATOR`, `RESERVED`, `SOLD` | Поточний стан оголошення | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
@@ -45,8 +45,8 @@
   - `min_price` і `max_price` (Optional[float], ge=0) — межі ціни.
   - `sort` (`newest` або `oldest`, default `newest`) — порядок за датою публікації (FR-008).
 
-### 2.4 Microsoft Entra ID та ідентифікація автора змін (TM-02)
-- **Рішення:** `user_id` завжди призначається на сервері. Роутер `/api/v1/auth` реалізує Microsoft Entra ID Authorization Code Flow через MSAL, створює непрозору server-side сесію та повторно читає локального `User` для кожного захищеного запиту.
+### 2.4 Microsoft Entra ID та ідентифікація автора змін (SEC-001, TM-02)
+- **Рішення:** `user_id` завжди призначається на сервері із `CurrentUser` (`require_current_user`). Роутер `/api/v1/auth` реалізує Microsoft Entra ID Authorization Code Flow через MSAL, створює непрозору server-side сесію та повторно читає локального `User` для кожного захищеного запиту (`POST /api/v1/listings`, `PATCH /api/v1/listings/{id}`, `DELETE /api/v1/listings/{id}`, `GET /api/v1/listings/my`, `POST /api/v1/listings/images`). Клієнтські заголовки (`X-Actor-Id`) або поля `user_id` ніколи не довіряються.
 - **Обґрунтування:** Microsoft-токени та `client_secret` не потрапляють у React/browser. Cookie містить лише випадковий ID сесії з `HttpOnly` та `SameSite=Lax`; у production додається `Secure`.
 
 ### 2.5 Семантика часткового оновлення (PATCH замість PUT)
@@ -80,9 +80,10 @@
   - Основне зображення зменшується до 1600 px по довшій стороні (без апскейлу малих зображень) та стискається у WebP з quality=80.
   - Генерується thumbnail із довшою стороною до 400 px у WebP quality=80.
   - Сервер генерує випадковий UUID v4 для кожного збереженого файла (`<uuid>.webp`, `<uuid>_thumb.webp`), ігноруючи назву та шлях, передані клієнтом (захист від path traversal і колізій).
-  - Атомарність завантаження пачки: якщо хоча б один файл у запиті невалідний, жоден файл не зберігається на диск.
+  - Потокове читання файлів по одному без одночасного утримання всього пакета в оперативній пам'яті; атомарний відкат пакета, якщо будь-який файл невалідний або перевищує 10 МБ.
+  - Захист від виснаження сховища незавершеними завантаженнями (`TM-08`): кожне staged-завантаження прив'язується до `current_user.user_id` (інший користувач не може прикріпити чужий `storage_key`), діють TTL (30 хвилин) з автоматичним очищенням незавершених файлів, квота незавершених завантажень (до 20 фото на користувача) та rate limit (до 10 запитів на хвилину на користувача).
   - При оновленні фотографій оголошення (`PATCH /api/v1/listings/{id}`) замінені й більше не використовувані файли автоматично видаляються з диска.
-  - Файли зберігаються через адаптер `LocalImageStorage` у зовнішньому Docker volume, змонтованому поза writable layer API-контейнера. Контракт `ImageStorage` абстрагований для безшовної майбутньої заміни на S3-сумісне сховище.
+  - Файли зберігаються через адаптер `LocalImageStorage` (підключений у production DI за замовчуванням через `get_image_storage_dir()`) у зовнішньому Docker volume, змонтованому поза writable layer API-контейнера. Контракт `ImageStorage` абстрагований для безшовної майбутньої заміни на S3-сумісне сховище.
 
 ---
 
@@ -92,8 +93,8 @@
 |---|---|---|---|---|
 | `POST` | `/api/v1/listings/images` | Завантажити фотографії оголошення (multipart/form-data, 1..10 файлів) | 201 Created | 401 Unauthorized, 403 Forbidden, 422 Unprocessable Entity |
 | `GET` | `/api/v1/listings` | Отримати список оголошень (з пагінацією, фільтрацією та сортуванням) | 200 OK | 422 Unprocessable Entity |
-| `GET` | `/api/v1/listings/my` | Отримати історію власних оголошень продавця (активні та зняті, `FR-005`) | 200 OK | 401 Unauthorized, 422 |
-| `POST` | `/api/v1/listings` | Створити нове оголошення | 201 Created | 400 Bad Request, 401 Unauthorized, 422 |
+| `GET` | `/api/v1/listings/my` | Отримати історію власних оголошень продавця (активні та зняті, `FR-005`) | 200 OK | 401 Unauthorized, 403 Forbidden, 422 |
+| `POST` | `/api/v1/listings` | Створити нове оголошення | 201 Created | 400 Bad Request, 401 Unauthorized, 403 Forbidden, 422 |
 | `GET` | `/api/v1/listings/{id}` | Отримати деталі конкретного оголошення за ID (без контактів) | 200 OK | 404 Not Found |
 | `PATCH` | `/api/v1/listings/{id}` | Частково оновити дані оголошення | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
 | `DELETE` | `/api/v1/listings/{id}` | Видалити оголошення | 204 No Content | 401 Unauthorized, 403 Forbidden, 404 Not Found |
@@ -150,5 +151,5 @@
 > ### Нотатка «Використання ШІ»
 > - **Інструменти:** Gemini, OpenAI Codex.
 > - **Етап:** Проєктування API, розширення контракту завантаження фотографій та збереження в ImageStorage (FR-002, TM-03, TM-08).
-> - **Що згенеровано:** Опис розділу 2.10 (завантаження та нормалізація фотографій, захист від decompression bomb, видалення метаданих, thumbnail, UUID ключі та очищення при PATCH), оновлення таблиці полів і ендпоінтів.
+> - **Що згенеровано:** Опис розділу 2.10 (завантаження та нормалізація фотографій, захист від decompression bomb, видалення метаданих, thumbnail, UUID ключі, TTL/квоти staged-завантажень та очищення при PATCH), оновлення таблиці полів і ендпоінтів.
 > - **Що перевірено / відкинуто вручну:** Опис звірено з кодом `ImageStorage`, `LocalImageStorage`, роутера `POST /api/v1/listings/images` та згенерованим `openapi-generated.yaml`.

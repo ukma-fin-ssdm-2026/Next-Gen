@@ -1,4 +1,4 @@
-"""HTTP-тести каталогу та контролів безпеки TM-02 / TM-05."""
+"""HTTP-тести каталогу та контролів безпеки SEC-001 / TM-02 / TM-05."""
 
 from uuid import uuid4
 
@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.domain.listings import SEED_LISTING_ID, SEED_OWNER_ID, WITHDRAWN_LISTING_ID
+from src.domain.users import UserRole
 from tests.conftest import make_dummy_jpeg, make_dummy_png, make_dummy_webp
 
 
@@ -53,7 +54,7 @@ def test_create_without_actor_is_401(
     client: TestClient,
     listing_payload: dict[str, object],
 ) -> None:
-    """[TP-002] [FR-002] Створення оголошення без actor_id повертає HTTP 401."""
+    """[TP-002] [FR-002] Створення оголошення без сесії повертає HTTP 401."""
     response = client.post(
         "/api/v1/listings",
         json=listing_payload,
@@ -61,22 +62,84 @@ def test_create_without_actor_is_401(
     assert response.status_code == 401
 
 
-def test_patch_foreign_listing_is_403(client: TestClient) -> None:
+def test_x_actor_id_without_session_is_rejected_with_401(
+    client: TestClient,
+    listing_payload: dict[str, object],
+) -> None:
+    """[TP-002] [SEC-001] [TM-02]
+    Заголовок X-Actor-Id без серверної сесії Microsoft не приймається (401).
+    """
+    spoofed = {"X-Actor-Id": str(SEED_OWNER_ID)}
+    assert (
+        client.post(
+            "/api/v1/listings", headers=spoofed, json=listing_payload
+        ).status_code
+        == 401
+    )
+    assert (
+        client.patch(
+            f"/api/v1/listings/{SEED_LISTING_ID}",
+            headers=spoofed,
+            json={"title": "Підміна заголовка"},
+        ).status_code
+        == 401
+    )
+    assert (
+        client.delete(
+            f"/api/v1/listings/{SEED_LISTING_ID}",
+            headers=spoofed,
+        ).status_code
+        == 401
+    )
+    assert client.get("/api/v1/listings/my", headers=spoofed).status_code == 401
+
+
+def test_x_actor_id_cannot_spoof_owner_when_logged_in_as_another_user(
+    client: TestClient,
+    listing_payload: dict[str, object],
+    login_as,
+) -> None:
+    """[TP-009] [SEC-001] [TM-02]
+    Навіть за наявності сесії клієнтський X-Actor-Id ігнорується на користь сесії.
+    """
+    user_b = login_as()
+    spoofed_owner = {"X-Actor-Id": str(SEED_OWNER_ID)}
+
+    created = client.post(
+        "/api/v1/listings",
+        headers=spoofed_owner,
+        json=listing_payload,
+    )
+    assert created.status_code == 201
+    assert created.json()["user_id"] == str(user_b.user_id)
+
+    patch_foreign = client.patch(
+        f"/api/v1/listings/{SEED_LISTING_ID}",
+        headers=spoofed_owner,
+        json={"title": "Спроба підмінити власника через X-Actor-Id"},
+    )
+    assert patch_foreign.status_code == 403
+
+
+def test_patch_foreign_listing_is_403(client: TestClient, login_as) -> None:
     """[TP-009] [FR-003] Редагування чужого оголошення повертає HTTP 403."""
+    login_as()
     response = client.patch(
         f"/api/v1/listings/{SEED_LISTING_ID}",
-        headers={"X-Actor-Id": str(uuid4())},
         json={"title": "Спроба зламати чуже оголошення"},
     )
     assert response.status_code == 403
     assert "contact" not in response.json() or "detail" in response.json()
 
 
-def test_owner_patch_updates_title_and_hides_contact(client: TestClient) -> None:
+def test_owner_patch_updates_title_and_hides_contact(
+    client: TestClient,
+    login_as,
+) -> None:
     """[TP-008] [FR-003] [SEC-002] PATCH оновлює назву та не повертає контакт."""
+    login_as(user_id=SEED_OWNER_ID)
     response = client.patch(
         f"/api/v1/listings/{SEED_LISTING_ID}",
-        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
         json={"title": "Худі НаУКМА, розмір M"},
     )
     assert response.status_code == 200
@@ -85,24 +148,25 @@ def test_owner_patch_updates_title_and_hides_contact(client: TestClient) -> None
     assert body["title"] == "Худі НаУКМА, розмір M"
 
 
-def test_patch_with_explicit_null_is_422(client: TestClient) -> None:
+def test_patch_with_explicit_null_is_422(client: TestClient, login_as) -> None:
     """[TP-008] [FR-003] PATCH з невалідним null-значенням повертає 422."""
+    login_as(user_id=SEED_OWNER_ID)
     response = client.patch(
         f"/api/v1/listings/{SEED_LISTING_ID}",
-        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
         json={"title": None},
     )
     assert response.status_code == 422
 
 
-def test_delete_marks_withdrawn_and_hides_from_public(client: TestClient) -> None:
+def test_delete_marks_withdrawn_and_hides_from_public(
+    client: TestClient,
+    login_as,
+) -> None:
     """[TP-006] [FR-004]
     Зняття оголошення власником повертає 204 та приховує з каталогу.
     """
-    response = client.delete(
-        f"/api/v1/listings/{SEED_LISTING_ID}",
-        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
-    )
+    login_as(user_id=SEED_OWNER_ID)
+    response = client.delete(f"/api/v1/listings/{SEED_LISTING_ID}")
     assert response.status_code == 204
 
     get_res = client.get(f"/api/v1/listings/{SEED_LISTING_ID}")
@@ -115,6 +179,7 @@ def test_delete_marks_withdrawn_and_hides_from_public(client: TestClient) -> Non
 
 def test_delete_foreign_listing_is_403_and_preserves_listing(
     client: TestClient,
+    login_as,
 ) -> None:
     """[TP-007] [FR-004]
     Спроба зняти чуже оголошення повертає 403 та зберігає оголошення.
@@ -122,10 +187,8 @@ def test_delete_foreign_listing_is_403_and_preserves_listing(
     before = client.get(f"/api/v1/listings/{SEED_LISTING_ID}")
     assert before.status_code == 200
 
-    response = client.delete(
-        f"/api/v1/listings/{SEED_LISTING_ID}",
-        headers={"X-Actor-Id": str(uuid4())},
-    )
+    login_as()
+    response = client.delete(f"/api/v1/listings/{SEED_LISTING_ID}")
     assert response.status_code == 403
 
     after = client.get(f"/api/v1/listings/{SEED_LISTING_ID}")
@@ -169,13 +232,11 @@ def test_catalog_rejects_inverted_price_range(client: TestClient) -> None:
 def test_catalog_accepts_oldest_sort_order(
     client: TestClient,
     listing_payload: dict[str, object],
+    login_as,
 ) -> None:
     """[TP-003] [FR-008] Каталог підтримує сортування від найстаріших (sort=oldest)."""
-    created = client.post(
-        "/api/v1/listings",
-        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
-        json=listing_payload,
-    )
+    login_as(user_id=SEED_OWNER_ID)
+    created = client.post("/api/v1/listings", json=listing_payload)
     assert created.status_code == 201
 
     response = client.get("/api/v1/listings", params={"sort": "oldest"})
@@ -205,21 +266,20 @@ def test_catalog_rejects_invalid_query_boundaries(
 
 
 def test_get_my_listings_requires_actor(client: TestClient) -> None:
-    """[TP-011] [FR-005] [SEC-001] GET /listings/my без актора повертає 401."""
+    """[TP-011] [FR-005] [SEC-001] GET /listings/my без сесії повертає 401."""
     response = client.get("/api/v1/listings/my")
     assert response.status_code == 401
 
 
 def test_get_my_listings_returns_active_and_withdrawn_for_owner(
     client: TestClient,
+    login_as,
 ) -> None:
     """[TP-011] [FR-005] [SEC-001]
     GET /api/v1/listings/my повертає всі оголошення власника.
     """
-    response = client.get(
-        "/api/v1/listings/my",
-        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
-    )
+    login_as(user_id=SEED_OWNER_ID)
+    response = client.get("/api/v1/listings/my")
     assert response.status_code == 200
     payload = response.json()
     ids = {item["id"] for item in payload}
@@ -236,7 +296,7 @@ def test_create_and_patch_listing_with_images_and_condition(
     login_as,
 ) -> None:
     """[TP-001] [FR-002] [FR-003] Створення та PATCH оголошення з фотографіями."""
-    seller = login_as()
+    login_as()
     upload_res = client.post(
         "/api/v1/listings/images",
         files=[
@@ -252,11 +312,7 @@ def test_create_and_patch_listing_with_images_and_condition(
         "condition": "NEW",
         "image_urls": uploaded_keys,
     }
-    created = client.post(
-        "/api/v1/listings",
-        headers={"X-Actor-Id": str(seller.user_id)},
-        json=payload,
-    )
+    created = client.post("/api/v1/listings", json=payload)
     assert created.status_code == 201
     body = created.json()
     assert body["condition"] == "NEW"
@@ -275,7 +331,6 @@ def test_create_and_patch_listing_with_images_and_condition(
 
     patched = client.patch(
         f"/api/v1/listings/{body['id']}",
-        headers={"X-Actor-Id": str(seller.user_id)},
         json={
             "condition": "USED",
             "image_urls": [new_key],
@@ -291,17 +346,16 @@ def test_create_and_patch_listing_with_images_and_condition(
 def test_create_listing_rejects_invalid_image_url_with_422(
     client: TestClient,
     listing_payload: dict[str, object],
+    login_as,
 ) -> None:
     """[TP-002] [FR-002] Невалідний URL фотографії відхиляється HTTP 422."""
+    login_as(user_id=SEED_OWNER_ID)
     payload = {
         **listing_payload,
         "image_urls": ["ftp://invalid-scheme.example.com/photo.jpg"],
     }
-    response = client.post(
-        "/api/v1/listings",
-        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
-        json=payload,
-    )
+    response = client.post("/api/v1/listings", json=payload)
+    assert response.status_code == 422
     detail = response.json()["detail"]
     assert detail[0]["loc"] == ["body", "image_urls"]
 
@@ -309,26 +363,25 @@ def test_create_listing_rejects_invalid_image_url_with_422(
 def test_create_listing_rejects_empty_images_list_with_422(
     client: TestClient,
     listing_payload: dict[str, object],
+    login_as,
 ) -> None:
     """[TP-002] [FR-002] Порожній список зображень відхиляється HTTP 422."""
+    login_as(user_id=SEED_OWNER_ID)
     payload = {**listing_payload, "image_urls": []}
-    response = client.post(
-        "/api/v1/listings",
-        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
-        json=payload,
-    )
+    response = client.post("/api/v1/listings", json=payload)
     assert response.status_code == 422
 
 
 def test_patch_listing_failed_image_validation_preserves_state(
     client: TestClient,
+    login_as,
 ) -> None:
     """[TP-008] [FR-003] Помилка валідації фото при PATCH зберігає стан оголошення."""
     before = client.get(f"/api/v1/listings/{SEED_LISTING_ID}").json()
+    login_as(user_id=SEED_OWNER_ID)
 
     response = client.patch(
         f"/api/v1/listings/{SEED_LISTING_ID}",
-        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
         json={
             "title": "Не має зберегтися при помилці фото",
             "image_urls": ["ftp://invalid-scheme.example.com/photo.jpg"],
@@ -338,22 +391,19 @@ def test_patch_listing_failed_image_validation_preserves_state(
 
     after = client.get(f"/api/v1/listings/{SEED_LISTING_ID}").json()
     assert after == before
-    assert response.status_code == 422
 
 
 def test_create_listing_with_unknown_category_returns_400(
     client: TestClient,
     listing_payload: dict[str, object],
+    login_as,
 ) -> None:
     """[TP-002] [FR-002] [FR-012]
     Створення оголошення з неіснуючою категорією повертає 400.
     """
+    login_as(user_id=SEED_OWNER_ID)
     payload = {**listing_payload, "category_id": str(uuid4())}
-    response = client.post(
-        "/api/v1/listings",
-        headers={"X-Actor-Id": str(SEED_OWNER_ID)},
-        json=payload,
-    )
+    response = client.post("/api/v1/listings", json=payload)
     assert response.status_code == 400
     assert "не існує або була деактивована" in response.json()["detail"]
 
@@ -361,23 +411,12 @@ def test_create_listing_with_unknown_category_returns_400(
 def test_create_listing_with_deactivated_category_returns_400(
     client: TestClient,
     listing_payload: dict[str, object],
+    login_as,
 ) -> None:
     """[TP-002] [FR-002] [FR-012]
     Створення оголошення з деактивованою категорією відхиляється.
     """
-    from src.api.deps import require_current_user
-    from src.api.main import app
-    from src.domain.users import CurrentUser, UserRole
-
-    admin = CurrentUser(
-        user_id=SEED_OWNER_ID,
-        tenant_id=uuid4(),
-        entra_object_id=uuid4(),
-        email="admin@ukma.edu.ua",
-        display_name="Admin",
-        role=UserRole.ADMIN,
-    )
-    app.dependency_overrides[require_current_user] = lambda: admin
+    login_as(role=UserRole.ADMIN, user_id=SEED_OWNER_ID)
     cat_id = str(listing_payload["category_id"])
     patch_res = client.patch(
         f"/api/v1/categories/{cat_id}",
@@ -386,11 +425,7 @@ def test_create_listing_with_deactivated_category_returns_400(
     assert patch_res.status_code == 200
 
     try:
-        response = client.post(
-            "/api/v1/listings",
-            headers={"X-Actor-Id": str(SEED_OWNER_ID)},
-            json=listing_payload,
-        )
+        response = client.post("/api/v1/listings", json=listing_payload)
         assert response.status_code == 400
         assert "не існує або була деактивована" in response.json()["detail"]
     finally:
@@ -398,4 +433,3 @@ def test_create_listing_with_deactivated_category_returns_400(
             f"/api/v1/categories/{cat_id}",
             json={"is_active": True},
         )
-        app.dependency_overrides.pop(require_current_user, None)

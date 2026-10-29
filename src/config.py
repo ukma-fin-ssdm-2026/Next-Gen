@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 import os
 from pathlib import Path
+import tempfile
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -35,7 +36,7 @@ def get_image_storage_dir() -> Path:
     env_dir = os.getenv("IMAGE_STORAGE_DIR", "").strip()
     if env_dir:
         return Path(env_dir).resolve()
-    return (Path(__file__).resolve().parents[1] / "var" / "uploads").resolve()
+    return (Path(tempfile.gettempdir()) / "baraholka-uploads").resolve()
 
 
 @dataclass(frozen=True)

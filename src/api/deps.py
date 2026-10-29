@@ -1,16 +1,15 @@
 """Залежності FastAPI: збирає сервіси на краю застосунку."""
 
-from typing import Annotated, Optional
-from uuid import UUID
+from typing import Annotated
 
-from fastapi import Cookie, Depends, Header, HTTPException, Request, status
+from fastapi import Cookie, Depends, HTTPException, Request, status
 
-from src.config import ConfigurationError, EntraSettings
+from src.config import ConfigurationError, EntraSettings, get_image_storage_dir
 from src.domain.users import CurrentUser
 from src.integrations.entra import EntraOidcClient, MsalEntraOidcClient
 from src.repositories.categories import InMemoryCategoryRepository
 from src.repositories.favorites import InMemoryFavoriteRepository
-from src.repositories.image_storage import ImageStorage, InMemoryImageStorage
+from src.repositories.image_storage import ImageStorage, LocalImageStorage
 from src.repositories.listings import InMemoryListingRepository
 from src.repositories.moderation import InMemoryModerationActionRepository
 from src.repositories.users import InMemoryUserRepository
@@ -29,7 +28,7 @@ from src.services.moderation import ModerationService
 
 category_repository = InMemoryCategoryRepository.with_seed()
 listing_repository = InMemoryListingRepository.with_seed()
-image_storage: ImageStorage = InMemoryImageStorage()
+image_storage: ImageStorage = LocalImageStorage(get_image_storage_dir())
 favorite_repository = InMemoryFavoriteRepository()
 category_service = CategoryService(category_repository)
 listing_service = ListingService(
@@ -162,30 +161,3 @@ def require_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(exc),
         ) from exc
-
-
-def resolve_optional_actor_id(
-    request: Request,
-    x_actor_id: Annotated[
-        Optional[UUID],
-        Header(
-            alias="X-Actor-Id",
-            description="Тимчасовий заголовок ідентифікації користувача (прототип)",
-        ),
-    ] = None,
-    session_token: SessionCookie = None,
-    sessions: InMemoryAuthSessionStore = Depends(get_auth_session_store),
-) -> Optional[UUID]:
-    """Визначає ID користувача: пріоритет X-Actor-Id, потім активна сесія."""
-    if x_actor_id is not None:
-        return x_actor_id
-    if session_token is not None:
-        user_id = sessions.resolve(session_token)
-        if user_id is not None:
-            service = _resolve_auth_service(request)
-            try:
-                user = service.get_current_user(user_id)
-                return user.user_id
-            except (InvalidSessionError, BlockedUserError):
-                pass
-    return None

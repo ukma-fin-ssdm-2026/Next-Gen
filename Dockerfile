@@ -12,7 +12,8 @@ RUN npm run build
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    IMAGE_STORAGE_DIR=/var/lib/baraholka/uploads
 
 WORKDIR /app
 

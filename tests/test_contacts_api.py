@@ -83,8 +83,9 @@ def test_contact_disappears_after_owner_withdraws(client: TestClient, login_as) 
     """
     login_as()
     assert client.get(contact_url(SEED_LISTING_ID)).status_code == 200
-    owner = {"X-Actor-Id": str(SEED_OWNER_ID)}
-    client.delete(f"/api/v1/listings/{SEED_LISTING_ID}", headers=owner)
+    login_as(user_id=SEED_OWNER_ID)
+    assert client.delete(f"/api/v1/listings/{SEED_LISTING_ID}").status_code == 204
+    login_as()
     response = client.get(contact_url(SEED_LISTING_ID))
     assert response.status_code == 404
     assert SEED_CONTACT not in response.text
