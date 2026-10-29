@@ -5,7 +5,17 @@ from typing import Annotated
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response
+from fastapi import (
+    APIRouter,
+    Cookie,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi import status
 from fastapi.responses import RedirectResponse
 
@@ -18,11 +28,13 @@ from src.api.deps import (
     get_entra_oidc_client,
     get_entra_settings,
     get_oidc_flow_store,
+    get_profile_service,
     require_current_user,
 )
-from src.api.schemas.listings import ErrorResponse
-from src.api.schemas.users import CurrentUserResponse
+from src.api.schemas.listings import ApiValidationErrorResponse, ErrorResponse
+from src.api.schemas.users import CurrentUserResponse, ProfileUpdate
 from src.config import ConfigurationError, EntraSettings, development_auth_enabled
+from src.domain.exceptions import InvalidProfileError, ProfileNotFoundError
 from src.domain.users import CurrentUser
 from src.integrations.entra import EntraOidcClient, EntraOidcError
 from src.services.auth import (
@@ -32,6 +44,9 @@ from src.services.auth import (
     VerifiedEntraClaims,
 )
 from src.services.auth_sessions import InMemoryAuthSessionStore, InMemoryOidcFlowStore
+from src.services.profile import ProfileService
+
+MAX_AVATAR_FILE_SIZE_BYTES = 10 * 1024 * 1024
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -91,7 +106,7 @@ def _development_login_response(
     )
     current_user = service.authenticate_verified_claims(claims)
     response = RedirectResponse(
-        _frontend_destination(settings, return_to),
+        _safe_return_path(return_to) or "/",
         status_code=status.HTTP_307_TEMPORARY_REDIRECT,
     )
     response.set_cookie(
@@ -235,6 +250,26 @@ def callback(
     return response
 
 
+def _me_response(user: CurrentUser) -> CurrentUserResponse:
+    return CurrentUserResponse(
+        user_id=user.user_id,
+        email=user.email,
+        display_name=user.display_name,
+        role=user.role,
+        avatar_url=user.avatar_url,
+        contact=user.contact,
+    )
+
+
+def _profile_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, ProfileNotFoundError):
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=[{"loc": ["body"], "msg": str(exc), "type": "value_error"}],
+    )
+
+
 @router.get(
     "/me",
     response_model=CurrentUserResponse,
@@ -248,12 +283,7 @@ def callback(
 def me(
     current_user: CurrentUser = Depends(require_current_user),
 ) -> CurrentUserResponse:
-    return CurrentUserResponse(
-        user_id=current_user.user_id,
-        email=current_user.email,
-        display_name=current_user.display_name,
-        role=current_user.role,
-    )
+    return _me_response(current_user)
 
 
 @router.post(
@@ -270,3 +300,98 @@ def logout(
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     response.delete_cookie(SESSION_COOKIE_NAME, path="/")
     return response
+
+
+_PROFILE_RESPONSES = {
+    401: {"model": ErrorResponse, "description": "Not authenticated"},
+    403: {"model": ErrorResponse, "description": "Local user is blocked"},
+    422: {"model": ApiValidationErrorResponse, "description": "Validation Error"},
+}
+
+
+@router.patch(
+    "/me",
+    response_model=CurrentUserResponse,
+    summary="Оновити власний профіль",
+    description=(
+        "Змінює ім'я та/або контакти за замовчуванням. Передані поля оновлюються, "
+        "відсутні лишаються без змін; contact=null або '' очищає контакти (FR-014)."
+    ),
+    responses=_PROFILE_RESPONSES,
+)
+def update_me(
+    payload: ProfileUpdate,
+    current_user: CurrentUser = Depends(require_current_user),
+    profiles: ProfileService = Depends(get_profile_service),
+) -> CurrentUserResponse:
+    fields = payload.model_fields_set
+    try:
+        updated = profiles.update(
+            current_user,
+            display_name=payload.display_name,
+            update_name="display_name" in fields,
+            contact=payload.contact,
+            update_contact="contact" in fields,
+        )
+    except (InvalidProfileError, ProfileNotFoundError) as exc:
+        raise _profile_error(exc) from exc
+    return _me_response(updated)
+
+
+@router.put(
+    "/me/avatar",
+    response_model=CurrentUserResponse,
+    summary="Завантажити аватарку",
+    description=(
+        "Приймає один файл (JPEG, PNG, WebP, HEIC/HEIF до 10 МБ), перевіряє "
+        "декодування, видаляє метадані, нормалізує до WebP і замінює попередню "
+        "аватарку (FR-014, TM-03)."
+    ),
+    responses=_PROFILE_RESPONSES,
+)
+def put_avatar(
+    file: UploadFile = File(..., description="Файл аватарки"),
+    current_user: CurrentUser = Depends(require_current_user),
+    profiles: ProfileService = Depends(get_profile_service),
+) -> CurrentUserResponse:
+    try:
+        data = file.file.read(MAX_AVATAR_FILE_SIZE_BYTES + 1)
+    finally:
+        file.file.close()
+    if len(data) > MAX_AVATAR_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=[
+                {
+                    "loc": ["body", "file"],
+                    "msg": "Розмір файла перевищує максимально допустимі 10 МБ",
+                    "type": "value_error",
+                }
+            ],
+        )
+    try:
+        updated = profiles.set_avatar(current_user, data)
+    except (InvalidProfileError, ProfileNotFoundError) as exc:
+        raise _profile_error(exc) from exc
+    return _me_response(updated)
+
+
+@router.delete(
+    "/me/avatar",
+    response_model=CurrentUserResponse,
+    summary="Видалити аватарку",
+    responses={
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Local user is blocked"},
+        404: {"model": ErrorResponse, "description": "Profile not found"},
+    },
+)
+def delete_avatar(
+    current_user: CurrentUser = Depends(require_current_user),
+    profiles: ProfileService = Depends(get_profile_service),
+) -> CurrentUserResponse:
+    try:
+        updated = profiles.remove_avatar(current_user)
+    except ProfileNotFoundError as exc:
+        raise _profile_error(exc) from exc
+    return _me_response(updated)

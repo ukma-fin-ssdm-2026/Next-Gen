@@ -9,21 +9,42 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from src.api.deps import get_moderation_service, require_current_user
+from src.api.deps import (
+    get_moderation_service,
+    get_user_moderation_service,
+    require_current_user,
+)
 from src.api.schemas.listings import ApiValidationErrorResponse, ErrorResponse
 from src.api.schemas.moderation import (
     ModerationActionResponse,
     ModerationWithdrawRequest,
+    UserModerationRequest,
 )
 from src.domain.exceptions import (
     InvalidModerationReasonError,
+    InvalidUserModerationError,
     ListingNotFoundError,
     ModerationForbiddenError,
+    UserNotFoundError,
 )
+from src.domain.moderation import ModerationAction
 from src.domain.users import CurrentUser, UserRole
 from src.services.moderation import ModerationService
+from src.services.user_moderation import UserModerationService
 
-router = APIRouter(prefix="/admin/listings", tags=["Moderation"])
+router = APIRouter(prefix="/admin", tags=["Moderation"])
+
+
+def _action_response(action: ModerationAction) -> ModerationActionResponse:
+    return ModerationActionResponse(
+        id=action.id,
+        listing_id=action.listing_id,
+        target_user_id=action.target_user_id,
+        moderator_id=action.moderator_id,
+        action_type=action.action_type,
+        reason=action.reason,
+        created_at=action.created_at,
+    )
 
 
 def require_moderator(
@@ -39,7 +60,7 @@ def require_moderator(
 
 
 @router.post(
-    "/{listing_id}/withdraw",
+    "/listings/{listing_id}/withdraw",
     response_model=ModerationActionResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Зняти чуже оголошення з публікації (модерація)",
@@ -80,11 +101,90 @@ def withdraw_listing(
                 {"loc": ["body", "reason"], "msg": str(exc), "type": "value_error"}
             ],
         )
-    return ModerationActionResponse(
-        id=action.id,
-        listing_id=action.listing_id,
-        moderator_id=action.moderator_id,
-        action_type=action.action_type,
-        reason=action.reason,
-        created_at=action.created_at,
+    return _action_response(action)
+
+
+_USER_ACTION_RESPONSES = {
+    401: {"model": ErrorResponse, "description": "Немає валідної сесії"},
+    403: {
+        "model": ErrorResponse,
+        "description": "Немає ролі ADMIN або обліковий запис заблоковано",
+    },
+    404: {"model": ErrorResponse, "description": "Користувача не знайдено"},
+    409: {
+        "model": ErrorResponse,
+        "description": (
+            "Дія неможлива: самоблокування, адміністратор або вже в такому стані"
+        ),
+    },
+    422: {"model": ApiValidationErrorResponse, "description": "Validation Error"},
+}
+
+
+def _run_user_action(call, user_id: UUID, request: UserModerationRequest):
+    try:
+        action = call(user_id, request.reason)
+    except ModerationForbiddenError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except InvalidUserModerationError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except InvalidModerationReasonError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=[
+                {"loc": ["body", "reason"], "msg": str(exc), "type": "value_error"}
+            ],
+        )
+    return _action_response(action)
+
+
+@router.post(
+    "/users/{user_id}/block",
+    response_model=ModerationActionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Заблокувати користувача (модерація)",
+    description=(
+        "Адміністратор блокує обліковий запис з обов'язковою причиною (FR-013). "
+        "Усі сесії користувача відкликаються, вхід і мутуючі дії стають "
+        "недоступними (403), оголошення не видаляються. Не можна заблокувати "
+        "себе або іншого адміністратора."
+    ),
+    responses=_USER_ACTION_RESPONSES,
+)
+def block_user(
+    user_id: UUID,
+    request: UserModerationRequest,
+    moderator: CurrentUser = Depends(require_moderator),
+    service: UserModerationService = Depends(get_user_moderation_service),
+) -> ModerationActionResponse:
+    return _run_user_action(
+        lambda uid, reason: service.block_user(moderator, uid, reason),
+        user_id,
+        request,
+    )
+
+
+@router.post(
+    "/users/{user_id}/unblock",
+    response_model=ModerationActionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Розблокувати користувача (модерація)",
+    description=(
+        "Адміністратор знімає блокування з обов'язковою причиною (FR-013); "
+        "користувач може знову входити через Microsoft Entra ID."
+    ),
+    responses=_USER_ACTION_RESPONSES,
+)
+def unblock_user(
+    user_id: UUID,
+    request: UserModerationRequest,
+    moderator: CurrentUser = Depends(require_moderator),
+    service: UserModerationService = Depends(get_user_moderation_service),
+) -> ModerationActionResponse:
+    return _run_user_action(
+        lambda uid, reason: service.unblock_user(moderator, uid, reason),
+        user_id,
+        request,
     )

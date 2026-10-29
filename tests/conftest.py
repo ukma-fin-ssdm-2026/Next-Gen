@@ -18,6 +18,8 @@ from src.api.deps import (
     get_image_storage,
     get_listing_service,
     get_moderation_service,
+    get_profile_service,
+    get_user_moderation_service,
 )
 from src.api.main import app
 from src.domain.listings import SEED_CATEGORY_ID, SEED_IMAGE_URL
@@ -33,6 +35,8 @@ from src.services.contacts import SellerContactService
 from src.services.favorites import FavoriteService
 from src.services.listings import ListingService
 from src.services.moderation import ModerationService
+from src.services.profile import ProfileService
+from src.services.user_moderation import UserModerationService
 
 
 def make_dummy_jpeg(w: int = 100, h: int = 100, color=(255, 0, 0)) -> bytes:
@@ -151,7 +155,11 @@ LoginAs = Callable[..., User]
 
 
 @pytest.fixture
-def login_as(client: TestClient) -> LoginAs:
+def login_as(
+    client: TestClient,
+    image_storage: InMemoryImageStorage,
+    moderation_actions: InMemoryModerationActionRepository,
+) -> LoginAs:
     """Створює локального користувача і справжню серверну сесію в cookie клієнта.
 
     Не підміняє `require_current_user`: перевіряється реальний шлях
@@ -169,6 +177,10 @@ def login_as(client: TestClient) -> LoginAs:
     )
     app.dependency_overrides[get_auth_session_store] = lambda: sessions
     app.dependency_overrides[get_auth_service] = lambda: service
+    profiles = ProfileService(users, image_storage)
+    app.dependency_overrides[get_profile_service] = lambda: profiles
+    user_moderation = UserModerationService(users, moderation_actions, sessions)
+    app.dependency_overrides[get_user_moderation_service] = lambda: user_moderation
 
     def _login(
         role: UserRole = UserRole.USER,

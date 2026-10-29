@@ -15,6 +15,9 @@ class ModerationActionRepository(Protocol):
     def list_by_listing(self, listing_id: UUID) -> list[ModerationAction]:
         """Повертає історію модерації оголошення від найдавнішої дії."""
 
+    def list_by_user(self, user_id: UUID) -> list[ModerationAction]:
+        """Повертає історію модерації користувача від найдавнішої дії."""
+
 
 class InMemoryModerationActionRepository:
     """Прототипний журнал модерації в пам'яті процесу (до підключення PostgreSQL)."""
@@ -28,3 +31,6 @@ class InMemoryModerationActionRepository:
 
     def list_by_listing(self, listing_id: UUID) -> list[ModerationAction]:
         return [item for item in self._items if item.listing_id == listing_id]
+
+    def list_by_user(self, user_id: UUID) -> list[ModerationAction]:
+        return [item for item in self._items if item.target_user_id == user_id]

@@ -1,6 +1,8 @@
 """Модульні тести перетворення MSAL claims."""
 
 from datetime import datetime, timezone
+import sys
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
@@ -63,6 +65,7 @@ class FakeMsalClient:
     def __init__(self, *, fail: bool = False) -> None:
         self.fail = fail
         self.scopes: list[str] | None = None
+        self.redirect_uri: str | None = None
 
     def initiate_auth_code_flow(
         self,
@@ -71,7 +74,7 @@ class FakeMsalClient:
         redirect_uri: str,
     ) -> dict[str, str]:
         self.scopes = scopes
-        assert redirect_uri == "http://localhost:8000/api/v1/auth/callback"
+        self.redirect_uri = redirect_uri
         if self.fail:
             raise ValueError("invalid scopes")
         return {"auth_uri": "https://login.microsoftonline.com/auth", "state": "s"}
@@ -101,7 +104,56 @@ def test_oidc_begin_passes_only_non_reserved_scopes_to_msal() -> None:
 
     assert flow["state"] == "s"
     assert fake.scopes == OIDC_SCOPES == ["User.Read"]
+    assert fake.redirect_uri == "http://localhost:8000/api/v1/auth/callback"
     assert not {"openid", "profile", "offline_access"} & set(fake.scopes)
+
+
+def test_production_msal_client_is_lazy_and_keeps_entra_configuration(
+    monkeypatch,
+) -> None:
+    """[TP-AUTH-01] [FR-001] [SEC-001]
+    Lazy initialization must preserve the real production OIDC configuration.
+    """
+    fake = FakeMsalClient()
+    constructor_calls: list[dict[str, str]] = []
+
+    def confidential_client_application(**kwargs: str) -> FakeMsalClient:
+        constructor_calls.append(kwargs)
+        return fake
+
+    monkeypatch.setitem(
+        sys.modules,
+        "msal",
+        SimpleNamespace(
+            ConfidentialClientApplication=confidential_client_application,
+        ),
+    )
+    settings = EntraSettings(
+        tenant_id=UUID("11111111-1111-1111-1111-111111111111"),
+        client_id="baraholka-client-id",
+        client_secret="production-secret",
+        redirect_uri="https://baraholka.example/api/v1/auth/callback",
+        frontend_url="https://baraholka.example",
+        session_cookie_secure=True,
+    )
+
+    adapter = MsalEntraOidcClient(settings)
+    assert constructor_calls == []
+
+    adapter.begin()
+
+    assert constructor_calls == [
+        {
+            "client_id": "baraholka-client-id",
+            "client_credential": "production-secret",
+            "authority": (
+                "https://login.microsoftonline.com/"
+                "11111111-1111-1111-1111-111111111111"
+            ),
+        }
+    ]
+    assert fake.scopes == OIDC_SCOPES
+    assert fake.redirect_uri == "https://baraholka.example/api/v1/auth/callback"
 
 
 def test_oidc_begin_wraps_msal_configuration_error() -> None:

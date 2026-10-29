@@ -29,6 +29,9 @@ class User:
     user_id: UUID = field(default_factory=uuid4)
     role: UserRole = UserRole.USER
     is_blocked: bool = False
+    display_name_customized: bool = False
+    avatar_url: str | None = None
+    contact: str | None = None
     created_at: datetime = field(default_factory=utc_now)
 
 
@@ -42,3 +45,5 @@ class CurrentUser:
     email: str
     display_name: str
     role: UserRole
+    avatar_url: str | None = None
+    contact: str | None = None

@@ -35,6 +35,9 @@ ER-діаграма зберігається у файлі:
 | `display_name` | string | Personal Data | Ім'я, яке відображається у маркетплейсі |
 | `role` | enum | Required | Роль `USER` або `ADMIN` |
 | `is_blocked` | boolean | Required, default `false` | Ознака блокування облікового запису |
+| `display_name_customized` | boolean | Required, default `false` | Ознака, що ім'я змінив сам користувач; повторний вхід тоді не перезаписує його іменем з Entra (`FR-014`) |
+| `avatar_url` | string | Nullable | Публічний URL аватарки (`/uploads/{key}.webp`); файл зберігається в сховищі зображень як зображення з псевдо-ідентифікатором `user_id`, тому не підпадає під TTL staged-завантажень (`FR-014`) |
+| `contact` | string | Nullable, ≤ 300 символів, Personal Data | Контакти за замовчуванням (формат як у `Listing.contact`: основний контакт, `Тел.: …`, `Локація: …`); підставляються клієнтом у форму нового оголошення; публічно не віддаються (`FR-014`) |
 | `created_at` | datetime | Required | Час створення облікового запису |
 
 Унікальність зовнішньої ідентичності забезпечує обмеження `UNIQUE (tenant_id, entra_object_id)`. Система не приймає і не зберігає паролі Microsoft.
@@ -67,7 +70,7 @@ ER-діаграма зберігається у файлі:
 | `title` | string | Required | Заголовок оголошення |
 | `description` | text | Required | Опис оголошення |
 | `price` | decimal | Required | Ціна |
-| `contact` | string | Required, Personal Data | Email або Telegram продавця, видимий лише автентифікованим користувачам |
+| `contact` | string | Required, Personal Data | Email або Telegram продавця, видимий лише автентифікованим користувачам. Веб-клієнт може дописувати в цей самий рядок необов'язкові телефон і локацію окремими рядками (`Тел.: ...`, `Локація: ...`, див. [frontend.md](../frontend/frontend.md#контакт-телефон-і-локація)); вони мають ту саму класифікацію Personal Data |
 | `condition` | enum | Required | Стан товару |
 | `status` | enum | Required | Поточний статус оголошення |
 | `created_at` | datetime | Required | Час створення оголошення |
@@ -113,7 +116,7 @@ ER-діаграма зберігається у файлі:
 | `moderator_id` | UUID | FK → `User.user_id`, Required | Адміністратор, який виконав дію |
 | `listing_id` | UUID | FK → `Listing.listing_id`, Nullable | Оголошення, якого стосується дія |
 | `target_user_id` | UUID | FK → `User.user_id`, Nullable | Користувач, якого блокують або розблоковують |
-| `action_type` | enum | Required | `REMOVE_LISTING`, `RESTORE_LISTING`, `BLOCK_USER` або `UNBLOCK_USER` |
+| `action_type` | enum | Required | `REMOVE_LISTING`, `RESTORE_LISTING`, `BLOCK_USER` або `UNBLOCK_USER`; у коді реалізовано `WITHDRAW_LISTING` (зняття оголошення), `BLOCK_USER` та `UNBLOCK_USER` |
 | `reason` | text | Required | Причина модераційного рішення |
 | `created_at` | datetime | Required | Час виконання дії |
 
@@ -227,6 +230,8 @@ ER-діаграма зберігається у файлі:
 |---|---|---|
 | `User` | `email` | Personal Data |
 | `User` | `display_name` | Personal Data |
+| `User` | `contact` | Personal Data |
+| `User` | `avatar_url` | Personal Data (зображення користувача) |
 | `User` | `tenant_id`, `entra_object_id` | Identity Data |
 | `Listing` | `contact` | Personal Data |
 

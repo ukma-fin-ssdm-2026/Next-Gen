@@ -12,9 +12,10 @@
 | FR-008   | Фільтрація та сортування                            | Listing Service, Data Access Layer (ORM), Listing, Category | Unit-тест фільтра за категорією/ціною |
 | FR-009   | Обране                                              | Listing Service, Data Access Layer (ORM), Favorite | Інтеграційний тест додавання/видалення |
 | FR-010   | Контакти продавця                                   | Listing Service, Auth Service, Data Access Layer (ORM), Listing.contact | Unit-тест перевірки авторизації |
+| FR-014   | Профіль користувача (ім'я, аватарка, контакти)      | Profile Service, Auth Service, Image Storage, User | TP-024, TP-025 |
 | FR-011   | Модерація оголошень                                 | Moderation Service, Data Access Layer (ORM), ModerationAction, Listing.status | Unit-тест зміни статусу адміном |
 | FR-012   | Керування категоріями                               | Moderation Service, Data Access Layer (ORM), Category | Unit-тест CRUD категорій |
-| FR-013   | Блокування користувачів                             | Auth Service, Moderation Service, Data Access Layer (ORM), User.is_blocked | Unit-тест блокування входу |
+| FR-013   | Блокування користувачів                             | User Moderation Service, Auth Service, Data Access Layer (ORM), User.is_blocked, ModerationAction | TP-026, TP-027 |
 | PERF-001 | Час завантаження ≤300мс при 50 користувачах         | React SPA, API Router, Listing Service, Data Access Layer (ORM), PostgreSQL (Listing) | Навантажувальний тест |
 | REL-001  | Відновлення без втрати даних, RTO ≤5хв              | Data Access Layer (ORM), PostgreSQL Database | Хаос-експеримент (збій сервера) |
 | SEC-001  | Лише tenant НаУКМА та @ukma.edu.ua | Microsoft Entra ID, Auth Service, User.tenant_id/entra_object_id/email | Негативні тести tenant, issuer, audience, expiry, state/nonce і domain |

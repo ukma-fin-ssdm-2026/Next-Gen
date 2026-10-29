@@ -49,7 +49,8 @@ class FakeEntraOidcClient:
 
 
 @pytest.fixture
-def auth_http_client():
+def auth_http_client(monkeypatch):
+    monkeypatch.setenv("DEV_AUTH_ENABLED", "false")
     settings = EntraSettings(
         tenant_id=TENANT_ID,
         client_id=CLIENT_ID,
@@ -145,9 +146,10 @@ def test_development_login_creates_real_local_session(
     monkeypatch,
 ) -> None:
     """[FR-001] Dev login still uses the normal server-side session path."""
-    client, oidc, _, _ = auth_http_client
+    client, _, _, _ = auth_http_client
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("DEV_AUTH_ENABLED", "true")
+    app.dependency_overrides.pop(get_entra_oidc_client)
 
     response = client.get(
         "/api/v1/auth/login?next=/favorites",
@@ -155,10 +157,9 @@ def test_development_login_creates_real_local_session(
     )
 
     assert response.status_code == 307
-    assert response.headers["location"] == "http://localhost:5173/favorites"
+    assert response.headers["location"] == "/favorites"
     assert client.cookies.get("baraholka_session") is not None
     assert client.cookies.get("baraholka_oidc_state") is None
-    assert oidc.completed_response is None
 
     me_response = client.get("/api/v1/auth/me")
     assert me_response.status_code == 200
@@ -167,6 +168,8 @@ def test_development_login_creates_real_local_session(
         "email": "developer@ukma.edu.ua",
         "display_name": "Local Developer",
         "role": "USER",
+        "avatar_url": None,
+        "contact": None,
     }
 
 

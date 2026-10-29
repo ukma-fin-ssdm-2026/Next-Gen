@@ -907,12 +907,55 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      tags:
+      - Authentication
+      summary: Оновити власний профіль
+      description: Змінює ім'я та/або контакти за замовчуванням. Передані поля оновлюються,
+        відсутні лишаються без змін; contact=null або '' очищає контакти (FR-014).
+      operationId: update_me_api_v1_auth_me_patch
+      parameters:
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Local user is blocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
   /api/v1/auth/logout:
     post:
       tags:
@@ -933,12 +976,98 @@ paths:
       responses:
         '204':
           description: Successful Response
+  /api/v1/auth/me/avatar:
+    put:
+      tags:
+      - Authentication
+      summary: Завантажити аватарку
+      description: Приймає один файл (JPEG, PNG, WebP, HEIC/HEIF до 10 МБ), перевіряє
+        декодування, видаляє метадані, нормалізує до WebP і замінює попередню аватарку
+        (FR-014, TM-03).
+      operationId: put_avatar_api_v1_auth_me_avatar_put
+      parameters:
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_put_avatar_api_v1_auth_me_avatar_put'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Local user is blocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+    delete:
+      tags:
+      - Authentication
+      summary: Видалити аватарку
+      operationId: delete_avatar_api_v1_auth_me_avatar_delete
+      parameters:
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Local user is blocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/admin/listings/{listing_id}/withdraw:
     post:
       tags:
@@ -1003,6 +1132,204 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/admin/users/{user_id}/block:
+    post:
+      tags:
+      - Moderation
+      summary: Заблокувати користувача (модерація)
+      description: Адміністратор блокує обліковий запис з обов'язковою причиною (FR-013).
+        Усі сесії користувача відкликаються, вхід і мутуючі дії стають недоступними
+        (403), оголошення не видаляються. Не можна заблокувати себе або іншого адміністратора.
+      operationId: block_user_api_v1_admin_users__user_id__block_post
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: User Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserModerationRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModerationActionResponse'
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає ролі ADMIN або обліковий запис заблоковано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Користувача не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 'Дія неможлива: самоблокування, адміністратор або вже в такому
+            стані'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/admin/users/{user_id}/unblock:
+    post:
+      tags:
+      - Moderation
+      summary: Розблокувати користувача (модерація)
+      description: Адміністратор знімає блокування з обов'язковою причиною (FR-013);
+        користувач може знову входити через Microsoft Entra ID.
+      operationId: unblock_user_api_v1_admin_users__user_id__unblock_post
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: User Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserModerationRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModerationActionResponse'
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає ролі ADMIN або обліковий запис заблоковано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Користувача не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 'Дія неможлива: самоблокування, адміністратор або вже в такому
+            стані'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/users/{user_id}:
+    get:
+      tags:
+      - Users
+      summary: Отримати публічний профіль користувача
+      description: Повертає лише ім'я й аватарку; email, роль і контакти не включаються
+        (FR-014, SEC-002). Потрібна автентифікація.
+      operationId: get_public_profile_api_v1_users__user_id__get
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: User Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicProfileResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Local user is blocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
   /health:
     get:
       tags:
@@ -1033,6 +1360,17 @@ components:
       - detail
       title: ApiValidationErrorResponse
       description: Узгоджений формат 422 для доменних і Pydantic-помилок API.
+    Body_put_avatar_api_v1_auth_me_avatar_put:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+          description: Файл аватарки
+      type: object
+      required:
+      - file
+      title: Body_put_avatar_api_v1_auth_me_avatar_put
     Body_upload_listing_images_api_v1_listings_images_post:
       properties:
         files:
@@ -1158,6 +1496,18 @@ components:
         role:
           $ref: '#/components/schemas/UserRole'
           description: Локальна роль користувача
+        avatar_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Avatar Url
+          description: URL аватарки користувача
+        contact:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Contact
+          description: Контакти за замовчуванням (лише власнику профілю)
       type: object
       required:
       - user_id
@@ -1257,11 +1607,11 @@ components:
         description:
           type: string
           maxLength: 2000
-          minLength: 10
           title: Description
-          description: Детальний опис товару
+          description: Необов'язковий опис товару; може бути порожнім
+          default: ''
           examples:
-          - Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
+          - Худі в ідеальному стані, розмір M.
         price:
           type: number
           minimum: 0.0
@@ -1304,7 +1654,6 @@ components:
       type: object
       required:
       - title
-      - description
       - price
       - category_id
       - contact
@@ -1381,9 +1730,8 @@ components:
         description:
           type: string
           maxLength: 2000
-          minLength: 10
           title: Description
-          description: Детальний опис товару
+          description: Необов'язковий опис товару; може бути порожнім
           examples:
           - Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
         price:
@@ -1463,9 +1811,8 @@ components:
         description:
           type: string
           maxLength: 2000
-          minLength: 10
           title: Description
-          description: Детальний опис товару
+          description: Необов'язковий опис товару; може бути порожнім
           examples:
           - Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
         price:
@@ -1557,7 +1904,6 @@ components:
           anyOf:
           - type: string
             maxLength: 2000
-            minLength: 10
           - type: 'null'
           title: Description
         price:
@@ -1596,10 +1942,19 @@ components:
           title: Id
           description: Ідентифікатор запису модерації
         listing_id:
-          type: string
-          format: uuid
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
           title: Listing Id
           description: Зняте оголошення
+        target_user_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Target User Id
+          description: Заблокований або розблокований користувач
         moderator_id:
           type: string
           format: uuid
@@ -1620,7 +1975,6 @@ components:
       type: object
       required:
       - id
-      - listing_id
       - moderator_id
       - action_type
       - reason
@@ -1630,8 +1984,10 @@ components:
       type: string
       enum:
       - WITHDRAW_LISTING
+      - BLOCK_USER
+      - UNBLOCK_USER
       title: ModerationActionType
-      description: Типи адміністративних дій над оголошенням.
+      description: Типи адміністративних дій над оголошенням і користувачем.
     ModerationWithdrawRequest:
       properties:
         reason:
@@ -1647,6 +2003,48 @@ components:
       - reason
       title: ModerationWithdrawRequest
       description: Тіло запиту містить лише причину; модератор береться із сесії.
+    ProfileUpdate:
+      properties:
+        display_name:
+          anyOf:
+          - type: string
+            maxLength: 100
+            minLength: 1
+          - type: 'null'
+          title: Display Name
+          description: Ім'я у застосунку
+        contact:
+          anyOf:
+          - type: string
+            maxLength: 300
+          - type: 'null'
+          title: Contact
+          description: Контакти для автопідстановки в оголошення; null або '' очищає
+      type: object
+      title: ProfileUpdate
+      description: 'Часткове оновлення профілю: передані поля змінюються (FR-014).'
+    PublicProfileResponse:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+          description: Локальний ID користувача
+        display_name:
+          type: string
+          title: Display Name
+          description: Ім'я користувача
+        avatar_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Avatar Url
+          description: URL аватарки користувача
+      type: object
+      required:
+      - user_id
+      - display_name
+      title: PublicProfileResponse
     SellerContactResponse:
       properties:
         listing_id:
@@ -1729,6 +2127,22 @@ components:
       - thumbnail_url
       - display_order
       title: UploadedImageResponse
+    UserModerationRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 5
+          title: Reason
+          description: Причина дії, від 5 до 500 символів після обрізання пробілів
+          examples:
+          - Систематичне розміщення заборонених товарів
+      type: object
+      required:
+      - reason
+      title: UserModerationRequest
+      description: Тіло блокування/розблокування містить лише причину; адмін — із
+        сесії.
     UserRole:
       type: string
       enum:

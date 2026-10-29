@@ -55,3 +55,23 @@ class ModerationForbiddenError(ListingError):
 
 class InvalidModerationReasonError(ListingError):
     """Причина модерації порожня або виходить за межі довжини."""
+
+
+class ProfileError(Exception):
+    """Базова помилка операцій з профілем користувача."""
+
+
+class InvalidProfileError(ProfileError):
+    """Некоректні дані профілю (ім'я, контакт, аватарка)."""
+
+
+class ProfileNotFoundError(ProfileError):
+    """Профіль користувача не знайдено."""
+
+
+class UserNotFoundError(ListingError):
+    """Користувача для адміністративної дії не знайдено."""
+
+
+class InvalidUserModerationError(ListingError):
+    """Дію над користувачем не можна виконати (самоблокування, адміністратор, стан)."""

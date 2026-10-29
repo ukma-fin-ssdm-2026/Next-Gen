@@ -12,12 +12,12 @@
 |---|---|---|---|---|
 | `id` | `UUID` | Auto UUID v4 | Унікальний ідентифікатор оголошення | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
 | `title` | `string` | min: 3, max: 100 | Назва оголошення | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
-| `description` | `string` | min: 10, max: 2000 | Детальний опис товару | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
+| `description` | `string` | min: 0, max: 2000; у `ListingCreate` поле можна не передавати, порожнє значення дозволене | Необов’язковий опис товару | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `price` | `number` (float) | ge: 0 (негативні значення заборонені) | Ціна в гривнях | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `category_id` | `UUID` | Valid UUID | Унікальний ідентифікатор категорії | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `condition` | `string` | Enum: `NEW`, `LIKE_NEW`, `GOOD`, `USED` | Стан товару в оголошенні (`FR-002`) | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `image_urls` / `images` | `array` | min: 1, max: 10, валідні серверні ключі або `/uploads/` | Фотографії оголошення з thumbnail та порядком відображення (`FR-002`, `TM-03`). Довільні зовнішні URL відхиляються | `image_urls` у `ListingCreate`/`ListingUpdate`; `images` (`ListingImageResponse`) у відповідях |
-| `contact` | `string` | Required on create | Контактні дані продавця (Telegram / Email) | **Приватне поле:** `ListingCreate`, `ListingUpdate`, `ListingResponse`. **Відсутнє в `ListingPublicResponse`** |
+| `contact` | `string` | Required on create | Контактні дані продавця (Telegram / Email). Це один рядок до 200 символів: веб-клієнт за домовленістю додає в нього необов'язкові рядки `Тел.: ...` і `Локація: ...` (див. [frontend.md](../frontend/frontend.md#контакт-телефон-і-локація)); окремих полів телефону й локації в API немає | **Приватне поле:** `ListingCreate`, `ListingUpdate`, `ListingResponse`. **Відсутнє в `ListingPublicResponse`** |
 | `user_id` | `UUID` | Auto UUID v4 | Унікальний ідентифікатор автора | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
 | `status` | `string` | Enum: `ACTIVE`, `WITHDRAWN`, `REMOVED_BY_MODERATOR`, `RESERVED`, `SOLD` | Поточний стан оголошення | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
 | `created_at` | `string` (datetime) | ISO 8601 | Дата та час створення оголошення | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
@@ -102,6 +102,8 @@
 | `POST` | `/api/v1/favorites/{listing_id}` | Додати активне оголошення в обране (без дублікатів) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
 | `DELETE` | `/api/v1/favorites/{listing_id}` | Прибрати оголошення з власного обраного | 204 No Content | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
 | `GET` | `/api/v1/listings/{listing_id}/contact` | Отримати контакт продавця активного оголошення (лише з серверною сесією, `FR-010`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
+| `POST` | `/api/v1/admin/users/{user_id}/block` | Заблокувати користувача з причиною 5–500 символів; сесії відкликаються, дія записується в журнал (Адміністратор, `FR-013`) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict (себе, адміністратор, вже заблоковано), 422 |
+| `POST` | `/api/v1/admin/users/{user_id}/unblock` | Розблокувати користувача з причиною (Адміністратор, `FR-013`) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict (не заблоковано), 422 |
 | `POST` | `/api/v1/admin/listings/{listing_id}/withdraw` | Зняти чуже оголошення з публікації з причиною (Адміністратор, `FR-011`) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
 | `GET` | `/api/v1/categories` | Отримати список активних категорій для фільтрації каталогу (`FR-012`) | 200 OK | - |
 | `GET` | `/api/v1/categories/{id}` | Отримати дані конкретної категорії за ID (`FR-012`) | 200 OK | 404 Not Found, 422 |
@@ -110,6 +112,10 @@
 | `GET` | `/api/v1/auth/login` | Розпочати Microsoft Entra ID Authorization Code Flow; опційний `next` зберігає внутрішній маршрут для повернення після входу | 307 Temporary Redirect | 422 Unprocessable Entity, 502 Bad Gateway, 503 Service Unavailable |
 | `GET` | `/api/v1/auth/callback` | Перевірити callback та створити локальну сесію | 303 See Other | 400 Bad Request, 401 Unauthorized, 403 Forbidden |
 | `GET` | `/api/v1/auth/me` | Отримати поточного користувача | 200 OK | 401 Unauthorized, 403 Forbidden |
+| `PATCH` | `/api/v1/auth/me` | Змінити власне ім'я та/або контакти за замовчуванням; передані поля оновлюються, `contact: null` очищає (`FR-014`) | 200 OK | 401 Unauthorized, 403 Forbidden, 422 |
+| `PUT` | `/api/v1/auth/me/avatar` | Завантажити або замінити аватарку, `multipart/form-data`, поле `file` (JPEG, PNG, WebP, HEIC/HEIF до 10 МБ; нормалізується до WebP, метадані видаляються) (`FR-014`) | 200 OK | 401 Unauthorized, 403 Forbidden, 422 |
+| `DELETE` | `/api/v1/auth/me/avatar` | Видалити аватарку (`FR-014`) | 200 OK | 401 Unauthorized, 403 Forbidden |
+| `GET` | `/api/v1/users/{user_id}` | Публічний профіль для автентифікованих: лише `user_id`, `display_name`, `avatar_url`; без email, ролі й контактів (`FR-014`, `SEC-002`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
 | `POST` | `/api/v1/auth/logout` | Завершити локальну сесію | 204 No Content | — |
 
 ---
