@@ -148,8 +148,17 @@ def callback(
         ) from exc
 
     session_token = sessions.create(current_user.user_id)
+    destination = settings.frontend_url
+    if return_to is not None:
+        frontend = urlsplit(settings.frontend_url)
+        requested = urlsplit(return_to)
+        destination = frontend._replace(
+            path=requested.path,
+            query=requested.query,
+            fragment=requested.fragment,
+        ).geturl()
     response = RedirectResponse(
-        return_to or settings.frontend_url,
+        destination,
         status_code=status.HTTP_303_SEE_OTHER,
     )
     response.delete_cookie(OIDC_STATE_COOKIE_NAME, path="/api/v1/auth")

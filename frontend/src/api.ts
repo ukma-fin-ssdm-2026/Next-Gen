@@ -83,8 +83,13 @@ export function getCategories(): Promise<Category[]> {
 export function getListings(
   filters: ListingFilters,
   limit = 100,
+  skip = 0,
 ): Promise<Listing[]> {
-  const params = new URLSearchParams({ limit: String(limit), sort: filters.sort });
+  const params = new URLSearchParams({
+    limit: String(limit),
+    skip: String(skip),
+    sort: filters.sort,
+  });
   if (filters.q.trim()) params.set("q", filters.q.trim());
   if (filters.categoryId) params.set("category_id", filters.categoryId);
   if (filters.minPrice) params.set("min_price", filters.minPrice);

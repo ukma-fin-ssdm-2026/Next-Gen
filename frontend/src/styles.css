@@ -120,6 +120,7 @@ button { color: inherit; }
 .recent-section { background: #f2f1eb; }
 .recent-section .listing-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .catalog-page { background: #f6f4ee; }
+.load-more-row { display: flex; justify-content: center; padding-top: 30px; }
 
 .filters { display: grid; grid-template-columns: minmax(220px, 1.6fr) repeat(4, minmax(120px, 0.75fr)) auto auto; gap: 10px; align-items: end; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 14px; margin-bottom: 30px; }
 .filters label { display: grid; gap: 7px; }

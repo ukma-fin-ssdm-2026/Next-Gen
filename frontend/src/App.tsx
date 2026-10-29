@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Link,
   NavLink,
@@ -38,6 +38,8 @@ const INITIAL_FILTERS: ListingFilters = {
   maxPrice: "",
   sort: "newest",
 };
+
+const CATALOG_PAGE_SIZE = 24;
 
 const CONDITION_LABELS: Record<ListingCondition, string> = {
   NEW: "Нове",
@@ -362,15 +364,63 @@ function CatalogPage({ categories, categoryNames, favorites, busy, onFavorite, o
   const [draftFilters, setDraftFilters] = useState<ListingFilters>(filters);
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const requestGeneration = useRef(0);
 
   useEffect(() => setDraftFilters(filters), [filters]);
   useEffect(() => {
+    const generation = requestGeneration.current + 1;
+    requestGeneration.current = generation;
+    let cancelled = false;
     setLoading(true);
-    getListings(filters)
-      .then(setListings)
-      .catch((requestError) => onError(errorText(requestError)))
-      .finally(() => setLoading(false));
+    setLoadingMore(false);
+    getListings(filters, CATALOG_PAGE_SIZE)
+      .then((items) => {
+        if (cancelled || generation !== requestGeneration.current) return;
+        setListings(items);
+        setHasMore(items.length === CATALOG_PAGE_SIZE);
+      })
+      .catch((requestError) => {
+        if (!cancelled && generation === requestGeneration.current) {
+          onError(errorText(requestError));
+        }
+      })
+      .finally(() => {
+        if (!cancelled && generation === requestGeneration.current) {
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+      if (requestGeneration.current === generation) {
+        requestGeneration.current += 1;
+      }
+    };
   }, [filters, onError]);
+
+  async function loadMore() {
+    const generation = requestGeneration.current;
+    setLoadingMore(true);
+    try {
+      const items = await getListings(
+        filters,
+        CATALOG_PAGE_SIZE,
+        listings.length,
+      );
+      if (generation !== requestGeneration.current) return;
+      setListings((current) => [...current, ...items]);
+      setHasMore(items.length === CATALOG_PAGE_SIZE);
+    } catch (requestError) {
+      if (generation === requestGeneration.current) {
+        onError(errorText(requestError));
+      }
+    } finally {
+      if (generation === requestGeneration.current) {
+        setLoadingMore(false);
+      }
+    }
+  }
 
   function applyFilters(event: FormEvent) {
     event.preventDefault();
@@ -387,12 +437,24 @@ function CatalogPage({ categories, categoryNames, favorites, busy, onFavorite, o
       <section>
         <div className="section-heading">
           <div><span className="eyebrow dark">Весь маркетплейс</span><h1>Оголошення</h1></div>
-          <span className="result-count">{loading ? "Завантаження…" : `${listings.length} знайдено`}</span>
+          <span className="result-count">{loading ? "Завантаження…" : `Показано: ${listings.length}`}</span>
         </div>
         <FilterForm filters={draftFilters} categories={categories} onChange={setDraftFilters} onSubmit={applyFilters} onClear={clearFilters} />
         {loading ? <ListingSkeleton /> : listings.length ? (
           <ListingGrid listings={listings} categoryNames={categoryNames} favorites={favorites} busy={busy} onFavorite={onFavorite} />
         ) : <EmptyState onClear={clearFilters} />}
+        {hasMore && !loading && (
+          <div className="load-more-row">
+            <button
+              className="button button-light"
+              type="button"
+              disabled={loadingMore}
+              onClick={() => void loadMore()}
+            >
+              {loadingMore ? "Завантажуємо…" : "Показати ще"}
+            </button>
+          </div>
+        )}
       </section>
     </main>
   );

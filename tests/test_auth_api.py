@@ -117,7 +117,9 @@ def test_login_callback_me_and_logout_complete_local_session_cycle(
     )
 
     assert callback_response.status_code == 303
-    assert callback_response.headers["location"] == "/favorites?sort=newest"
+    assert callback_response.headers["location"] == (
+        "http://localhost:5173/favorites?sort=newest"
+    )
     assert oidc.completed_response == {
         "code": "authorization-code",
         "state": "state-created-by-msal",
