@@ -31,14 +31,14 @@ def _validate_url(value: str, name: str, *, allow_local_http: bool) -> str:
     return value
 
 
-<<<<<<< Updated upstream
 def get_image_storage_dir() -> Path:
     """Повертає шлях до каталогу сховища зображень (поза writable layer контейнера)."""
     env_dir = os.getenv("IMAGE_STORAGE_DIR", "").strip()
     if env_dir:
         return Path(env_dir).resolve()
     return (Path(tempfile.gettempdir()) / "baraholka-uploads").resolve()
-=======
+
+
 def development_auth_enabled(settings: "EntraSettings") -> bool:
     """Allows the local login shortcut only in an explicitly local environment."""
     enabled = os.getenv("DEV_AUTH_ENABLED", "false").strip().casefold()
@@ -58,7 +58,6 @@ def development_auth_enabled(settings: "EntraSettings") -> bool:
             "Development auth дозволено лише для localhost URL"
         )
     return True
->>>>>>> Stashed changes
 
 
 @dataclass(frozen=True)

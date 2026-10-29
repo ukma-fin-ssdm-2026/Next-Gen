@@ -99,7 +99,7 @@ def _development_login_response(
         value=sessions.create(current_user.user_id),
         max_age=settings.session_ttl_seconds,
         httponly=True,
-        secure=False,
+        secure=settings.session_cookie_secure,
         samesite="lax",
         path="/",
     )
