@@ -17,7 +17,7 @@
 | `category_id` | `UUID` | Valid UUID | Унікальний ідентифікатор категорії | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `condition` | `string` | Enum: `NEW`, `LIKE_NEW`, `GOOD`, `USED` | Стан товару в оголошенні (`FR-002`) | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `image_urls` / `images` | `array` | min: 1, max: 10, валідні серверні ключі або `/uploads/` | Фотографії оголошення з thumbnail та порядком відображення (`FR-002`, `TM-03`). Довільні зовнішні URL відхиляються | `image_urls` у `ListingCreate`/`ListingUpdate`; `images` (`ListingImageResponse`) у відповідях |
-| `contact` | `string` | Required on create | Контактні дані продавця (Telegram / Email) | **Приватне поле:** `ListingCreate`, `ListingUpdate`, `ListingResponse`. **Відсутнє в `ListingPublicResponse`** |
+| `contact` | `string` | Required on create | Контактні дані продавця (Telegram / Email). Це один рядок до 200 символів: веб-клієнт за домовленістю додає в нього необов'язкові рядки `Тел.: ...` і `Локація: ...` (див. [frontend.md](../frontend/frontend.md#контакт-телефон-і-локація)); окремих полів телефону й локації в API немає | **Приватне поле:** `ListingCreate`, `ListingUpdate`, `ListingResponse`. **Відсутнє в `ListingPublicResponse`** |
 | `user_id` | `UUID` | Auto UUID v4 | Унікальний ідентифікатор автора | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
 | `status` | `string` | Enum: `ACTIVE`, `WITHDRAWN`, `REMOVED_BY_MODERATOR`, `RESERVED`, `SOLD` | Поточний стан оголошення | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
 | `created_at` | `string` (datetime) | ISO 8601 | Дата та час створення оголошення | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |

@@ -67,7 +67,7 @@ ER-діаграма зберігається у файлі:
 | `title` | string | Required | Заголовок оголошення |
 | `description` | text | Required | Опис оголошення |
 | `price` | decimal | Required | Ціна |
-| `contact` | string | Required, Personal Data | Email або Telegram продавця, видимий лише автентифікованим користувачам |
+| `contact` | string | Required, Personal Data | Email або Telegram продавця, видимий лише автентифікованим користувачам. Веб-клієнт може дописувати в цей самий рядок необов'язкові телефон і локацію окремими рядками (`Тел.: ...`, `Локація: ...`, див. [frontend.md](../frontend/frontend.md#контакт-телефон-і-локація)); вони мають ту саму класифікацію Personal Data |
 | `condition` | enum | Required | Стан товару |
 | `status` | enum | Required | Поточний статус оголошення |
 | `created_at` | datetime | Required | Час створення оголошення |
