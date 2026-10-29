@@ -5,7 +5,12 @@ from pathlib import Path
 import pytest
 
 from src.api import deps
-from src.config import ConfigurationError, EntraSettings, get_image_storage_dir
+from src.config import (
+    ConfigurationError,
+    EntraSettings,
+    get_admin_emails,
+    get_image_storage_dir,
+)
 from src.repositories.image_storage import LocalImageStorage
 
 VALID_ENV = {
@@ -83,3 +88,50 @@ def test_get_image_storage_dir_respects_env(
     custom_dir = tmp_path / "custom-uploads"
     monkeypatch.setenv("IMAGE_STORAGE_DIR", str(custom_dir))
     assert get_image_storage_dir() == custom_dir
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (None, frozenset()),
+        ("", frozenset()),
+        (
+            " A@ukma.edu.ua, b@UKMA.edu.ua;a@ukma.edu.ua\nc@ukma.edu.ua ",
+            frozenset({"a@ukma.edu.ua", "b@ukma.edu.ua", "c@ukma.edu.ua"}),
+        ),
+    ],
+)
+def test_admin_emails_are_parsed_and_normalized(
+    monkeypatch: pytest.MonkeyPatch, raw: str | None, expected: frozenset[str]
+) -> None:
+    """[TP-AUTH-05] [FR-001] [SEC-001] ADMIN_EMAILS нормалізується й дедуплікується."""
+    if raw is None:
+        monkeypatch.delenv("ADMIN_EMAILS", raising=False)
+    else:
+        monkeypatch.setenv("ADMIN_EMAILS", raw)
+    assert get_admin_emails() == expected
+
+
+@pytest.mark.parametrize("raw", ["a@gmail.com", "ukma.edu.ua", "@ukma.edu.ua"])
+def test_admin_emails_reject_foreign_or_malformed_addresses(
+    monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
+    """[TP-AUTH-05] [FR-001] [SEC-001]
+    Адреса не з @ukma.edu.ua у ADMIN_EMAILS зупиняє конфігурацію.
+    """
+    monkeypatch.setenv("ADMIN_EMAILS", raw)
+    with pytest.raises(ConfigurationError):
+        get_admin_emails()
+
+
+def test_invalid_admin_emails_make_auth_service_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """[TP-AUTH-05] [FR-001] [SEC-001]
+    Некоректний ADMIN_EMAILS не дає тихо працювати з порожнім списком (503).
+    """
+    _set_valid_env(monkeypatch)
+    monkeypatch.setenv("ADMIN_EMAILS", "a@gmail.com")
+    with pytest.raises(deps.HTTPException) as caught:
+        deps.get_auth_service(EntraSettings.from_env())
+    assert caught.value.status_code == 503
