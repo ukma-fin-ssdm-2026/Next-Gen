@@ -204,7 +204,7 @@ function App() {
 
   return (
     <div className="app-shell">
-      <Header user={user} authChecked={authChecked} busy={busy} onLogout={() => void handleLogout()} />
+      <Header user={user} authChecked={authChecked} busy={busy} favoritesCount={favorites.size} onLogout={() => void handleLogout()} />
 
       {error && <div className="global-alert-wrap"><div className="alert alert-error" role="alert">{error}</div></div>}
       {notice && (
@@ -244,6 +244,7 @@ function App() {
             />
           }
         />
+        <Route path="/listings/new" element={<CreateListingPage user={user} authChecked={authChecked} />} />
         <Route
           path="/listings/:listingId"
           element={
@@ -281,18 +282,89 @@ function App() {
   );
 }
 
-function Header({ user, authChecked, busy, onLogout }: {
+function HeartIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 20.3s-7.6-4.5-7.6-10.2A4.4 4.4 0 0 1 12 7.4a4.4 4.4 0 0 1 7.6 2.7c0 5.7-7.6 10.2-7.6 10.2Z" />
+    </svg>
+  );
+}
+
+function AccountMenu({ user, busy, onLogout }: { user: CurrentUser; busy: boolean; onLogout: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+
+  useEffect(() => { setOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="account-menu" ref={ref}>
+      <button className="account-trigger" type="button" aria-haspopup="menu" aria-expanded={open} aria-label="Меню профілю" title={user.email} onClick={() => setOpen((value) => !value)}>
+        <span className="avatar">{user.display_name.slice(0, 1).toUpperCase()}</span>
+        <svg viewBox="0 0 12 8" width="10" height="7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m1 1.5 5 5 5-5" /></svg>
+      </button>
+      {open && (
+        <div className="account-dropdown" role="menu">
+          <div className="account-head">
+            <strong>{user.display_name}</strong>
+            <small>{user.email}</small>
+            <small>{user.role === "ADMIN" ? "Адміністратор" : "Студент"}</small>
+          </div>
+          <Link role="menuitem" to="/profile">Профіль</Link>
+          <button role="menuitem" type="button" disabled={busy} onClick={onLogout}>Вийти</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
   user: CurrentUser | null;
   authChecked: boolean;
   busy: boolean;
+  favoritesCount: number;
   onLogout: () => void;
 }) {
   const currentLoginUrl = useCurrentLoginUrl();
+  const createLoginUrl = loginUrl("/listings/new");
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [hidden, setHidden] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
-  useEffect(() => { setMenuOpen(false); }, [location.pathname]);
+  useEffect(() => { setMenuOpen(false); setHidden(false); }, [location.pathname]);
+  useEffect(() => {
+    let lastY = window.scrollY;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(() => {
+        const y = window.scrollY;
+        const delta = y - lastY;
+        if (y < 90) setHidden(false);
+        else if (delta > 6) setHidden(true);
+        else if (delta < -6) setHidden(false);
+        if (Math.abs(delta) > 6 || y < 90) lastY = y;
+        ticking = false;
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   useEffect(() => {
     if (!menuOpen) return;
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setMenuOpen(false); };
@@ -304,32 +376,35 @@ function Header({ user, authChecked, busy, onLogout }: {
     };
   }, [menuOpen]);
 
+  const favoritesLabel = favoritesCount > 0 ? `Обране, збережено: ${favoritesCount}` : "Обране";
+  const onCreatePage = location.pathname === "/listings/new";
+
   return (
     <>
-      <header className="topbar">
+      <header className={`topbar${hidden && !menuOpen ? " topbar-hidden" : ""}`} onFocusCapture={() => setHidden(false)}>
         <Link className="brand" to="/" aria-label="Барахолка НаУКМА, на головну">
           <span className="brand-mark">Б</span>
           <span><strong>Барахолка</strong><small>НаУКМА</small></span>
         </Link>
-        <nav className="topnav" aria-label="Основна навігація">
-          <NavLink to="/listings">Оголошення</NavLink>
-          {user && <NavLink to="/favorites">Обране</NavLink>}
-          {user && <NavLink to="/profile">Профіль</NavLink>}
-        </nav>
-        <div className="account-area">
+        <div className="header-actions">
+          <nav className="topnav" aria-label="Основна навігація">
+            <NavLink to="/listings" end>Оголошення</NavLink>
+          </nav>
+          {authChecked && user && (
+            <NavLink className="icon-button fav-button" to="/favorites" aria-label={favoritesLabel} title="Обране">
+              <HeartIcon />
+              {favoritesCount > 0 && <span className="badge" aria-hidden="true">{favoritesCount > 99 ? "99+" : favoritesCount}</span>}
+            </NavLink>
+          )}
+          {user ? (
+            <Link className="button button-primary create-button" to="/listings/new" aria-label="Створити оголошення"><span aria-hidden="true">+</span> Створити</Link>
+          ) : (
+            <a className="button button-primary create-button" href={createLoginUrl} aria-label="Створити оголошення"><span aria-hidden="true">+</span> Створити</a>
+          )}
           {authChecked && user ? (
-            <>
-              <Link className="user-chip" to="/profile" title={user.email}>
-                <span className="avatar">{user.display_name.slice(0, 1).toUpperCase()}</span>
-                <span className="user-copy">
-                  <strong>{user.display_name}</strong>
-                  <small>{user.role === "ADMIN" ? "Адміністратор" : "Студент"}</small>
-                </span>
-              </Link>
-              <button className="button button-ghost compact" disabled={busy} onClick={onLogout}>Вийти</button>
-            </>
+            <AccountMenu user={user} busy={busy} onLogout={onLogout} />
           ) : authChecked ? (
-            <a className="button button-primary compact" href={currentLoginUrl}>Увійти через Microsoft</a>
+            <a className="button button-ghost compact login-button" href={currentLoginUrl}>Увійти</a>
           ) : (
             <span className="auth-placeholder" aria-label="Перевіряємо авторизацію" />
           )}
@@ -346,6 +421,14 @@ function Header({ user, authChecked, busy, onLogout }: {
         </button>
       </header>
 
+      {!onCreatePage && (
+        user ? (
+          <Link className={`fab${hidden || menuOpen ? " fab-hidden" : ""}`} to="/listings/new" aria-label="Створити оголошення">+</Link>
+        ) : (
+          <a className={`fab${hidden || menuOpen ? " fab-hidden" : ""}`} href={createLoginUrl} aria-label="Створити оголошення">+</a>
+        )
+      )}
+
       {menuOpen && <div className="menu-backdrop" onClick={closeMenu} aria-hidden="true" />}
       <aside id="mobile-menu" className={`mobile-menu${menuOpen ? " open" : ""}`} aria-label="Меню">
         <div className="drawer-head">
@@ -360,8 +443,9 @@ function Header({ user, authChecked, busy, onLogout }: {
         )}
         <nav className="drawer-nav" aria-label="Мобільна навігація">
           <NavLink to="/" end>Головна</NavLink>
-          <NavLink to="/listings">Оголошення</NavLink>
-          {user && <NavLink to="/favorites">Обране</NavLink>}
+          <NavLink to="/listings" end>Оголошення</NavLink>
+          <NavLink to="/listings/new">Створити оголошення</NavLink>
+          {user && <NavLink to="/favorites">Обране{favoritesCount > 0 ? ` (${favoritesCount})` : ""}</NavLink>}
           {user && <NavLink to="/profile">Профіль</NavLink>}
         </nav>
         <div className="drawer-foot">
@@ -373,6 +457,23 @@ function Header({ user, authChecked, busy, onLogout }: {
         </div>
       </aside>
     </>
+  );
+}
+
+function CreateListingPage({ user, authChecked }: { user: CurrentUser | null; authChecked: boolean }) {
+  if (!authChecked) return <PageLoading />;
+  if (!user) return <SignInRequired title="Створення оголошення доступне після входу" />;
+  return (
+    <main className="page-main narrow-page">
+      <Link className="back-link" to="/listings">← До оголошень</Link>
+      <PageHeading eyebrow="У розробці" title="Створити оголошення" />
+      <div className="empty-state">
+        <span>+</span>
+        <h3>Форма ще в розробці</h3>
+        <p>Додавання оголошень із фото з’явиться найближчим часом.</p>
+        <Link className="button button-light" to="/listings">Переглянути оголошення</Link>
+      </div>
+    </main>
   );
 }
 
@@ -562,9 +663,7 @@ function CatalogPage({ categories, categoryNames, favorites, busy, onFavorite, o
   return (
     <main className="page-main catalog-page">
       <section>
-        <div className="section-heading">
-          <div><span className="eyebrow dark">Весь маркетплейс</span><h1>Оголошення</h1></div>
-        </div>
+        <h1 className="sr-only">Оголошення</h1>
         <FilterForm filters={draftFilters} categories={categories} onChange={setDraftFilters} onSubmit={applyFilters} onClear={clearFilters} />
         <div className="results-bar">
           <span className="result-count">{loading ? "Завантаження…" : `Показано: ${listings.length}`}</span>

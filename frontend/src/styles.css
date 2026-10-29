@@ -49,7 +49,7 @@ button { color: inherit; }
   background: var(--green); color: var(--lime); font-family: "Unbounded", sans-serif; font-weight: 700;
 }
 
-.topnav { display: flex; align-items: center; gap: 28px; margin-left: auto; }
+.topnav { display: flex; align-items: center; gap: 28px; margin: 0 10px 0 0; }
 .topnav a { font-size: 14px; font-weight: 700; color: #3d4842; }
 .topnav a:hover { color: var(--green); }
 .topnav a.active { color: var(--green); }
@@ -107,6 +107,7 @@ button { color: inherit; }
 .recent-section { background: #f2f1eb; }
 .recent-section .listing-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .catalog-page { background: #f6f4ee; }
+.page-main.catalog-page { padding-top: 32px; }
 .load-more-row { display: flex; justify-content: center; padding-top: 30px; }
 
 .filters { display: grid; grid-template-columns: minmax(220px, 1.6fr) minmax(0, 3fr) auto auto; gap: 10px; align-items: end; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 14px; margin-bottom: 18px; }
@@ -229,6 +230,30 @@ footer p { color: rgba(255,255,255,0.55); font-size: 11px; text-align: right; }
 /* ===== Логотип: збільшена літера Б ===== */
 .brand-mark { width: 39px; height: 39px; font-size: 22px; line-height: 1; }
 
+/* ===== Панель ховається при гортанні вниз ===== */
+.topbar { transition: transform 240ms ease; }
+.topbar-hidden { transform: translateY(-100%); }
+
+/* ===== Верхня панель: дії ===== */
+.header-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.create-button { padding: 12px 18px; white-space: nowrap; }
+.create-button span { font-size: 19px; line-height: 1; margin-top: -1px; }
+.icon-button { position: relative; width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 12px; background: #fff; color: var(--ink); transition: border-color 160ms ease, color 160ms ease; }
+.icon-button:hover { border-color: var(--green); color: var(--green); }
+.icon-button.active { border-color: var(--green); color: var(--green); }
+.icon-button.active svg { fill: currentColor; }
+.badge { position: absolute; top: -7px; right: -7px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px; display: grid; place-items: center; background: var(--green); color: var(--lime); font-size: 10px; font-weight: 800; border: 2px solid var(--paper); box-sizing: content-box; }
+.account-menu { position: relative; }
+.account-trigger { display: flex; align-items: center; gap: 7px; padding: 3px 11px 3px 3px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--ink); cursor: pointer; }
+.account-trigger:hover, .account-trigger[aria-expanded="true"] { border-color: var(--green); }
+.account-dropdown { position: absolute; z-index: 60; right: 0; top: calc(100% + 10px); min-width: 250px; display: grid; gap: 2px; padding: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+.account-head { display: grid; gap: 2px; padding: 10px 12px 12px; margin-bottom: 6px; border-bottom: 1px solid var(--line); }
+.account-head strong { font-size: 14px; }
+.account-head small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-dropdown a, .account-dropdown button { padding: 10px 12px; border: 0; border-radius: 10px; background: none; color: var(--ink); font-size: 14px; font-weight: 700; text-align: left; cursor: pointer; }
+.account-dropdown a:hover, .account-dropdown button:hover { background: #f1f3ee; }
+.fab { display: none; }
+
 /* ===== Бургер-меню ===== */
 .burger { display: none; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: #fff; cursor: pointer; flex-direction: column; align-items: center; justify-content: center; gap: 5px; }
 .burger span { width: 18px; height: 2px; border-radius: 2px; background: var(--ink); transition: transform 200ms ease, opacity 200ms ease; }
@@ -259,7 +284,6 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 @keyframes shimmer { to { background-position-x: -220%; } }
 
 @media (max-width: 1120px) {
-  .topnav { display: none; }
   .listing-grid { grid-template-columns: repeat(3, 1fr); }
   .recent-section .listing-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .how-section { grid-template-columns: 1fr; gap: 34px; }
@@ -301,8 +325,6 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 }
 
 @media (max-width: 1120px) {
-  .account-area { display: none; }
-  .burger { display: inline-flex; }
   .topbar { gap: 14px; }
   .hero { grid-template-columns: minmax(0, 1fr); gap: 36px; min-height: auto; }
   .hero-copy, .hero-copy > p { max-width: 640px; }
@@ -313,11 +335,15 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .filter-clear { grid-row: 1; grid-column: 3; }
 }
 
-@media (min-width: 1121px) {
+@media (min-width: 761px) {
   .mobile-menu, .menu-backdrop { display: none; }
 }
 
 @media (max-width: 760px) {
+  .topnav, .create-button, .account-menu, .login-button, .header-actions .auth-placeholder { display: none; }
+  .burger { display: inline-flex; }
+  .fab { display: grid; place-items: center; position: fixed; z-index: 35; right: 16px; bottom: 18px; width: 56px; height: 56px; border-radius: 16px; background: var(--lime); color: #163326; font-size: 32px; line-height: 1; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.24); transition: transform 240ms ease; }
+  .fab-hidden { transform: translateY(calc(100% + 32px)); }
   .hero { padding: 40px 18px 36px; gap: 30px; }
   .hero h1 { font-size: 34px; }
   .hero-copy > p { margin: 16px 0 22px; }
