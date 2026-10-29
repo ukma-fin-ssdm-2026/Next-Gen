@@ -6,6 +6,7 @@ import type {
   ListingFilters,
   ListingUpdatePayload,
   ListingWithContact,
+  ModerationAction,
   PublicProfile,
   SellerContact,
   UploadedImage,
@@ -173,4 +174,12 @@ export function deleteAvatar(): Promise<CurrentUser> {
 
 export function getPublicProfile(userId: string): Promise<PublicProfile> {
   return apiFetch<PublicProfile>(`/users/${userId}`);
+}
+
+export function blockUser(userId: string, reason: string): Promise<ModerationAction> {
+  return apiFetch<ModerationAction>(`/admin/users/${userId}/block`, { method: "POST", body: JSON.stringify({ reason }) });
+}
+
+export function unblockUser(userId: string, reason: string): Promise<ModerationAction> {
+  return apiFetch<ModerationAction>(`/admin/users/${userId}/unblock`, { method: "POST", body: JSON.stringify({ reason }) });
 }
