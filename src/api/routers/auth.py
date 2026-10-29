@@ -91,7 +91,7 @@ def _development_login_response(
     )
     current_user = service.authenticate_verified_claims(claims)
     response = RedirectResponse(
-        _frontend_destination(settings, return_to),
+        _safe_return_path(return_to) or "/",
         status_code=status.HTTP_307_TEMPORARY_REDIRECT,
     )
     response.set_cookie(

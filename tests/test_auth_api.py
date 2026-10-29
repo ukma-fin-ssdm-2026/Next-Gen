@@ -157,7 +157,7 @@ def test_development_login_creates_real_local_session(
     )
 
     assert response.status_code == 307
-    assert response.headers["location"] == "http://localhost:5173/favorites"
+    assert response.headers["location"] == "/favorites"
     assert client.cookies.get("baraholka_session") is not None
     assert client.cookies.get("baraholka_oidc_state") is None
 

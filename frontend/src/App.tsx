@@ -480,9 +480,10 @@ const STATUS_LABELS: Record<string, string> = {
 
 type PhotoItem = { id: string; preview: string; url?: string; file?: File };
 
-function ListingForm({ mode, listing, categories, onError, onNotice }: {
+function ListingForm({ mode, listing, initialContact, categories, onError, onNotice }: {
   mode: "create" | "edit";
   listing?: Listing;
+  initialContact?: string;
   categories: Category[];
   onError: (message: string) => void;
   onNotice: (message: string) => void;
@@ -494,7 +495,7 @@ function ListingForm({ mode, listing, categories, onError, onNotice }: {
   const [price, setPrice] = useState(listing ? String(listing.price) : "");
   const [condition, setCondition] = useState<ListingCondition>(listing?.condition ?? "GOOD");
   const [description, setDescription] = useState(listing?.description ?? "");
-  const [contact, setContact] = useState("");
+  const [contact, setContact] = useState(initialContact ?? "");
   const [photos, setPhotos] = useState<PhotoItem[]>(() =>
     [...(listing?.images ?? [])]
       .sort((a, b) => a.display_order - b.display_order)
@@ -578,55 +579,60 @@ function ListingForm({ mode, listing, categories, onError, onNotice }: {
 
   const backTo = editing && listing ? `/listings/${listing.id}` : "/listings";
   return (
-    <main className="page-main narrow-page">
+    <main className="page-main create-page">
       <Link className="back-link" to={backTo}>{editing ? "← До оголошення" : "← До оголошень"}</Link>
-      <PageHeading eyebrow={editing ? "Редагування" : "Нове оголошення"} title={editing ? "Редагувати оголошення" : "Створити оголошення"} />
+      <div className="create-page-head">
+        <div className="page-heading"><h1>{editing ? "Редагувати оголошення" : "Створити оголошення"}</h1></div>
+        <p className="create-lead">{editing ? "Оновіть деталі та фото, щоб оголошення залишалося актуальним." : "Додайте фото, коротко опишіть товар і залиште контакт для покупців."}</p>
+      </div>
       <form className="create-form" onSubmit={(event) => void onSubmit(event)}>
-        <section className="form-block">
-          <h2>Фото</h2>
-          <p className="form-hint">Від 1 до {MAX_PHOTOS} фото. Перше буде обкладинкою оголошення.</p>
-          <div className="photo-grid">
-            {photos.map((photo, index) => (
-              <div className="photo-tile" key={photo.id}>
-                <img src={photo.preview} alt="" />
-                {index === 0
-                  ? <span className="photo-cover">Обкладинка</span>
-                  : <button className="photo-make-cover" type="button" onClick={() => makeCover(index)}>Зробити обкладинкою</button>}
-                <button className="photo-remove" type="button" onClick={() => removePhoto(index)} aria-label={`Прибрати фото ${index + 1}`}>×</button>
+        <div className="create-form-grid">
+          <section className="form-block photo-block">
+            <div className="form-block-head"><span className="form-step">01</span><div><h2>Фото</h2><p className="form-hint">Від 1 до {MAX_PHOTOS}. Перше фото — обкладинка.</p></div></div>
+            <div className="photo-grid">
+              {photos.map((photo, index) => (
+                <div className="photo-tile" key={photo.id}>
+                  <img src={photo.preview} alt="" />
+                  {index === 0
+                    ? <span className="photo-cover">Обкладинка</span>
+                    : <button className="photo-make-cover" type="button" onClick={() => makeCover(index)}>Зробити обкладинкою</button>}
+                  <button className="photo-remove" type="button" onClick={() => removePhoto(index)} aria-label={`Прибрати фото ${index + 1}`}>×</button>
+                </div>
+              ))}
+              {photos.length < MAX_PHOTOS && (
+                <label className="photo-add">
+                  <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }} />
+                  <span aria-hidden="true">+</span>
+                  <small>Додати фото</small>
+                </label>
+              )}
+            </div>
+          </section>
+
+          <div className="create-form-fields">
+            <section className="form-block">
+              <div className="form-block-head"><span className="form-step">02</span><div><h2>Про товар</h2><p className="form-hint">Основна інформація для покупців.</p></div></div>
+              <label><span>Назва</span><input value={title} onChange={(event) => setTitle(event.target.value)} minLength={3} maxLength={100} required placeholder="Наприклад, худі з логотипом НаУКМА" /></label>
+              <div className="form-row">
+                <label><span>Категорія</span><select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} required disabled={editing}>
+                  <option value="" disabled>Оберіть категорію</option>
+                  {categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}
+                </select></label>
+                <label><span>Стан</span><select value={condition} onChange={(event) => setCondition(event.target.value as ListingCondition)}>
+                  {(Object.keys(CONDITION_LABELS) as ListingCondition[]).map((key) => <option value={key} key={key}>{CONDITION_LABELS[key]}</option>)}
+                </select></label>
+                <label><span>Ціна, грн</span><input type="number" min="0" step="1" inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value)} required placeholder="0" /></label>
               </div>
-            ))}
-            {photos.length < MAX_PHOTOS && (
-              <label className="photo-add">
-                <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }} />
-                <span aria-hidden="true">+</span>
-                <small>Додати фото</small>
-              </label>
-            )}
-          </div>
-        </section>
+              {editing && <p className="form-hint">Категорію після публікації змінити не можна.</p>}
+              <label><span>Опис <small>необов’язково</small></span><textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} rows={5} placeholder="Розкажіть про стан, розмір, чому продаєте" /></label>
+            </section>
 
-        <section className="form-block">
-          <h2>Про товар</h2>
-          <label><span>Назва</span><input value={title} onChange={(event) => setTitle(event.target.value)} minLength={3} maxLength={100} required placeholder="Наприклад, худі з логотипом НаУКМА" /></label>
-          <div className="form-row">
-            <label><span>Категорія</span><select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} required disabled={editing}>
-              <option value="" disabled>Оберіть категорію</option>
-              {categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}
-            </select></label>
-            <label><span>Стан</span><select value={condition} onChange={(event) => setCondition(event.target.value as ListingCondition)}>
-              {(Object.keys(CONDITION_LABELS) as ListingCondition[]).map((key) => <option value={key} key={key}>{CONDITION_LABELS[key]}</option>)}
-            </select></label>
-            <label><span>Ціна, грн</span><input type="number" min="0" step="1" inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value)} required placeholder="0" /></label>
+            <section className="form-block contact-block">
+              <div className="form-block-head"><span className="form-step">03</span><div><h2>Контакт</h2><p className="form-hint">Його побачать лише авторизовані користувачі.</p></div></div>
+              <label><span>Telegram або пошта</span><input value={contact} onChange={(event) => setContact(event.target.value)} minLength={3} maxLength={200} required={!editing} placeholder={editing && !initialContact ? "Залиште порожнім, щоб не змінювати" : "@username або name@ukma.edu.ua"} /></label>
+            </section>
           </div>
-          {editing && <p className="form-hint">Категорію після публікації змінити не можна.</p>}
-          <label><span>Опис (необов’язково)</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} rows={6} placeholder="Розкажіть про стан, розмір, чому продаєте" /></label>
-        </section>
-
-        <section className="form-block">
-          <h2>Контакт</h2>
-          <p className="form-hint">Побачать лише авторизовані користувачі, коли натиснуть «Показати контакт».</p>
-          <label><span>Telegram або пошта</span><input value={contact} onChange={(event) => setContact(event.target.value)} minLength={3} maxLength={200} required={!editing} placeholder={editing ? "Залиште порожнім, щоб не змінювати" : "@username"} /></label>
-        </section>
+        </div>
 
         {formError && <p className="form-error" role="alert">{formError}</p>}
         <div className="form-actions">
@@ -659,11 +665,18 @@ function EditListingPage({ user, authChecked, categories, onError, onNotice }: {
 }) {
   const { listingId = "" } = useParams();
   const [listing, setListing] = useState<Listing | null>(null);
+  const [existingContact, setExistingContact] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    getListing(listingId).then(setListing).catch(() => setListing(null)).finally(() => setLoading(false));
+    Promise.all([
+      getListing(listingId),
+      getSellerContact(listingId).then((item) => item.contact).catch(() => ""),
+    ])
+      .then(([item, savedContact]) => { setListing(item); setExistingContact(savedContact); })
+      .catch(() => setListing(null))
+      .finally(() => setLoading(false));
   }, [listingId]);
 
   if (!authChecked || loading) return <PageLoading />;
@@ -672,7 +685,7 @@ function EditListingPage({ user, authChecked, categories, onError, onNotice }: {
   if (listing.user_id !== user.user_id) {
     return <main className="page-main auth-required"><h1>Це не ваше оголошення</h1><p>Редагувати можна лише власні оголошення.</p><Link className="button button-primary" to={`/listings/${listing.id}`}>До оголошення</Link></main>;
   }
-  return <ListingForm mode="edit" listing={listing} categories={categories} onError={onError} onNotice={onNotice} />;
+  return <ListingForm mode="edit" listing={listing} initialContact={existingContact} categories={categories} onError={onError} onNotice={onNotice} />;
 }
 
 function MyListingsPage({ user, authChecked, categoryNames, onError, onNotice }: {
@@ -1119,6 +1132,14 @@ function ListingGrid({ listings, categoryNames, favorites, busy, onFavorite }: {
   );
 }
 
+function contactHref(contact: string): string | null {
+  const value = contact.trim();
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return `mailto:${value}`;
+  if (/^@[A-Za-z0-9_]{3,}$/.test(value)) return `https://t.me/${value.slice(1)}`;
+  if (/^\+?[0-9][0-9\s()-]{6,}$/.test(value)) return `tel:${value.replace(/[^\d+]/g, "")}`;
+  return null;
+}
+
 function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy, onError, onNotice }: {
   user: CurrentUser | null;
   categoryNames: Map<string, string>;
@@ -1134,21 +1155,26 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
   const currentLoginUrl = useCurrentLoginUrl();
   const [listing, setListing] = useState<Listing | null>(null);
   const [contact, setContact] = useState<string | null>(null);
+  const [contactState, setContactState] = useState<"idle" | "loading" | "failed">("idle");
   const [loading, setLoading] = useState(true);
   const [confirmingWithdraw, setConfirmingWithdraw] = useState(false);
+  const userId = user?.user_id ?? null;
 
   useEffect(() => {
     setLoading(true);
     getListing(listingId).then(setListing).catch((requestError) => onError(errorText(requestError))).finally(() => setLoading(false));
   }, [listingId, onError]);
 
-  async function revealContact() {
-    if (!user) { window.location.assign(currentLoginUrl); return; }
-    onBusy(true);
-    try { setContact((await getSellerContact(listingId)).contact); }
-    catch (requestError) { onError(errorText(requestError)); }
-    finally { onBusy(false); }
-  }
+  useEffect(() => {
+    setContact(null);
+    if (!userId) { setContactState("idle"); return; }
+    let cancelled = false;
+    setContactState("loading");
+    getSellerContact(listingId)
+      .then((item) => { if (!cancelled) { setContact(item.contact); setContactState("idle"); } })
+      .catch(() => { if (!cancelled) setContactState("failed"); });
+    return () => { cancelled = true; };
+  }, [listingId, userId]);
 
   async function withdrawOwn() {
     onBusy(true);
@@ -1169,39 +1195,74 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
   if (loading) return <PageLoading />;
   if (!listing) return <NotFoundPage />;
   const isOwner = Boolean(user && user.user_id === listing.user_id);
+  const published = new Date(listing.created_at).toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric" });
+  const href = contact ? contactHref(contact) : null;
   return (
     <main className="page-main listing-detail-page">
       <Link className="back-link" to="/listings">← До оголошень</Link>
-      <article className="listing-detail">
-        <ListingGallery listing={listing} />
-        <div className="listing-detail-content">
-          <div className="card-meta"><span>{categoryNames.get(listing.category_id) ?? "Інше"}</span><span>{CONDITION_LABELS[listing.condition]}</span></div>
-          <h1>{listing.title}</h1><strong className="price detail-price">{formatPrice(listing.price)}</strong>{listing.description && <p className="detail-description">{listing.description}</p>}
-          {contact && <div className="contact-box"><span>Контакт продавця</span><strong>{contact}</strong></div>}
-          <div className="detail-actions">
-            {isOwner ? (
-              <>
-                <Link className="button button-primary" to={`/listings/${listing.id}/edit`}>Редагувати оголошення</Link>
-                {confirmingWithdraw ? (
-                  <div className="confirm-row">
-                    <span>Зняти з публікації?</span>
-                    <button className="button button-danger" disabled={busy} onClick={() => void withdrawOwn()}>Так, зняти</button>
-                    <button className="button button-text" onClick={() => setConfirmingWithdraw(false)}>Ні</button>
-                  </div>
-                ) : (
-                  <button className="button button-light" disabled={busy} onClick={() => setConfirmingWithdraw(true)}>Зняти з публікації</button>
-                )}
-              </>
-            ) : (
-              <>
-                <button className="button button-primary" disabled={busy} onClick={() => void revealContact()}>{user ? "Показати контакт" : "Увійти, щоб побачити контакт"}</button>
+      <div className="ad-layout">
+        <section className="ad-card ad-gallery"><ListingGallery listing={listing} /></section>
+
+        <aside className="ad-side">
+          <div className="ad-card ad-price-card">
+            <time className="ad-date" dateTime={listing.created_at}>Опубліковано {published}</time>
+            <h1 className="ad-title">{listing.title}</h1>
+            <strong className="ad-price">{formatPrice(listing.price)}</strong>
+            <div className="ad-tags"><span>{categoryNames.get(listing.category_id) ?? "Інше"}</span><span>{CONDITION_LABELS[listing.condition]}</span></div>
+            <div className="ad-actions">
+              {isOwner ? (
+                <>
+                  <Link className="button button-primary" to={`/listings/${listing.id}/edit`}>Редагувати оголошення</Link>
+                  {confirmingWithdraw ? (
+                    <div className="confirm-row">
+                      <span>Зняти з публікації?</span>
+                      <button className="button button-danger" disabled={busy} onClick={() => void withdrawOwn()}>Так, зняти</button>
+                      <button className="button button-text" onClick={() => setConfirmingWithdraw(false)}>Ні</button>
+                    </div>
+                  ) : (
+                    <button className="button button-light" disabled={busy} onClick={() => setConfirmingWithdraw(true)}>Зняти з публікації</button>
+                  )}
+                </>
+              ) : (
                 <button className="button button-light" disabled={busy} onClick={() => onFavorite(listing.id)}>{favorites.has(listing.id) ? "♥ В обраному" : "♡ Додати в обране"}</button>
-              </>
-            )}
-            {user?.role === "ADMIN" && <button className="button button-danger" disabled={busy} onClick={() => void moderate()}>Зняти з публікації</button>}
+              )}
+              {user?.role === "ADMIN" && <button className="button button-danger" disabled={busy} onClick={() => void moderate()}>Зняти з публікації (модератор)</button>}
+            </div>
           </div>
-        </div>
-      </article>
+
+          <div className="ad-card ad-seller">
+            <h2>{isOwner ? "Ваш контакт" : "Продавець"}</h2>
+            <div className="ad-seller-row">
+              <span className="ad-avatar" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.2 3.6-7 8-7s8 2.8 8 7" /></svg>
+              </span>
+              <div><strong>Студент НаУКМА</strong><small>Вхід через корпоративну пошту</small></div>
+            </div>
+            {!user ? (
+              <a className="button button-primary ad-contact-button" href={currentLoginUrl}>Увійти, щоб побачити контакт</a>
+            ) : contactState === "loading" ? (
+              <div className="ad-contact skeleton-line" aria-busy="true" />
+            ) : contact ? (
+              <div className="ad-contact">
+                <span>Контакт</span>
+                {href ? <a href={href} target={href.startsWith("http") ? "_blank" : undefined} rel="noreferrer">{contact}</a> : <strong>{contact}</strong>}
+              </div>
+            ) : (
+              <p className="ad-muted">Контакт зараз недоступний.</p>
+            )}
+          </div>
+        </aside>
+
+        <section className="ad-card ad-info">
+          <h2>Опис</h2>
+          {listing.description ? <p className="ad-description">{listing.description}</p> : <p className="ad-muted">Продавець не додав опису.</p>}
+          <dl className="ad-facts">
+            <div><dt>Стан</dt><dd>{CONDITION_LABELS[listing.condition]}</dd></div>
+            <div><dt>Категорія</dt><dd>{categoryNames.get(listing.category_id) ?? "Інше"}</dd></div>
+            <div><dt>Опубліковано</dt><dd>{published}</dd></div>
+          </dl>
+        </section>
+      </div>
     </main>
   );
 }
