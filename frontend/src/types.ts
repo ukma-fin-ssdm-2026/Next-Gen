@@ -29,6 +29,27 @@ export interface Listing {
   updated_at: string;
 }
 
+export interface ListingWithContact extends Listing {
+  contact: string;
+}
+
+export interface UploadedImage {
+  image_id: string;
+  image_url: string;
+  thumbnail_url: string;
+  display_order: number;
+}
+
+export interface ListingCreatePayload {
+  title: string;
+  description: string;
+  price: number;
+  category_id: string;
+  condition: ListingCondition;
+  contact: string;
+  image_urls: string[];
+}
+
 export interface Category {
   id: string;
   name: string;

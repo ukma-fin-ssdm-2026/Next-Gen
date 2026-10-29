@@ -12,6 +12,7 @@ import {
 import {
   ApiError,
   addFavorite,
+  createListing,
   getCategories,
   getCurrentUser,
   getFavorites,
@@ -22,6 +23,7 @@ import {
   logout,
   moderateListing,
   removeFavorite,
+  uploadListingImages,
 } from "./api";
 import { NaukmaLogo } from "./NaukmaLogo";
 import type {
@@ -42,6 +44,7 @@ const INITIAL_FILTERS: ListingFilters = {
 
 const CATALOG_PAGE_SIZE = 24;
 const STATS_SAMPLE_SIZE = 100;
+const MAX_PHOTOS = 10;
 
 const CONDITION_LABELS: Record<ListingCondition, string> = {
   NEW: "Нове",
@@ -244,7 +247,7 @@ function App() {
             />
           }
         />
-        <Route path="/listings/new" element={<CreateListingPage user={user} authChecked={authChecked} />} />
+        <Route path="/listings/new" element={<CreateListingPage user={user} authChecked={authChecked} categories={categories} onError={setError} onNotice={setNotice} />} />
         <Route
           path="/listings/:listingId"
           element={
@@ -460,19 +463,130 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
   );
 }
 
-function CreateListingPage({ user, authChecked }: { user: CurrentUser | null; authChecked: boolean }) {
+function CreateListingPage({ user, authChecked, categories, onError, onNotice }: {
+  user: CurrentUser | null;
+  authChecked: boolean;
+  categories: Category[];
+  onError: (message: string) => void;
+  onNotice: (message: string) => void;
+}) {
+  const navigate = useNavigate();
+  const [title, setTitle] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [price, setPrice] = useState("");
+  const [condition, setCondition] = useState<ListingCondition>("GOOD");
+  const [description, setDescription] = useState("");
+  const [contact, setContact] = useState("");
+  const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const photosRef = useRef(photos);
+  photosRef.current = photos;
+
+  useEffect(() => () => photosRef.current.forEach((photo) => URL.revokeObjectURL(photo.url)), []);
+
   if (!authChecked) return <PageLoading />;
   if (!user) return <SignInRequired title="Створення оголошення доступне після входу" />;
+
+  const addFiles = (list: FileList | null) => {
+    if (!list) return;
+    const room = MAX_PHOTOS - photos.length;
+    const added = Array.from(list).slice(0, Math.max(room, 0)).map((file) => ({ file, url: URL.createObjectURL(file) }));
+    if (list.length > room) setFormError(`Можна додати не більше ${MAX_PHOTOS} фото`);
+    else setFormError(null);
+    setPhotos((current) => [...current, ...added]);
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos((current) => {
+      URL.revokeObjectURL(current[index].url);
+      return current.filter((_, position) => position !== index);
+    });
+  };
+
+  const onSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setFormError(null);
+    if (photos.length === 0) {
+      setFormError("Додайте щонайменше одне фото");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const uploaded = await uploadListingImages(photos.map((photo) => photo.file));
+      const created = await createListing({
+        title: title.trim(),
+        description: description.trim(),
+        price: Number(price),
+        category_id: categoryId,
+        condition,
+        contact: contact.trim(),
+        image_urls: uploaded.sort((a, b) => a.display_order - b.display_order).map((image) => image.image_url),
+      });
+      onNotice("Оголошення опубліковано");
+      navigate(`/listings/${created.id}`);
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "Не вдалося створити оголошення";
+      setFormError(message);
+      onError(message);
+      setSubmitting(false);
+    }
+  };
+
   return (
     <main className="page-main narrow-page">
       <Link className="back-link" to="/listings">← До оголошень</Link>
-      <PageHeading eyebrow="У розробці" title="Створити оголошення" />
-      <div className="empty-state">
-        <span>+</span>
-        <h3>Форма ще в розробці</h3>
-        <p>Додавання оголошень із фото з’явиться найближчим часом.</p>
-        <Link className="button button-light" to="/listings">Переглянути оголошення</Link>
-      </div>
+      <PageHeading eyebrow="Нове оголошення" title="Створити оголошення" />
+      <form className="create-form" onSubmit={(event) => void onSubmit(event)}>
+        <section className="form-block">
+          <h2>Фото</h2>
+          <p className="form-hint">Від 1 до {MAX_PHOTOS} фото. Перше буде обкладинкою оголошення.</p>
+          <div className="photo-grid">
+            {photos.map((photo, index) => (
+              <div className="photo-tile" key={photo.url}>
+                <img src={photo.url} alt="" />
+                {index === 0 && <span className="photo-cover">Обкладинка</span>}
+                <button type="button" onClick={() => removePhoto(index)} aria-label={`Прибрати фото ${index + 1}`}>×</button>
+              </div>
+            ))}
+            {photos.length < MAX_PHOTOS && (
+              <label className="photo-add">
+                <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }} />
+                <span aria-hidden="true">+</span>
+                <small>Додати фото</small>
+              </label>
+            )}
+          </div>
+        </section>
+
+        <section className="form-block">
+          <h2>Про товар</h2>
+          <label><span>Назва</span><input value={title} onChange={(event) => setTitle(event.target.value)} minLength={3} maxLength={100} required placeholder="Наприклад, худі з логотипом НаУКМА" /></label>
+          <div className="form-row">
+            <label><span>Категорія</span><select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} required>
+              <option value="" disabled>Оберіть категорію</option>
+              {categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}
+            </select></label>
+            <label><span>Стан</span><select value={condition} onChange={(event) => setCondition(event.target.value as ListingCondition)}>
+              {(Object.keys(CONDITION_LABELS) as ListingCondition[]).map((key) => <option value={key} key={key}>{CONDITION_LABELS[key]}</option>)}
+            </select></label>
+            <label><span>Ціна, грн</span><input type="number" min="0" step="1" inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value)} required placeholder="0" /></label>
+          </div>
+          <label><span>Опис</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} minLength={10} maxLength={2000} rows={6} required placeholder="Розкажіть про стан, розмір, чому продаєте" /></label>
+        </section>
+
+        <section className="form-block">
+          <h2>Контакт</h2>
+          <p className="form-hint">Побачать лише авторизовані користувачі, коли натиснуть «Показати контакт».</p>
+          <label><span>Telegram або пошта</span><input value={contact} onChange={(event) => setContact(event.target.value)} minLength={3} maxLength={200} required placeholder="@username" /></label>
+        </section>
+
+        {formError && <p className="form-error" role="alert">{formError}</p>}
+        <div className="form-actions">
+          <button className="button button-primary" type="submit" disabled={submitting}>{submitting ? "Публікуємо…" : "Опублікувати"}</button>
+          <Link className="button button-text" to="/listings">Скасувати</Link>
+        </div>
+      </form>
     </main>
   );
 }

@@ -395,3 +395,30 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+/* Форма створення оголошення */
+.create-form { display: grid; gap: 18px; }
+.form-block { display: grid; gap: 14px; padding: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
+.form-block h2 { margin: 0; font-size: 18px; }
+.form-hint { margin: -8px 0 0; color: var(--muted); font-size: 13px; }
+.form-block label { display: grid; gap: 7px; min-width: 0; }
+.form-block label > span { padding-left: 2px; color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+.form-block input:not([type="file"]), .form-block select, .form-block textarea { width: 100%; border: 1px solid #dde1dc; border-radius: 10px; background: #f9f9f5; color: var(--ink); padding: 0 12px; outline: none; font: inherit; }
+.form-block input:not([type="file"]), .form-block select { height: 43px; }
+.form-block textarea { padding: 11px 12px; resize: vertical; min-height: 130px; }
+.form-block input:focus, .form-block select:focus, .form-block textarea:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(15, 91, 69, 0.1); }
+.form-block select { appearance: none; -webkit-appearance: none; padding-right: 36px; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none' stroke='%230f5b45' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m1 1.5 5 5 5-5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 13px center; }
+.form-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.photo-tile, .photo-add { position: relative; aspect-ratio: 1; border-radius: 14px; overflow: hidden; }
+.photo-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-tile button { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border: 0; border-radius: 50%; background: rgba(22, 51, 38, 0.78); color: #fff; font-size: 16px; line-height: 1; cursor: pointer; }
+.photo-cover { position: absolute; left: 6px; bottom: 6px; padding: 3px 8px; border-radius: 999px; background: var(--lime); color: #163326; font-size: 10px; font-weight: 800; }
+.photo-add { display: grid; place-content: center; justify-items: center; gap: 2px; border: 1px dashed #b9c1b9; color: var(--green); cursor: pointer; background: #f9f9f5; }
+.photo-add:hover { border-color: var(--green); }
+.photo-add input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.form-block .photo-add > span { padding: 0; font-size: 30px; font-weight: 400; line-height: 1; letter-spacing: 0; text-transform: none; color: var(--green); }
+.photo-add small { font-size: 12px; font-weight: 700; }
+.form-error { margin: 0; padding: 12px 14px; border-radius: 12px; background: #f5dfdc; color: var(--danger); font-size: 14px; font-weight: 700; }
+.form-actions { display: flex; align-items: center; gap: 10px; }
+@media (max-width: 760px) { .form-block { padding: 16px; } .form-row { grid-template-columns: minmax(0, 1fr); } }
