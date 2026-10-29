@@ -87,6 +87,10 @@ export function getListings(filters: ListingFilters): Promise<Listing[]> {
   return apiFetch<Listing[]>(`/listings?${params.toString()}`);
 }
 
+export function getListing(listingId: string): Promise<Listing> {
+  return apiFetch<Listing>(`/listings/${listingId}`);
+}
+
 export function getFavorites(): Promise<Listing[]> {
   return apiFetch<Listing[]>("/favorites");
 }
