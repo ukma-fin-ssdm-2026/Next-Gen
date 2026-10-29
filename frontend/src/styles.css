@@ -49,7 +49,7 @@ button { color: inherit; }
   background: var(--green); color: var(--lime); font-family: "Unbounded", sans-serif; font-weight: 700;
 }
 
-.topnav { display: flex; align-items: center; gap: 28px; margin-left: auto; }
+.topnav { display: flex; align-items: center; gap: 28px; margin: 0 10px 0 0; }
 .topnav a { font-size: 14px; font-weight: 700; color: #3d4842; }
 .topnav a:hover { color: var(--green); }
 .topnav a.active { color: var(--green); }
@@ -85,7 +85,6 @@ button { color: inherit; }
 .hero::before { content: ""; position: absolute; width: 420px; height: 420px; border-radius: 50%; background: rgba(201, 246, 92, 0.08); left: -180px; bottom: -270px; }
 .hero-copy { position: relative; z-index: 2; max-width: 690px; }
 .eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lime); }
-.eyebrow::before { content: ""; width: 24px; height: 2px; background: currentColor; }
 .eyebrow.dark { color: var(--green); }
 .hero h1, .section-heading h2, .how-section h2, .listing-modal h2 {
   font-family: "Unbounded", sans-serif; letter-spacing: -0.055em; margin: 0;
@@ -108,6 +107,7 @@ button { color: inherit; }
 .recent-section { background: #f2f1eb; }
 .recent-section .listing-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .catalog-page { background: #f6f4ee; }
+.page-main.catalog-page { padding-top: 32px; }
 .load-more-row { display: flex; justify-content: center; padding-top: 30px; }
 
 .filters { display: grid; grid-template-columns: minmax(220px, 1.6fr) minmax(0, 3fr) auto auto; gap: 10px; align-items: end; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 14px; margin-bottom: 18px; }
@@ -166,7 +166,8 @@ button { color: inherit; }
 
 footer { padding: 30px clamp(22px, 6vw, 94px); background: #14231c; color: white; display: flex; align-items: center; justify-content: space-between; gap: 30px; }
 .footer-brand { color: white; }
-.footer-brand .brand-mark { width: 34px; height: 34px; }
+.footer-brand .brand-divider { width: 1px; height: 34px; margin: 0 6px; flex: none; background: rgba(255, 255, 255, 0.28); }
+.footer-brand .naukma-logo { height: 36px; width: auto; max-width: 100%; flex: none; color: inherit; position: relative; top: 2px; }
 footer p { color: rgba(255,255,255,0.55); font-size: 11px; text-align: right; }
 
 .global-alert-wrap { position: fixed; z-index: 80; top: 92px; left: 50%; width: min(560px, calc(100% - 32px)); transform: translateX(-50%); }
@@ -194,13 +195,13 @@ footer p { color: rgba(255,255,255,0.55); font-size: 11px; text-align: right; }
 .auth-required { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .auth-required h1 { font-size: clamp(28px, 4vw, 46px); margin: 24px 0 8px; }
 .auth-required p { color: var(--muted); margin: 0 0 24px; }
-.large-mark { width: 64px; height: 64px; font-size: 25px; }
+.large-mark { width: 64px; height: 64px; font-size: 34px; }
 .not-found-code { font-family: "Unbounded", sans-serif; font-size: clamp(70px, 13vw, 150px); line-height: 0.8; color: #d9ded8; }
 
 .modal-backdrop { position: fixed; inset: 0; z-index: 100; background: rgba(10, 23, 17, 0.72); padding: 24px; display: grid; place-items: center; backdrop-filter: blur(6px); }
 .listing-modal { width: min(920px, 100%); max-height: min(720px, calc(100vh - 48px)); overflow: auto; background: var(--surface); border-radius: 28px; display: grid; grid-template-columns: minmax(300px, 0.95fr) minmax(340px, 1.05fr); position: relative; box-shadow: 0 30px 90px rgba(0,0,0,0.35); }
 .modal-close { position: absolute; z-index: 2; top: 14px; right: 14px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: rgba(255,255,255,0.92); font-size: 24px; cursor: pointer; }
-.listing-image.large { height: 100%; min-height: 520px; }
+.listing-image.large { aspect-ratio: auto; width: 100%; min-width: 0; height: 100%; min-height: 520px; }
 .modal-content { padding: 54px 38px 38px; }
 .listing-modal h2 { margin: 20px 0 12px; font-size: clamp(25px, 3.2vw, 38px); line-height: 1.08; }
 .modal-price { font-size: 24px; margin: 12px 0 24px; }
@@ -225,6 +226,44 @@ footer p { color: rgba(255,255,255,0.55); font-size: 11px; text-align: right; }
 .stats div { display: flex; flex-direction: column; gap: 4px; }
 .stats dd { margin: 0; font-family: "Unbounded", sans-serif; font-size: clamp(18px, 2vw, 26px); color: var(--lime); letter-spacing: -0.03em; }
 .stats dt { color: rgba(255, 255, 255, 0.66); font-size: 11px; font-weight: 700; }
+
+/* ===== Логотип: збільшена літера Б ===== */
+.brand-mark { width: 39px; height: 39px; font-size: 22px; line-height: 1; }
+
+/* ===== Панель ховається при гортанні вниз ===== */
+.topbar { transition: transform 240ms ease; }
+.topbar-hidden { transform: translateY(-100%); }
+
+/* ===== Верхня панель: дії ===== */
+.header-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.create-button { padding: 12px 18px; white-space: nowrap; }
+.create-button span { font-size: 19px; line-height: 1; margin-top: -1px; }
+.icon-button { position: relative; width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 12px; background: #fff; color: var(--ink); transition: border-color 160ms ease, color 160ms ease; }
+.icon-button:hover { border-color: var(--green); color: var(--green); }
+.icon-button.active { border-color: var(--green); color: var(--green); }
+.icon-button.active svg { fill: currentColor; }
+.badge { position: absolute; top: -7px; right: -7px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px; display: grid; place-items: center; background: var(--green); color: var(--lime); font-size: 10px; font-weight: 800; border: 2px solid var(--paper); box-sizing: content-box; }
+.account-menu { position: relative; }
+.account-trigger { display: flex; align-items: center; gap: 7px; padding: 3px 11px 3px 3px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--ink); cursor: pointer; }
+.account-trigger:hover, .account-trigger[aria-expanded="true"] { border-color: var(--green); }
+.account-dropdown { position: absolute; z-index: 60; right: 0; top: calc(100% + 10px); min-width: 250px; display: grid; gap: 2px; padding: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+.account-head { display: grid; gap: 2px; padding: 10px 12px 12px; margin-bottom: 6px; border-bottom: 1px solid var(--line); }
+.account-head strong { font-size: 14px; }
+.account-head small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-dropdown a, .account-dropdown button { padding: 10px 12px; border: 0; border-radius: 10px; background: none; color: var(--ink); font-size: 14px; font-weight: 700; text-align: left; cursor: pointer; }
+.account-dropdown a:hover, .account-dropdown button:hover { background: #f1f3ee; }
+/* Єдиний стиль у шапці: плаский, як «Оголошення»; виділяється лише «Створити» */
+.header-actions { gap: 6px; }
+.topnav { margin: 0; }
+.topnav a, .header-actions .icon-button, .account-trigger { height: 42px; border: 0; border-radius: 12px; background: transparent; color: #3d4842; transition: background 160ms ease, color 160ms ease; }
+.topnav a { display: inline-flex; align-items: center; padding: 0 14px; }
+.header-actions .icon-button { width: 42px; }
+.topnav a:hover, .header-actions .icon-button:hover, .account-trigger:hover, .account-trigger[aria-expanded="true"] { background: rgba(15, 91, 69, 0.07); color: var(--green); }
+.topnav a.active, .header-actions .icon-button.active { color: var(--green); }
+.account-trigger { height: 46px; padding: 0 10px 0 3px; }
+.account-trigger .avatar { width: 40px; height: 40px; font-size: 16px; }
+.create-button { height: 42px; padding: 0 18px; border-radius: 12px; display: inline-flex; align-items: center; margin-left: 4px; }
+.fab { display: none; }
 
 /* ===== Бургер-меню ===== */
 .burger { display: none; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: #fff; cursor: pointer; flex-direction: column; align-items: center; justify-content: center; gap: 5px; }
@@ -256,7 +295,6 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 @keyframes shimmer { to { background-position-x: -220%; } }
 
 @media (max-width: 1120px) {
-  .topnav { display: none; }
   .listing-grid { grid-template-columns: repeat(3, 1fr); }
   .recent-section .listing-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .how-section { grid-template-columns: 1fr; gap: 34px; }
@@ -265,7 +303,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 @media (max-width: 760px) {
   .topbar { height: 68px; padding-inline: 16px; }
   .brand strong { font-size: 13px; }
-  .brand-mark { width: 35px; height: 35px; }
+  .brand-mark { width: 35px; height: 35px; font-size: 20px; }
+  .footer-brand .naukma-logo { height: 26px; }
   .user-copy, .button-ghost.compact { display: none; }
   .button-primary.compact { max-width: 170px; text-align: center; line-height: 1.15; }
   .hero { min-height: auto; grid-template-columns: 1fr; padding: 60px 22px 50px; }
@@ -297,8 +336,6 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 }
 
 @media (max-width: 1120px) {
-  .account-area { display: none; }
-  .burger { display: inline-flex; }
   .topbar { gap: 14px; }
   .hero { grid-template-columns: minmax(0, 1fr); gap: 36px; min-height: auto; }
   .hero-copy, .hero-copy > p { max-width: 640px; }
@@ -309,11 +346,15 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .filter-clear { grid-row: 1; grid-column: 3; }
 }
 
-@media (min-width: 1121px) {
+@media (min-width: 761px) {
   .mobile-menu, .menu-backdrop { display: none; }
 }
 
 @media (max-width: 760px) {
+  .topnav, .create-button, .account-menu, .login-button, .header-actions .auth-placeholder { display: none; }
+  .burger { display: inline-flex; }
+  .fab { display: grid; place-items: center; position: fixed; z-index: 35; right: 16px; bottom: 18px; width: 56px; height: 56px; border-radius: 16px; background: var(--lime); color: #163326; font-size: 32px; line-height: 1; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.24); transition: transform 240ms ease; }
+  .fab-hidden { transform: translateY(calc(100% + 32px)); }
   .hero { padding: 40px 18px 36px; gap: 30px; }
   .hero h1 { font-size: 34px; }
   .hero-copy > p { margin: 16px 0 22px; }
@@ -354,3 +395,30 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+/* Форма створення оголошення */
+.create-form { display: grid; gap: 18px; }
+.form-block { display: grid; gap: 14px; padding: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
+.form-block h2 { margin: 0; font-size: 18px; }
+.form-hint { margin: -8px 0 0; color: var(--muted); font-size: 13px; }
+.form-block label { display: grid; gap: 7px; min-width: 0; }
+.form-block label > span { padding-left: 2px; color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+.form-block input:not([type="file"]), .form-block select, .form-block textarea { width: 100%; border: 1px solid #dde1dc; border-radius: 10px; background: #f9f9f5; color: var(--ink); padding: 0 12px; outline: none; font: inherit; }
+.form-block input:not([type="file"]), .form-block select { height: 43px; }
+.form-block textarea { padding: 11px 12px; resize: vertical; min-height: 130px; }
+.form-block input:focus, .form-block select:focus, .form-block textarea:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(15, 91, 69, 0.1); }
+.form-block select { appearance: none; -webkit-appearance: none; padding-right: 36px; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none' stroke='%230f5b45' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m1 1.5 5 5 5-5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 13px center; }
+.form-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.photo-tile, .photo-add { position: relative; aspect-ratio: 1; border-radius: 14px; overflow: hidden; }
+.photo-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-tile button { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border: 0; border-radius: 50%; background: rgba(22, 51, 38, 0.78); color: #fff; font-size: 16px; line-height: 1; cursor: pointer; }
+.photo-cover { position: absolute; left: 6px; bottom: 6px; padding: 3px 8px; border-radius: 999px; background: var(--lime); color: #163326; font-size: 10px; font-weight: 800; }
+.photo-add { display: grid; place-content: center; justify-items: center; gap: 2px; border: 1px dashed #b9c1b9; color: var(--green); cursor: pointer; background: #f9f9f5; }
+.photo-add:hover { border-color: var(--green); }
+.photo-add input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.form-block .photo-add > span { padding: 0; font-size: 30px; font-weight: 400; line-height: 1; letter-spacing: 0; text-transform: none; color: var(--green); }
+.photo-add small { font-size: 12px; font-weight: 700; }
+.form-error { margin: 0; padding: 12px 14px; border-radius: 12px; background: #f5dfdc; color: var(--danger); font-size: 14px; font-weight: 700; }
+.form-actions { display: flex; align-items: center; gap: 10px; }
+@media (max-width: 760px) { .form-block { padding: 16px; } .form-row { grid-template-columns: minmax(0, 1fr); } }

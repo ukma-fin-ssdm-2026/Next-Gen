@@ -2,8 +2,11 @@ import type {
   Category,
   CurrentUser,
   Listing,
+  ListingCreatePayload,
   ListingFilters,
+  ListingWithContact,
   SellerContact,
+  UploadedImage,
 } from "./types";
 
 const API_ROOT = "/api/v1";
@@ -40,7 +43,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     credentials: "include",
     ...init,
     headers: {
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...(init?.body && !(init.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
       ...init?.headers,
     },
   });
@@ -99,6 +102,19 @@ export function getListings(
 
 export function getListing(listingId: string): Promise<Listing> {
   return apiFetch<Listing>(`/listings/${listingId}`);
+}
+
+export function uploadListingImages(files: File[]): Promise<UploadedImage[]> {
+  const body = new FormData();
+  files.forEach((file) => body.append("files", file));
+  return apiFetch<UploadedImage[]>("/listings/images", { method: "POST", body });
+}
+
+export function createListing(payload: ListingCreatePayload): Promise<ListingWithContact> {
+  return apiFetch<ListingWithContact>("/listings", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function getFavorites(): Promise<Listing[]> {
