@@ -16,6 +16,7 @@
 | FR-011   | Модерація оголошень                                 | Moderation Service, Data Access Layer (ORM), ModerationAction, Listing.status | Unit-тест зміни статусу адміном |
 | FR-012   | Керування категоріями                               | Moderation Service, Data Access Layer (ORM), Category | Unit-тест CRUD категорій |
 | FR-013   | Блокування користувачів                             | User Moderation Service, Auth Service, Data Access Layer (ORM), User.is_blocked, ModerationAction | TP-026, TP-027 |
+| FR-015   | Пропозиції нових категорій і їх модерація           | Category Suggestion Service, Listing Service, Category Service, Data Access Layer, CategorySuggestion, Listing.suggested_category_id, ModerationAction | TP-026, TP-027, TP-028 |
 | PERF-001 | Час завантаження ≤300мс при 50 користувачах         | React SPA, API Router, Listing Service, Data Access Layer (ORM), PostgreSQL (Listing) | Навантажувальний тест |
 | REL-001  | Відновлення без втрати даних, RTO ≤5хв              | Data Access Layer (ORM), PostgreSQL Database | Хаос-експеримент (збій сервера) |
 | SEC-001  | Лише tenant НаУКМА та @ukma.edu.ua | Microsoft Entra ID, Auth Service, User.tenant_id/entra_object_id/email | Негативні тести tenant, issuer, audience, expiry, state/nonce і domain |
@@ -35,7 +36,7 @@
 
 ---
 > ### Нотатка «Використання ШІ»
-> - **Інструменти:** Claude
-> - **Етап:** Побудова матриці простежуваності вимог до архітектурних компонентів та сценаріїв атрибутів якості.
+> - **Інструменти:** Claude, Gemini.
+> - **Етап:** Побудова матриці простежуваності вимог до архітектурних компонентів та сценаріїв атрибутів якості, включаючи FR-014 і FR-015.
 > - **Що згенеровано:** Чорновий варіант прив'язок FR/NFR до компонентів на основі high-level-design.md, components.puml, deployment.puml та data-model.md; формулювання методів верифікації; чернетка двох сценаріїв атрибутів якості за довідником курсу (цифри з requirements.md).
 > - **Що перевірено / відкинуто вручну:** Прив'язки і сценарії перевірено і підтверджено мною; звірено назви компонентів з components.puml та deployment.puml; підтверджено з Architecture Lead, що PERF-001 стосується всього ланцюжка обробки запиту; Data Access Layer додано в усі рядки після зауваження викладача; сценарії звірено з довідником про сценарії атрибутів якості.

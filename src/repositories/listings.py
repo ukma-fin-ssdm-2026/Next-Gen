@@ -1,5 +1,6 @@
 """Репозиторій оголошень. Інтерфейс не залежить від FastAPI."""
 
+from threading import RLock
 from typing import Protocol
 from uuid import UUID
 
@@ -33,6 +34,7 @@ class InMemoryListingRepository:
 
     def __init__(self, items: list[Listing] | None = None) -> None:
         self._items: dict[UUID, Listing] = {item.id: item for item in items or []}
+        self._mutation_lock = RLock()
 
     @classmethod
     def with_seed(cls) -> "InMemoryListingRepository":
@@ -58,3 +60,16 @@ class InMemoryListingRepository:
 
     def delete(self, listing_id: UUID) -> bool:
         return self._items.pop(listing_id, None) is not None
+
+
+def get_listing_mutation_lock(repository: ListingRepository) -> RLock:
+    """Повертає спільний RLock для серіалізації змін оголошень у межах репозиторію."""
+    lock = getattr(repository, "_mutation_lock", None)
+    if isinstance(lock, type(RLock())):
+        return lock
+    new_lock = RLock()
+    try:
+        setattr(repository, "_mutation_lock", new_lock)
+    except Exception:
+        return new_lock
+    return new_lock

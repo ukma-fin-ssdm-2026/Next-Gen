@@ -170,7 +170,8 @@ paths:
       - Listings
       summary: Створити оголошення
       description: Створює оголошення від імені автентифікованого користувача із підтримкою
-        фотографій та стану товару (FR-002). Повертає об'єкт з контактами.
+        фотографій, стану товару та необов'язкової пропозиції нової категорії (FR-002,
+        FR-015). Повертає об'єкт з контактами.
       operationId: create_listing_api_v1_listings_post
       parameters:
       - name: baraholka_session
@@ -214,12 +215,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiValidationErrorResponse'
+        '429':
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/listings/my:
     get:
       tags:
@@ -760,6 +773,265 @@ paths:
           description: Новий slug вже використовується
         '422':
           description: Невалідні дані оновлення
+  /api/v1/category-suggestions:
+    post:
+      tags:
+      - Category Suggestions
+      summary: Створити пропозицію нової категорії
+      description: Дозволяє автентифікованому користувачеві подати пропозицію нової
+        категорії (FR-015 / US-010). Не більше 3 пропозицій у статусі PENDING на користувача.
+      operationId: submit_category_suggestion_api_v1_category_suggestions_post
+      parameters:
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategorySuggestionCreateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategorySuggestionResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+        '429':
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags:
+      - Category Suggestions
+      summary: Черга пропозицій категорій для модерації
+      description: Повертає список пропозицій категорій із фільтром за статусом та
+        кількістю прив'язаних активних оголошень (FR-015). Доступно лише для ролі
+        ADMIN.
+      operationId: list_category_suggestions_api_v1_category_suggestions_get
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/CategorySuggestionStatus'
+          description: Фільтр за статусом пропозиції (PENDING, APPROVED, REJECTED)
+          default: PENDING
+        description: Фільтр за статусом пропозиції (PENDING, APPROVED, REJECTED)
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CategorySuggestionResponse'
+                title: Response List Category Suggestions Api V1 Category Suggestions
+                  Get
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/category-suggestions/{suggestion_id}/approve:
+    post:
+      tags:
+      - Category Suggestions
+      summary: Схвалити пропозицію та створити категорію
+      description: 'Адміністратор схвалює пропозицію категорії (FR-015): створюється
+        нова активна категорія, усі активні оголошення з категорії «Інше» переміщуються
+        до неї, а дія фіксується в журналі модерації.'
+      operationId: approve_category_suggestion_api_v1_category_suggestions__suggestion_id__approve_post
+      parameters:
+      - name: suggestion_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Suggestion Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/CategorySuggestionApproveRequest'
+              - type: 'null'
+              title: Payload
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategorySuggestionResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/category-suggestions/{suggestion_id}/reject:
+    post:
+      tags:
+      - Category Suggestions
+      summary: Відхилити пропозицію категорії
+      description: 'Адміністратор відхиляє пропозицію з обов''язковою причиною (FR-015):
+        оголошення залишаються в «Інше», а рішення фіксується в журналі модерації.'
+      operationId: reject_category_suggestion_api_v1_category_suggestions__suggestion_id__reject_post
+      parameters:
+      - name: suggestion_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Suggestion Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategorySuggestionRejectRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategorySuggestionResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
   /api/v1/auth/login:
     get:
       tags:
@@ -1570,6 +1842,122 @@ components:
       - slug
       title: CategoryResponse
       description: Публічна схема категорії.
+    CategorySuggestionApproveRequest:
+      properties:
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+          description: Скоригована адміністратором назва категорії
+          examples:
+          - Музичні інструменти та аудіо
+      type: object
+      title: CategorySuggestionApproveRequest
+      description: Необов'язкове тіло запиту на схвалення пропозиції з можливістю
+        уточнити назву.
+    CategorySuggestionCreateRequest:
+      properties:
+        name:
+          type: string
+          title: Name
+          description: Назва пропонованої категорії (2–40 символів після обрізання
+            пробілів)
+          examples:
+          - Музичні інструменти
+      type: object
+      required:
+      - name
+      title: CategorySuggestionCreateRequest
+      description: Запит на створення пропозиції категорії; proposer_id береться із
+        сесії.
+    CategorySuggestionRejectRequest:
+      properties:
+        reason:
+          type: string
+          title: Reason
+          description: Причина відхилення пропозиції (5–500 символів після strip)
+          examples:
+          - Занадто вузька категорія, скористайтеся розділом «Інше»
+      type: object
+      required:
+      - reason
+      title: CategorySuggestionRejectRequest
+      description: Тіло запиту на відхилення пропозиції категорії з обов'язковою причиною.
+    CategorySuggestionResponse:
+      properties:
+        suggestion_id:
+          type: string
+          format: uuid
+          title: Suggestion Id
+          description: Унікальний ідентифікатор пропозиції
+        name:
+          type: string
+          title: Name
+          description: Назва пропонованої категорії
+        proposer_id:
+          type: string
+          format: uuid
+          title: Proposer Id
+          description: ID користувача, який подав пропозицію
+        status:
+          $ref: '#/components/schemas/CategorySuggestionStatus'
+          description: Поточний статус розгляду (PENDING, APPROVED, REJECTED)
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+          description: Причина відхилення (заповнюється для REJECTED)
+        category_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Category Id
+          description: ID створеної категорії (заповнюється після APPROVED)
+        reviewed_by:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Reviewed By
+          description: ID адміністратора, який розглянув пропозицію
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Час створення пропозиції (UTC)
+        reviewed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Reviewed At
+          description: Час розгляду пропозиції адміністратором (UTC)
+        listings_count:
+          type: integer
+          minimum: 0.0
+          title: Listings Count
+          description: Кількість активних оголошень, прив'язаних до цієї пропозиції
+          default: 0
+      type: object
+      required:
+      - suggestion_id
+      - name
+      - proposer_id
+      - status
+      - created_at
+      title: CategorySuggestionResponse
+      description: Публічне для автора / адміністратора представлення пропозиції категорії.
+    CategorySuggestionStatus:
+      type: string
+      enum:
+      - PENDING
+      - APPROVED
+      - REJECTED
+      title: CategorySuggestionStatus
+      description: Статуси розгляду пропозиції нової категорії (FR-015).
     CategoryUpdateRequest:
       properties:
         name:
@@ -1746,10 +2134,13 @@ components:
           examples:
           - 150.0
         category_id:
-          type: string
-          format: uuid
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
           title: Category Id
-          description: ID категорії
+          description: ID категорії (обов'язковий, якщо не передано suggested_category_name;
+            при пропозиції нової категорії оголошення публікується в «Інше»)
           examples:
           - 3fa85f64-5717-4562-b3fc-2c963f66afa6
         condition:
@@ -1758,6 +2149,14 @@ components:
           default: GOOD
           examples:
           - GOOD
+        suggested_category_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Suggested Category Name
+          description: Назва пропонованої нової категорії (FR-015 / US-010)
+          examples:
+          - Музичні інструменти
         contact:
           type: string
           maxLength: 200
@@ -1781,7 +2180,6 @@ components:
       required:
       - title
       - price
-      - category_id
       - contact
       - image_urls
       title: ListingCreate
@@ -1997,6 +2395,12 @@ components:
           type: string
           title: Contact
           description: Контактні дані (пошта або Telegram)
+        suggested_category_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Suggested Category Name
+          description: Назва запропонованої категорії (лише для власника, FR-015)
       type: object
       required:
       - title
@@ -2081,6 +2485,13 @@ components:
           - type: 'null'
           title: Target User Id
           description: Заблокований або розблокований користувач
+        suggestion_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Suggestion Id
+          description: Розглянута пропозиція категорії
         moderator_id:
           type: string
           format: uuid
@@ -2112,8 +2523,11 @@ components:
       - WITHDRAW_LISTING
       - BLOCK_USER
       - UNBLOCK_USER
+      - APPROVE_CATEGORY
+      - REJECT_CATEGORY
       title: ModerationActionType
-      description: Типи адміністративних дій над оголошенням і користувачем.
+      description: Типи дій модерації над оголошенням, користувачем і пропозицією
+        категорії.
     ModerationWithdrawRequest:
       properties:
         reason:

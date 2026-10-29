@@ -13,6 +13,9 @@ from src.config import (
 from src.domain.users import CurrentUser
 from src.integrations.entra import EntraOidcClient, MsalEntraOidcClient
 from src.repositories.categories import InMemoryCategoryRepository
+from src.repositories.category_suggestions import (
+    InMemoryCategorySuggestionRepository,
+)
 from src.repositories.favorites import InMemoryFavoriteRepository
 from src.repositories.image_storage import ImageStorage, LocalImageStorage
 from src.repositories.listings import InMemoryListingRepository
@@ -26,6 +29,7 @@ from src.services.auth import (
 )
 from src.services.auth_sessions import InMemoryAuthSessionStore, InMemoryOidcFlowStore
 from src.services.categories import CategoryService
+from src.services.category_suggestions import CategorySuggestionService
 from src.services.contacts import SellerContactService
 from src.services.favorites import FavoriteService
 from src.services.listings import ListingService
@@ -34,19 +38,28 @@ from src.services.profile import ProfileService
 from src.services.user_moderation import UserModerationService
 
 category_repository = InMemoryCategoryRepository.with_seed()
+category_suggestion_repository = InMemoryCategorySuggestionRepository()
 listing_repository = InMemoryListingRepository.with_seed()
 image_storage: ImageStorage = LocalImageStorage(get_image_storage_dir())
 favorite_repository = InMemoryFavoriteRepository()
+moderation_action_repository = InMemoryModerationActionRepository()
 category_service = CategoryService(category_repository)
+category_suggestion_service = CategorySuggestionService(
+    suggestions=category_suggestion_repository,
+    categories=category_repository,
+    category_service=category_service,
+    listings=listing_repository,
+    actions=moderation_action_repository,
+)
 listing_service = ListingService(
     listing_repository,
     image_storage=image_storage,
     favorites=favorite_repository,
     category_validator=category_service.is_valid_category_id,
+    category_suggestion_service=category_suggestion_service,
 )
 favorite_service = FavoriteService(favorite_repository, listing_repository)
 contact_service = SellerContactService(listing_repository)
-moderation_action_repository = InMemoryModerationActionRepository()
 moderation_service = ModerationService(
     listing_repository, favorite_repository, moderation_action_repository
 )
@@ -69,6 +82,11 @@ def get_image_storage() -> ImageStorage:
 def get_category_service() -> CategoryService:
     """Повертає Category Service для ін'єкції в роутери."""
     return category_service
+
+
+def get_category_suggestion_service() -> CategorySuggestionService:
+    """Повертає Category Suggestion Service для ін'єкції в роутери (FR-015)."""
+    return category_suggestion_service
 
 
 def get_listing_service() -> ListingService:

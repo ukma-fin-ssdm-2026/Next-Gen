@@ -1,4 +1,4 @@
-"""HTTP-адаптер до Listing Service та завантаження фотографій (FR-002, TM-02, TM-03)."""
+"""HTTP-адаптер до Listing Service та фото (FR-002, FR-015, TM-02, TM-03)."""
 
 from collections.abc import Iterator, Sequence
 from typing import Optional
@@ -30,8 +30,11 @@ from src.api.schemas.listings import (
     UploadedImageResponse,
 )
 from src.domain.exceptions import (
+    CategorySuggestionQuotaError,
+    DuplicateCategorySuggestionError,
     ImageUploadRateLimitError,
     InvalidCategoryError,
+    InvalidCategorySuggestionError,
     InvalidListingImageError,
     InvalidPriceRangeError,
     ListingForbiddenError,
@@ -55,7 +58,7 @@ router = APIRouter(
 
 
 def _to_public(listing: Listing) -> ListingPublicResponse:
-    """Публічна схема без contact (SEC-002, TM-05)."""
+    """Публічна схема без contact і без suggested_category_name (SEC-002, TM-05)."""
     return ListingPublicResponse(
         id=listing.id,
         title=listing.title,
@@ -83,11 +86,14 @@ def _to_public(listing: Listing) -> ListingPublicResponse:
     )
 
 
-def _to_private(listing: Listing) -> ListingResponse:
+def _to_private(
+    listing: Listing, suggested_category_name: Optional[str] = None
+) -> ListingResponse:
     """Повна схема для власника після create/update та у власній історії."""
     return ListingResponse(
         **_to_public(listing).model_dump(),
         contact=listing.contact,
+        suggested_category_name=suggested_category_name,
     )
 
 
@@ -113,6 +119,23 @@ def _raise_domain(exc: Exception) -> None:
                     "type": "value_error",
                 }
             ],
+        )
+    if isinstance(exc, InvalidCategorySuggestionError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=[
+                {
+                    "loc": ["body", "suggested_category_name"],
+                    "msg": str(exc),
+                    "type": "value_error",
+                }
+            ],
+        )
+    if isinstance(exc, DuplicateCategorySuggestionError):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    if isinstance(exc, CategorySuggestionQuotaError):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc)
         )
     if isinstance(exc, ListingUnauthorizedError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
@@ -323,17 +346,19 @@ def get_my_listings(
     summary="Створити оголошення",
     description=(
         "Створює оголошення від імені автентифікованого користувача із "
-        "підтримкою фотографій та стану товару (FR-002). "
-        "Повертає об'єкт з контактами."
+        "підтримкою фотографій, стану товару та необов'язкової пропозиції нової "
+        "категорії (FR-002, FR-015). Повертає об'єкт з контактами."
     ),
     responses={
         400: {"model": ErrorResponse, "description": "Bad Request"},
         401: {"model": ErrorResponse, "description": "Unauthorized"},
         403: {"model": ErrorResponse, "description": "Forbidden"},
+        409: {"model": ErrorResponse, "description": "Conflict"},
         422: {
             "model": ApiValidationErrorResponse,
             "description": "Validation Error",
         },
+        429: {"model": ErrorResponse, "description": "Too Many Requests"},
     },
 )
 def create_listing(
@@ -343,7 +368,7 @@ def create_listing(
 ) -> ListingResponse:
     try:
         created = service.create(
-            actor_id=current_user.user_id,
+            actor_id=current_user,
             title=listing.title,
             description=listing.description,
             price=listing.price,
@@ -351,14 +376,19 @@ def create_listing(
             contact=listing.contact,
             condition=listing.condition,
             image_urls=listing.image_urls,
+            suggested_category_name=listing.suggested_category_name,
         )
     except (
         ListingUnauthorizedError,
+        ListingForbiddenError,
         InvalidListingImageError,
         InvalidCategoryError,
+        InvalidCategorySuggestionError,
+        DuplicateCategorySuggestionError,
+        CategorySuggestionQuotaError,
     ) as exc:
         _raise_domain(exc)
-    return _to_private(created)
+    return _to_private(created, service.get_suggested_category_name(created))
 
 
 @router.get(
