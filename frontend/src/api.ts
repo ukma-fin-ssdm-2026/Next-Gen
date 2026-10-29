@@ -41,7 +41,20 @@ function errorMessage(payload: unknown, fallback: string): string {
   return fallback;
 }
 
+/** Екранує значення, що підставляється в сегмент шляху API (захист від path traversal / SSRF). */
+function segment(value: string): string {
+  return encodeURIComponent(value);
+}
+
+/** Дозволяє лише відносні шляхи API без обходу каталогів і зміни хоста. */
+function assertApiPath(path: string): void {
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\") || path.split("?")[0].split("/").some((part) => part === "..")) {
+    throw new Error("Некоректний шлях запиту");
+  }
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  assertApiPath(path);
   const response = await fetch(`${API_ROOT}${path}`, {
     credentials: "include",
     ...init,
@@ -104,7 +117,7 @@ export function getListings(
 }
 
 export function getListing(listingId: string): Promise<Listing> {
-  return apiFetch<Listing>(`/listings/${listingId}`);
+  return apiFetch<Listing>(`/listings/${segment(listingId)}`);
 }
 
 export function uploadListingImages(files: File[]): Promise<UploadedImage[]> {
@@ -125,14 +138,14 @@ export function getMyListings(): Promise<Listing[]> {
 }
 
 export function updateListing(listingId: string, payload: ListingUpdatePayload): Promise<Listing> {
-  return apiFetch<Listing>(`/listings/${listingId}`, {
+  return apiFetch<Listing>(`/listings/${segment(listingId)}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
 }
 
 export function deleteListing(listingId: string): Promise<void> {
-  return apiFetch<void>(`/listings/${listingId}`, { method: "DELETE" });
+  return apiFetch<void>(`/listings/${segment(listingId)}`, { method: "DELETE" });
 }
 
 export function getFavorites(): Promise<Listing[]> {
@@ -140,19 +153,19 @@ export function getFavorites(): Promise<Listing[]> {
 }
 
 export function addFavorite(listingId: string): Promise<void> {
-  return apiFetch<void>(`/favorites/${listingId}`, { method: "POST" });
+  return apiFetch<void>(`/favorites/${segment(listingId)}`, { method: "POST" });
 }
 
 export function removeFavorite(listingId: string): Promise<void> {
-  return apiFetch<void>(`/favorites/${listingId}`, { method: "DELETE" });
+  return apiFetch<void>(`/favorites/${segment(listingId)}`, { method: "DELETE" });
 }
 
 export function getSellerContact(listingId: string): Promise<SellerContact> {
-  return apiFetch<SellerContact>(`/listings/${listingId}/contact`);
+  return apiFetch<SellerContact>(`/listings/${segment(listingId)}/contact`);
 }
 
 export function moderateListing(listingId: string, reason: string): Promise<void> {
-  return apiFetch<void>(`/admin/listings/${listingId}/withdraw`, {
+  return apiFetch<void>(`/admin/listings/${segment(listingId)}/withdraw`, {
     method: "POST",
     body: JSON.stringify({ reason }),
   });
@@ -173,11 +186,11 @@ export function deleteAvatar(): Promise<CurrentUser> {
 }
 
 export function getPublicProfile(userId: string): Promise<PublicProfile> {
-  return apiFetch<PublicProfile>(`/users/${userId}`);
+  return apiFetch<PublicProfile>(`/users/${segment(userId)}`);
 }
 
 export function blockUser(userId: string, reason: string): Promise<ModerationAction> {
-  return apiFetch<ModerationAction>(`/admin/users/${userId}/block`, { method: "POST", body: JSON.stringify({ reason }) });
+  return apiFetch<ModerationAction>(`/admin/users/${segment(userId)}/block`, { method: "POST", body: JSON.stringify({ reason }) });
 }
 
 export function blockUserByEmail(email: string, reason: string): Promise<ModerationAction> {
@@ -189,5 +202,5 @@ export function unblockUserByEmail(email: string, reason: string): Promise<Moder
 }
 
 export function unblockUser(userId: string, reason: string): Promise<ModerationAction> {
-  return apiFetch<ModerationAction>(`/admin/users/${userId}/unblock`, { method: "POST", body: JSON.stringify({ reason }) });
+  return apiFetch<ModerationAction>(`/admin/users/${segment(userId)}/unblock`, { method: "POST", body: JSON.stringify({ reason }) });
 }
