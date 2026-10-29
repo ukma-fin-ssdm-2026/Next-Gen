@@ -1,4 +1,4 @@
-"""Сутність оголошення, фотографії та статуси каталогу (FR-002..FR-008)."""
+"""Сутність оголошення, фотографії та статуси каталогу (FR-002..FR-008, FR-015)."""
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -67,6 +67,7 @@ class Listing:
     condition: ListingCondition = ListingCondition.GOOD
     status: ListingStatus = ListingStatus.ACTIVE
     images: list[ListingImage] = field(default_factory=list)
+    suggested_category_id: UUID | None = None
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
 
@@ -78,6 +79,7 @@ class Listing:
 SEED_OWNER_ID = UUID("87654321-4321-8765-4321-876543210987")
 SEED_LISTING_ID = UUID("3fa85f64-5717-4562-b3fc-2c963f66afa6")
 SEED_CATEGORY_ID = UUID("12345678-1234-5678-1234-567812345678")
+OTHER_CATEGORY_ID = UUID("55555555-5555-5555-5555-555555555555")
 WITHDRAWN_LISTING_ID = UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
 SEED_IMAGE_ID = UUID("11111111-2222-3333-4444-555555555555")
 SEED_IMAGE_STORAGE_KEY = f"{SEED_IMAGE_ID.hex}.webp"

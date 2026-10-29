@@ -3,8 +3,8 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi.openapi.utils import get_openapi
 from fastapi import Depends, FastAPI, HTTPException, Response, status
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -13,6 +13,7 @@ from src.api.deps import get_image_storage
 from src.api.routers import (
     auth,
     categories,
+    category_suggestions,
     contacts,
     favorites,
     listings,
@@ -36,6 +37,7 @@ app.include_router(listings.router, prefix="/api/v1")
 app.include_router(contacts.router, prefix="/api/v1")
 app.include_router(favorites.router, prefix="/api/v1")
 app.include_router(categories.router, prefix="/api/v1")
+app.include_router(category_suggestions.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(moderation.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")

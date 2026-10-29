@@ -1,4 +1,4 @@
-"""HTTP-адаптер адміністративної модерації оголошень (FR-011).
+"""HTTP-адаптер адміністративної модерації оголошень і користувачів (FR-011, FR-013).
 
 Роль ADMIN перевіряється лише з `CurrentUser`, який `require_current_user`
 перечитує з локального запису користувача. Поля запиту, заголовки на кшталт
@@ -40,6 +40,7 @@ def _action_response(action: ModerationAction) -> ModerationActionResponse:
         id=action.id,
         listing_id=action.listing_id,
         target_user_id=action.target_user_id,
+        suggestion_id=action.suggestion_id,
         moderator_id=action.moderator_id,
         action_type=action.action_type,
         reason=action.reason,
