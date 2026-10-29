@@ -6,6 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN addgroup --system app && adduser --system --ingroup app app
+RUN mkdir -p /var/lib/baraholka/uploads && chown -R app:app /var/lib/baraholka/uploads
 
 COPY requirements.txt requirements.lock ./
 RUN python -m pip install \

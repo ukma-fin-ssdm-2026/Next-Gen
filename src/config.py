@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 import os
+from pathlib import Path
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -27,6 +28,14 @@ def _validate_url(value: str, name: str, *, allow_local_http: bool) -> str:
     ):
         raise ConfigurationError(f"{name} має використовувати HTTPS")
     return value
+
+
+def get_image_storage_dir() -> Path:
+    """Повертає шлях до каталогу сховища зображень (поза writable layer контейнера)."""
+    env_dir = os.getenv("IMAGE_STORAGE_DIR", "").strip()
+    if env_dir:
+        return Path(env_dir).resolve()
+    return (Path(__file__).resolve().parents[1] / "var" / "uploads").resolve()
 
 
 @dataclass(frozen=True)
