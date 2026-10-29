@@ -165,7 +165,8 @@ button { color: inherit; }
 
 footer { padding: 30px clamp(22px, 6vw, 94px); background: #14231c; color: white; display: flex; align-items: center; justify-content: space-between; gap: 30px; }
 .footer-brand { color: white; }
-.footer-brand .brand-mark { width: 34px; height: 34px; }
+.footer-brand .brand-divider { width: 1px; height: 30px; margin: 0 3px; flex: none; background: rgba(255, 255, 255, 0.28); }
+.footer-brand .brand-naukma { height: 34px; width: auto; flex: none; color: inherit; }
 footer p { color: rgba(255,255,255,0.55); font-size: 11px; text-align: right; }
 
 .global-alert-wrap { position: fixed; z-index: 80; top: 92px; left: 50%; width: min(560px, calc(100% - 32px)); transform: translateX(-50%); }
@@ -193,7 +194,7 @@ footer p { color: rgba(255,255,255,0.55); font-size: 11px; text-align: right; }
 .auth-required { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .auth-required h1 { font-size: clamp(28px, 4vw, 46px); margin: 24px 0 8px; }
 .auth-required p { color: var(--muted); margin: 0 0 24px; }
-.large-mark { width: 64px; height: 64px; font-size: 25px; }
+.large-mark { width: 64px; height: 64px; font-size: 34px; }
 .not-found-code { font-family: "Unbounded", sans-serif; font-size: clamp(70px, 13vw, 150px); line-height: 0.8; color: #d9ded8; }
 
 .modal-backdrop { position: fixed; inset: 0; z-index: 100; background: rgba(10, 23, 17, 0.72); padding: 24px; display: grid; place-items: center; backdrop-filter: blur(6px); }
@@ -224,6 +225,9 @@ footer p { color: rgba(255,255,255,0.55); font-size: 11px; text-align: right; }
 .stats div { display: flex; flex-direction: column; gap: 4px; }
 .stats dd { margin: 0; font-family: "Unbounded", sans-serif; font-size: clamp(18px, 2vw, 26px); color: var(--lime); letter-spacing: -0.03em; }
 .stats dt { color: rgba(255, 255, 255, 0.66); font-size: 11px; font-weight: 700; }
+
+/* ===== Логотип: збільшена літера Б ===== */
+.brand-mark { width: 39px; height: 39px; font-size: 22px; line-height: 1; }
 
 /* ===== Бургер-меню ===== */
 .burger { display: none; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: #fff; cursor: pointer; flex-direction: column; align-items: center; justify-content: center; gap: 5px; }
@@ -264,7 +268,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 @media (max-width: 760px) {
   .topbar { height: 68px; padding-inline: 16px; }
   .brand strong { font-size: 13px; }
-  .brand-mark { width: 35px; height: 35px; }
+  .brand-mark { width: 35px; height: 35px; font-size: 20px; }
+  .footer-brand .brand-naukma { height: 30px; }
   .user-copy, .button-ghost.compact { display: none; }
   .button-primary.compact { max-width: 170px; text-align: center; line-height: 1.15; }
   .hero { min-height: auto; grid-template-columns: 1fr; padding: 60px 22px 50px; }
