@@ -1,7 +1,9 @@
 """HTTP endpoints Microsoft Entra ID Authorization Code Flow."""
 
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response
 from fastapi import status
@@ -20,10 +22,15 @@ from src.api.deps import (
 )
 from src.api.schemas.listings import ErrorResponse
 from src.api.schemas.users import CurrentUserResponse
-from src.config import EntraSettings
+from src.config import ConfigurationError, EntraSettings, development_auth_enabled
 from src.domain.users import CurrentUser
 from src.integrations.entra import EntraOidcClient, EntraOidcError
-from src.services.auth import AuthService, BlockedUserError, InvalidIdentityError
+from src.services.auth import (
+    AuthService,
+    BlockedUserError,
+    InvalidIdentityError,
+    VerifiedEntraClaims,
+)
 from src.services.auth_sessions import InMemoryAuthSessionStore, InMemoryOidcFlowStore
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -52,6 +59,53 @@ def _safe_return_path(value: str | None) -> str | None:
     return value
 
 
+def _frontend_destination(settings: EntraSettings, return_to: str | None) -> str:
+    destination = settings.frontend_url
+    safe_return_to = _safe_return_path(return_to)
+    if safe_return_to is not None:
+        frontend = urlsplit(settings.frontend_url)
+        requested = urlsplit(safe_return_to)
+        destination = frontend._replace(
+            path=requested.path,
+            query=requested.query,
+            fragment=requested.fragment,
+        ).geturl()
+    return destination
+
+
+def _development_login_response(
+    settings: EntraSettings,
+    sessions: InMemoryAuthSessionStore,
+    service: AuthService,
+    return_to: str | None,
+) -> RedirectResponse:
+    """Creates a normal server-side session without contacting Entra locally."""
+    claims = VerifiedEntraClaims(
+        tenant_id=settings.tenant_id,
+        object_id=UUID("00000000-0000-0000-0000-000000000002"),
+        issuer=settings.issuer,
+        audience=settings.client_id,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        email="developer@ukma.edu.ua",
+        display_name="Local Developer",
+    )
+    current_user = service.authenticate_verified_claims(claims)
+    response = RedirectResponse(
+        _frontend_destination(settings, return_to),
+        status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+    )
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=sessions.create(current_user.user_id),
+        max_age=settings.session_ttl_seconds,
+        httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite="lax",
+        path="/",
+    )
+    return response
+
+
 @router.get(
     "/login",
     summary="Розпочати вхід Microsoft Entra ID",
@@ -73,7 +127,23 @@ def login(
     settings: EntraSettings = Depends(get_entra_settings),
     oidc: EntraOidcClient = Depends(get_entra_oidc_client),
     flows: InMemoryOidcFlowStore = Depends(get_oidc_flow_store),
+    sessions: InMemoryAuthSessionStore = Depends(get_auth_session_store),
+    service: AuthService = Depends(get_auth_service),
 ) -> RedirectResponse:
+    try:
+        if development_auth_enabled(settings):
+            return _development_login_response(
+                settings,
+                sessions,
+                service,
+                return_to,
+            )
+    except ConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
     try:
         flow = oidc.begin()
     except EntraOidcError as exc:
@@ -148,17 +218,8 @@ def callback(
         ) from exc
 
     session_token = sessions.create(current_user.user_id)
-    destination = settings.frontend_url
-    if return_to is not None:
-        frontend = urlsplit(settings.frontend_url)
-        requested = urlsplit(return_to)
-        destination = frontend._replace(
-            path=requested.path,
-            query=requested.query,
-            fragment=requested.fragment,
-        ).geturl()
     response = RedirectResponse(
-        destination,
+        _frontend_destination(settings, return_to),
         status_code=status.HTTP_303_SEE_OTHER,
     )
     response.delete_cookie(OIDC_STATE_COOKIE_NAME, path="/api/v1/auth")

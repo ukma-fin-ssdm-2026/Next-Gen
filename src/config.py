@@ -39,6 +39,25 @@ def get_image_storage_dir() -> Path:
     return (Path(tempfile.gettempdir()) / "baraholka-uploads").resolve()
 
 
+def development_auth_enabled(settings: "EntraSettings") -> bool:
+    """Allows the local login shortcut only in an explicitly local environment."""
+    enabled = os.getenv("DEV_AUTH_ENABLED", "false").strip().casefold()
+    if enabled not in {"1", "true", "yes"}:
+        return False
+
+    if os.getenv("APP_ENV", "").strip().casefold() != "development":
+        raise ConfigurationError(
+            "DEV_AUTH_ENABLED дозволено лише з APP_ENV=development"
+        )
+
+    local_hosts = {"localhost", "127.0.0.1"}
+    frontend_host = urlparse(settings.frontend_url).hostname
+    callback_host = urlparse(settings.redirect_uri).hostname
+    if frontend_host not in local_hosts or callback_host not in local_hosts:
+        raise ConfigurationError("Development auth дозволено лише для localhost URL")
+    return True
+
+
 @dataclass(frozen=True)
 class EntraSettings:
     tenant_id: UUID

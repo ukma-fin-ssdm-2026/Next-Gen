@@ -140,6 +140,51 @@ def test_login_callback_me_and_logout_complete_local_session_cycle(
     assert client.get("/api/v1/auth/me").status_code == 401
 
 
+def test_development_login_creates_real_local_session(
+    auth_http_client,
+    monkeypatch,
+) -> None:
+    """[FR-001] Dev login still uses the normal server-side session path."""
+    client, oidc, _, _ = auth_http_client
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("DEV_AUTH_ENABLED", "true")
+
+    response = client.get(
+        "/api/v1/auth/login?next=/favorites",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "http://localhost:5173/favorites"
+    assert client.cookies.get("baraholka_session") is not None
+    assert client.cookies.get("baraholka_oidc_state") is None
+    assert oidc.completed_response is None
+
+    me_response = client.get("/api/v1/auth/me")
+    assert me_response.status_code == 200
+    assert me_response.json() == {
+        "user_id": me_response.json()["user_id"],
+        "email": "developer@ukma.edu.ua",
+        "display_name": "Local Developer",
+        "role": "USER",
+    }
+
+
+def test_development_login_is_rejected_outside_local_development(
+    auth_http_client,
+    monkeypatch,
+) -> None:
+    """[SEC-001] A production process cannot enable the local identity shortcut."""
+    client, _, _, _ = auth_http_client
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("DEV_AUTH_ENABLED", "true")
+
+    response = client.get("/api/v1/auth/login", follow_redirects=False)
+
+    assert response.status_code == 503
+    assert "APP_ENV=development" in response.json()["detail"]
+
+
 @pytest.mark.parametrize(
     "next_url",
     [
