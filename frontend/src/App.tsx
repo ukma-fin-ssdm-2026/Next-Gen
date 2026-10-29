@@ -572,7 +572,7 @@ function CreateListingPage({ user, authChecked, categories, onError, onNotice }:
             </select></label>
             <label><span>Ціна, грн</span><input type="number" min="0" step="1" inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value)} required placeholder="0" /></label>
           </div>
-          <label><span>Опис</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} minLength={10} maxLength={2000} rows={6} required placeholder="Розкажіть про стан, розмір, чому продаєте" /></label>
+          <label><span>Опис (необов’язково)</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} rows={6} placeholder="Розкажіть про стан, розмір, чому продаєте" /></label>
         </section>
 
         <section className="form-block">

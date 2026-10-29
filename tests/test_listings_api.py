@@ -62,6 +62,31 @@ def test_create_without_actor_is_401(
     assert response.status_code == 401
 
 
+def test_create_and_patch_accept_empty_description(
+    client: TestClient,
+    listing_payload: dict[str, object],
+    login_as,
+) -> None:
+    """[TP-001] [TP-008] [FR-002] [FR-003]
+    Опис оголошення є необов'язковим під час створення і редагування.
+    """
+    login_as(user_id=SEED_OWNER_ID)
+    payload = {**listing_payload}
+    payload.pop("description")
+
+    created = client.post("/api/v1/listings", json=payload)
+
+    assert created.status_code == 201
+    assert created.json()["description"] == ""
+
+    patched = client.patch(
+        f"/api/v1/listings/{SEED_LISTING_ID}",
+        json={"description": ""},
+    )
+    assert patched.status_code == 200
+    assert patched.json()["description"] == ""
+
+
 def test_x_actor_id_without_session_is_rejected_with_401(
     client: TestClient,
     listing_payload: dict[str, object],

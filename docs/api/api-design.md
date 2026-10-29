@@ -12,7 +12,7 @@
 |---|---|---|---|---|
 | `id` | `UUID` | Auto UUID v4 | Унікальний ідентифікатор оголошення | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
 | `title` | `string` | min: 3, max: 100 | Назва оголошення | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
-| `description` | `string` | min: 10, max: 2000 | Детальний опис товару | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
+| `description` | `string` | min: 0, max: 2000; у `ListingCreate` поле можна не передавати, порожнє значення дозволене | Необов’язковий опис товару | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `price` | `number` (float) | ge: 0 (негативні значення заборонені) | Ціна в гривнях | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `category_id` | `UUID` | Valid UUID | Унікальний ідентифікатор категорії | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `condition` | `string` | Enum: `NEW`, `LIKE_NEW`, `GOOD`, `USED` | Стан товару в оголошенні (`FR-002`) | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |

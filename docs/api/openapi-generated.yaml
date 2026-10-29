@@ -1257,11 +1257,11 @@ components:
         description:
           type: string
           maxLength: 2000
-          minLength: 10
           title: Description
-          description: Детальний опис товару
+          description: Необов'язковий опис товару; може бути порожнім
+          default: ''
           examples:
-          - Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
+          - Худі в ідеальному стані, розмір M.
         price:
           type: number
           minimum: 0.0
@@ -1304,7 +1304,6 @@ components:
       type: object
       required:
       - title
-      - description
       - price
       - category_id
       - contact
@@ -1381,9 +1380,8 @@ components:
         description:
           type: string
           maxLength: 2000
-          minLength: 10
           title: Description
-          description: Детальний опис товару
+          description: Необов'язковий опис товару; може бути порожнім
           examples:
           - Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
         price:
@@ -1463,9 +1461,8 @@ components:
         description:
           type: string
           maxLength: 2000
-          minLength: 10
           title: Description
-          description: Детальний опис товару
+          description: Необов'язковий опис товару; може бути порожнім
           examples:
           - Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
         price:
@@ -1557,7 +1554,6 @@ components:
           anyOf:
           - type: string
             maxLength: 2000
-            minLength: 10
           - type: 'null'
           title: Description
         price:

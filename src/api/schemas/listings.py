@@ -80,9 +80,8 @@ class ListingBase(BaseModel):
     )
     description: str = Field(
         ...,
-        min_length=10,
         max_length=2000,
-        description="Детальний опис товару",
+        description="Необов'язковий опис товару; може бути порожнім",
         examples=["Худі в ідеальному стані, розмір M. Продаю, бо не ношу."],
     )
     price: float = Field(..., ge=0, description="Ціна в гривнях", examples=[150.0])
@@ -99,6 +98,12 @@ class ListingBase(BaseModel):
 
 
 class ListingCreate(ListingBase):
+    description: str = Field(
+        "",
+        max_length=2000,
+        description="Необов'язковий опис товару; може бути порожнім",
+        examples=["Худі в ідеальному стані, розмір M."],
+    )
     contact: str = Field(
         ...,
         min_length=3,
@@ -120,7 +125,7 @@ class ListingCreate(ListingBase):
 
 class ListingUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=3, max_length=100)
-    description: Optional[str] = Field(None, min_length=10, max_length=2000)
+    description: Optional[str] = Field(None, max_length=2000)
     price: Optional[float] = Field(None, ge=0)
     contact: Optional[str] = Field(None, min_length=3, max_length=200)
     condition: Optional[ListingCondition] = Field(None)
