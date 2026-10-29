@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID
 
-from src.domain.users import CurrentUser, User
+from src.domain.users import CurrentUser, User, UserRole
 from src.repositories.users import UserRepository
 
 UKMA_EMAIL_DOMAIN = "ukma.edu.ua"
@@ -51,9 +51,15 @@ class VerifiedEntraClaims:
 class AuthService:
     """Зв'язує перевірену Entra-ідентичність із локальним профілем."""
 
-    def __init__(self, repository: UserRepository, config: EntraAuthConfig) -> None:
+    def __init__(
+        self,
+        repository: UserRepository,
+        config: EntraAuthConfig,
+        admin_emails: frozenset[str] = frozenset(),
+    ) -> None:
         self._repository = repository
         self._config = config
+        self._admin_emails = admin_emails
 
     def authenticate_verified_claims(
         self,
@@ -86,6 +92,11 @@ class AuthService:
             if not user.display_name_customized:
                 user.display_name = claims.display_name.strip()
 
+        # Список ADMIN_EMAILS — єдине джерело ролі: адреса зі списку отримує
+        # ADMIN, відсутня в ньому повертається до USER при наступному вході.
+        user.role = (
+            UserRole.ADMIN if normalized_email in self._admin_emails else UserRole.USER
+        )
         saved = self._repository.save(user)
         return CurrentUser(
             user_id=saved.user_id,
