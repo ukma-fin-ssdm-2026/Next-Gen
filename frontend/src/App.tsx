@@ -306,7 +306,7 @@ function Header({ user, authChecked, busy, onLogout }: {
   return (
     <>
       <header className="topbar">
-        <Link className="brand" to="/" aria-label="Барахолка НаУКМА — на головну">
+        <Link className="brand" to="/" aria-label="Барахолка НаУКМА, на головну">
           <span className="brand-mark">Б</span>
           <span><strong>Барахолка</strong><small>НаУКМА</small></span>
         </Link>
@@ -413,7 +413,7 @@ function HomePage({ categories, categoryNames, user, favorites, busy, onFavorite
   }
 
   const totalLabel = totalListings === null
-    ? "—"
+    ? "…"
     : totalListings >= STATS_SAMPLE_SIZE ? `${STATS_SAMPLE_SIZE}+` : String(totalListings);
 
   return (
@@ -422,7 +422,7 @@ function HomePage({ categories, categoryNames, user, favorites, busy, onFavorite
         <div className="hero-copy">
           <span className="eyebrow">Маркетплейс могилянської спільноти</span>
           <h1>Речі знаходять нових власників тут.</h1>
-          <p>Купуйте й продавайте всередині НаУКМА — без зайвих чатів, випадкових людей і загублених оголошень.</p>
+          <p>Купуйте й продавайте всередині НаУКМА: без зайвих чатів, випадкових людей і загублених оголошень.</p>
           <div className="hero-actions">
             <Link className="button button-primary" to="/listings">Переглянути оголошення</Link>
             {!user && <a className="button button-light" href={currentLoginUrl}>Приєднатися</a>}
@@ -447,15 +447,15 @@ function HomePage({ categories, categoryNames, user, favorites, busy, onFavorite
           )}
           <dl className="stats">
             <div><dd>{totalLabel}</dd><dt>оголошень</dt></div>
-            <div><dd>{categories.length || "—"}</dd><dt>категорій</dt></div>
-            <div><dd>{freshStat?.value ?? "—"}</dd><dt>{freshStat?.label ?? "нових за добу"}</dt></div>
+            <div><dd>{categories.length}</dd><dt>категорій</dt></div>
+            <div><dd>{freshStat?.value ?? "0"}</dd><dt>{freshStat?.label ?? "нових за добу"}</dt></div>
           </dl>
         </div>
       </section>
 
       <section className="catalog-section recent-section">
         <div className="section-heading">
-          <div><span className="eyebrow dark">Щойно додали</span><h2>Нещодавні оголошення</h2></div>
+          <h2>Нещодавні оголошення</h2>
           <Link className="button button-light" to="/listings">Весь каталог →</Link>
         </div>
         {loading ? <ListingSkeleton /> : recentListings.length ? (
