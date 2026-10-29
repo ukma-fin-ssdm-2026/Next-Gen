@@ -136,6 +136,18 @@ function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  useEffect(() => {
+    if (!error) return;
+    const timer = window.setTimeout(() => setError(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [error]);
+
   const categoryNames = useMemo(
     () => new Map(categories.map((category) => [category.id, category.name])),
     [categories],
@@ -212,11 +224,18 @@ function App() {
     <div className="app-shell">
       <Header user={user} authChecked={authChecked} busy={busy} favoritesCount={favorites.size} onLogout={() => void handleLogout()} />
 
-      {error && <div className="global-alert-wrap"><div className="alert alert-error" role="alert">{error}</div></div>}
+      {error && (
+        <div className="global-alert-wrap">
+          <div className="alert alert-error" role="alert" key={error}>
+            <span>{error}</span>
+            <button onClick={() => setError(null)} aria-label="Закрити повідомлення">×</button>
+          </div>
+        </div>
+      )}
       {notice && (
         <div className="global-alert-wrap">
-          <div className="alert alert-success" role="status">
-            {notice}
+          <div className="alert alert-success" role="status" key={notice}>
+            <span>{notice}</span>
             <button onClick={() => setNotice(null)} aria-label="Закрити повідомлення">×</button>
           </div>
         </div>
@@ -478,7 +497,205 @@ const STATUS_LABELS: Record<string, string> = {
   REMOVED_BY_MODERATOR: "Знято модератором",
 };
 
-type PhotoItem = { id: string; preview: string; url?: string; file?: File };
+const PHONE_PREFIX = "Тел.: ";
+const LOCATION_PREFIX = "Локація: ";
+const PHONE_PATTERN = /^\+?[0-9][0-9\s()-]{6,19}$/;
+
+// Бекенд зберігає один рядок contact (до 200 символів), тому телефон і локацію
+// пакуємо в нього окремими рядками; старі односкладові контакти читаються як є.
+function packContact(parts: { main: string; phone: string; location: string }): string {
+  return [
+    parts.main.trim(),
+    parts.phone.trim() ? `${PHONE_PREFIX}${parts.phone.trim()}` : "",
+    parts.location.trim() ? `${LOCATION_PREFIX}${parts.location.trim()}` : "",
+  ].filter(Boolean).join("\n");
+}
+
+function unpackContact(raw: string): { main: string; phone: string; location: string } {
+  const result = { main: "", phone: "", location: "" };
+  const rest: string[] = [];
+  raw.split("\n").forEach((line) => {
+    const value = line.trim();
+    if (value.startsWith(PHONE_PREFIX)) result.phone = value.slice(PHONE_PREFIX.length).trim();
+    else if (value.startsWith(LOCATION_PREFIX)) result.location = value.slice(LOCATION_PREFIX.length).trim();
+    else if (value) rest.push(value);
+  });
+  result.main = rest.join(" ");
+  return result;
+}
+
+type PhotoItem = { id: string; preview: string; url?: string; file?: File; original?: File };
+
+const CROP_ASPECT = 4 / 3;
+const CROP_OUTPUT_WIDTH = 1600;
+
+type CropJob = { id: string; kind: "new"; file: File } | { id: string; kind: "edit"; photoId: string; src: string; name: string; revoke: boolean };
+
+function PhotoCropper({ src, name, queued, onCancel, onSkip, onDone, onUnreadable }: {
+  src: string;
+  name: string;
+  queued: number;
+  onCancel: () => void;
+  onSkip: () => void;
+  onDone: (blob: Blob) => void;
+  onUnreadable: () => void;
+}) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
+  const [frame, setFrame] = useState({ w: 0, h: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [fill, setFill] = useState<"blur" | "light" | "dark">("blur");
+  const imageRef = useRef<HTMLImageElement | null>(null);
+
+  const minScale = natural && frame.w ? Math.max(frame.w / natural.w, frame.h / natural.h) : 1;
+  const fitRatio = natural && frame.w ? Math.min(frame.w / natural.w, frame.h / natural.h) / minScale : 1;
+  const scale = minScale * zoom;
+  const hasGaps = Boolean(natural) && (natural!.w * scale < frame.w - 1 || natural!.h * scale < frame.h - 1);
+
+  const clamp = useCallback((x: number, y: number, nextScale: number) => {
+    if (!natural) return { x: 0, y: 0 };
+    const gapX = frame.w - natural.w * nextScale;
+    const gapY = frame.h - natural.h * nextScale;
+    return {
+      x: Math.min(Math.max(0, gapX), Math.max(Math.min(0, gapX), x)),
+      y: Math.min(Math.max(0, gapY), Math.max(Math.min(0, gapY), y)),
+    };
+  }, [natural, frame.w, frame.h]);
+
+  useEffect(() => {
+    const measure = () => {
+      const node = frameRef.current;
+      if (node) setFrame({ w: node.clientWidth, h: node.clientHeight });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
+  useEffect(() => {
+    if (!natural || !frame.w) return;
+    const base = Math.max(frame.w / natural.w, frame.h / natural.h);
+    setZoom(1);
+    setOffset({ x: (frame.w - natural.w * base) / 2, y: (frame.h - natural.h * base) / 2 });
+  }, [natural, frame.w, frame.h]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onCancel(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  const changeZoom = (next: number) => {
+    const value = Math.min(4, Math.max(fitRatio, next));
+    if (!natural) return;
+    const nextScale = minScale * value;
+    const cx = (frame.w / 2 - offset.x) / scale;
+    const cy = (frame.h / 2 - offset.y) / scale;
+    setZoom(value);
+    setOffset(clamp(frame.w / 2 - cx * nextScale, frame.h / 2 - cy * nextScale, nextScale));
+  };
+
+  const confirm = () => {
+    const image = imageRef.current;
+    if (!image || !natural) return;
+    const outW = Math.round(Math.min(CROP_OUTPUT_WIDTH, frame.w / scale));
+    const outH = Math.round(outW / CROP_ASPECT);
+    const k = outW / frame.w;
+    const canvas = document.createElement("canvas");
+    canvas.width = outW;
+    canvas.height = outH;
+    const context = canvas.getContext("2d");
+    if (!context) { onSkip(); return; }
+    if (hasGaps) {
+      if (fill === "blur") {
+        const tiny = document.createElement("canvas");
+        tiny.width = 32;
+        tiny.height = 24;
+        const tinyContext = tiny.getContext("2d");
+        if (tinyContext) {
+          const cover = Math.max(32 / natural.w, 24 / natural.h);
+          tinyContext.drawImage(image, (32 - natural.w * cover) / 2, (24 - natural.h * cover) / 2, natural.w * cover, natural.h * cover);
+          context.imageSmoothingEnabled = true;
+          context.imageSmoothingQuality = "high";
+          context.drawImage(tiny, 0, 0, outW, outH);
+          context.fillStyle = "rgba(255, 255, 255, 0.18)";
+          context.fillRect(0, 0, outW, outH);
+        }
+      } else {
+        context.fillStyle = fill === "light" ? "#ffffff" : "#101814";
+        context.fillRect(0, 0, outW, outH);
+      }
+    }
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(image, offset.x * k, offset.y * k, natural.w * scale * k, natural.h * scale * k);
+    canvas.toBlob((blob) => { if (blob) onDone(blob); else onSkip(); }, "image/jpeg", 0.92);
+  };
+
+  return (
+    <div className="crop-overlay" role="dialog" aria-modal="true" aria-label="Обрізання фото" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
+      <div className="crop-dialog">
+        <div className="crop-head">
+          <h2>Обріжте фото</h2>
+          <p>Кадр 4:3 такий самий, як у каталозі й на сторінці оголошення. Можна заповнити його фото або вписати фото повністю, а порожні місця заповнити полями.{queued > 0 ? ` Ще фото в черзі: ${queued}.` : ""}</p>
+        </div>
+        <div
+          className="crop-frame"
+          ref={frameRef}
+          tabIndex={0}
+          onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); dragRef.current = { x: event.clientX, y: event.clientY, ox: offset.x, oy: offset.y }; }}
+          onPointerMove={(event) => { const drag = dragRef.current; if (drag) setOffset(clamp(drag.ox + event.clientX - drag.x, drag.oy + event.clientY - drag.y, scale)); }}
+          onPointerUp={() => { dragRef.current = null; }}
+          onPointerCancel={() => { dragRef.current = null; }}
+          onWheel={(event) => changeZoom(zoom - event.deltaY * 0.0025)}
+          onKeyDown={(event) => {
+            const step = 24;
+            const moves: Record<string, [number, number]> = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
+            const move = moves[event.key];
+            if (move) { event.preventDefault(); setOffset((current) => clamp(current.x + move[0], current.y + move[1], scale)); }
+          }}
+        >
+          {hasGaps && (fill === "blur"
+            ? <img className="crop-backdrop" src={src} alt="" draggable={false} aria-hidden="true" />
+            : <span className="crop-solid" style={{ background: fill === "light" ? "#ffffff" : "#101814" }} aria-hidden="true" />)}
+          <img
+            ref={imageRef}
+            src={src}
+            alt={name}
+            draggable={false}
+            onLoad={(event) => setNatural({ w: event.currentTarget.naturalWidth, h: event.currentTarget.naturalHeight })}
+            onError={onUnreadable}
+            style={natural ? { width: natural.w * scale, height: natural.h * scale, transform: `translate(${offset.x}px, ${offset.y}px)` } : { visibility: "hidden" }}
+          />
+          <span className="crop-grid" aria-hidden="true" />
+        </div>
+        <div className="crop-modes" role="group" aria-label="Режим кадру">
+          <button type="button" className={!hasGaps ? "active" : ""} onClick={() => { if (!natural) return; setZoom(1); setOffset({ x: (frame.w - natural.w * minScale) / 2, y: (frame.h - natural.h * minScale) / 2 }); }}>Заповнити кадр</button>
+          <button type="button" className={hasGaps ? "active" : ""} disabled={fitRatio > 0.995} onClick={() => { if (!natural) return; const nextScale = minScale * fitRatio; setZoom(fitRatio); setOffset({ x: (frame.w - natural.w * nextScale) / 2, y: (frame.h - natural.h * nextScale) / 2 }); }}>Вписати повністю</button>
+        </div>
+        <label className="crop-zoom">
+          <span>Масштаб</span>
+          <input type="range" min={fitRatio} max="4" step="0.01" value={zoom} onChange={(event) => changeZoom(Number(event.target.value))} />
+        </label>
+        {hasGaps && (
+          <div className="crop-fill" role="group" aria-label="Чим заповнити поля">
+            <span>Поля</span>
+            <button type="button" className={fill === "blur" ? "active" : ""} onClick={() => setFill("blur")}>Розмиття</button>
+            <button type="button" className={fill === "light" ? "active" : ""} onClick={() => setFill("light")}>Світлі</button>
+            <button type="button" className={fill === "dark" ? "active" : ""} onClick={() => setFill("dark")}>Темні</button>
+          </div>
+        )}
+        <div className="crop-actions">
+          <button className="button button-text" type="button" onClick={onCancel}>Скасувати</button>
+          <button className="button button-primary" type="button" disabled={!natural} onClick={confirm}>Готово</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function ListingForm({ mode, listing, initialContact, categories, onError, onNotice }: {
   mode: "create" | "edit";
@@ -495,7 +712,10 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
   const [price, setPrice] = useState(listing ? String(listing.price) : "");
   const [condition, setCondition] = useState<ListingCondition>(listing?.condition ?? "GOOD");
   const [description, setDescription] = useState(listing?.description ?? "");
-  const [contact, setContact] = useState(initialContact ?? "");
+  const initialParts = useMemo(() => unpackContact(initialContact ?? ""), [initialContact]);
+  const [contact, setContact] = useState(initialParts.main);
+  const [phone, setPhone] = useState(initialParts.phone);
+  const [location, setLocation] = useState(initialParts.location);
   const [photos, setPhotos] = useState<PhotoItem[]>(() =>
     [...(listing?.images ?? [])]
       .sort((a, b) => a.display_order - b.display_order)
@@ -505,18 +725,52 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
   const [formError, setFormError] = useState<string | null>(null);
   const photosRef = useRef(photos);
   photosRef.current = photos;
+  const [cropQueue, setCropQueue] = useState<CropJob[]>([]);
+  const cropJob = cropQueue[0] ?? null;
+  const cropSource = useMemo(() => {
+    if (!cropJob) return null;
+    if (cropJob.kind === "new") return { src: URL.createObjectURL(cropJob.file), name: cropJob.file.name, revoke: true };
+    return { src: cropJob.src, name: cropJob.name, revoke: cropJob.revoke };
+  }, [cropJob]);
+  useEffect(() => () => { if (cropSource?.revoke) URL.revokeObjectURL(cropSource.src); }, [cropSource]);
 
   useEffect(() => () => photosRef.current.forEach((photo) => { if (photo.file) URL.revokeObjectURL(photo.preview); }), []);
 
   const addFiles = (list: FileList | null) => {
     if (!list) return;
     const room = Math.max(MAX_PHOTOS - photos.length, 0);
-    const added = Array.from(list).slice(0, room).map((file) => {
-      const preview = URL.createObjectURL(file);
-      return { id: preview, preview, file };
-    });
+    const files = Array.from(list).slice(0, room);
     setFormError(list.length > room ? `Можна додати не більше ${MAX_PHOTOS} фото` : null);
-    setPhotos((current) => [...current, ...added]);
+    setCropQueue((current) => [...current, ...files.map((file, position) => ({ id: `${Date.now()}-${position}-${file.name}`, kind: "new" as const, file }))]);
+  };
+
+  const finishCrop = (blob: Blob | null) => {
+    if (!cropJob) return;
+    if (blob) {
+      const baseName = (cropJob.kind === "new" ? cropJob.file.name : cropJob.name).replace(/\.[^.]+$/, "") || "photo";
+      const cropped = new File([blob], `${baseName}.jpg`, { type: "image/jpeg" });
+      const preview = URL.createObjectURL(cropped);
+      if (cropJob.kind === "new") {
+        setPhotos((current) => [...current, { id: preview, preview, file: cropped, original: cropJob.file }]);
+      } else {
+        setPhotos((current) => current.map((photo) => {
+          if (photo.id !== cropJob.photoId) return photo;
+          if (photo.file) URL.revokeObjectURL(photo.preview);
+          return { id: preview, preview, file: cropped, original: photo.original ?? photo.file };
+        }));
+      }
+    } else if (cropJob.kind === "new") {
+      const file = cropJob.file;
+      const preview = URL.createObjectURL(file);
+      setPhotos((current) => [...current, { id: preview, preview, file }]);
+    }
+    setCropQueue((current) => current.slice(1));
+  };
+
+  const startRecrop = (photo: PhotoItem) => {
+    const original = photo.original ?? photo.file;
+    const src = original ? URL.createObjectURL(original) : photo.url ?? photo.preview;
+    setCropQueue((current) => [...current, { id: `edit-${photo.id}`, kind: "edit", photoId: photo.id, src, name: original?.name ?? "photo", revoke: Boolean(original) }]);
   };
 
   const removePhoto = (index: number) => {
@@ -537,6 +791,15 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
       setFormError("Додайте щонайменше одне фото");
       return;
     }
+    if (phone.trim() && !PHONE_PATTERN.test(phone.trim())) {
+      setFormError("Перевірте номер телефону: лише цифри, пробіли, дужки й дефіс, можна з «+» на початку");
+      return;
+    }
+    const packedContact = packContact({ main: contact, phone, location });
+    if (packedContact.length > 200) {
+      setFormError("Контактні дані задовгі, скоротіть їх");
+      return;
+    }
     setSubmitting(true);
     try {
       const newFiles = photos.filter((photo) => photo.file).map((photo) => photo.file as File);
@@ -552,7 +815,7 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
           price: Number(price),
           condition,
           image_urls: imageUrls,
-          ...(contact.trim() ? { contact: contact.trim() } : {}),
+          ...(initialContact || contact.trim() ? { contact: packedContact } : {}),
         });
         onNotice("Зміни збережено");
         navigate(`/listings/${listing.id}`);
@@ -563,7 +826,7 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
           price: Number(price),
           category_id: categoryId,
           condition,
-          contact: contact.trim(),
+          contact: packedContact,
           image_urls: imageUrls,
         });
         onNotice("Оголошення опубліковано");
@@ -580,6 +843,18 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
   const backTo = editing && listing ? `/listings/${listing.id}` : "/listings";
   return (
     <main className="page-main create-page">
+      {cropJob && cropSource && (
+        <PhotoCropper
+          key={cropJob.id}
+          src={cropSource.src}
+          name={cropSource.name}
+          queued={cropQueue.length - 1}
+          onCancel={() => setCropQueue((current) => current.slice(1))}
+          onSkip={() => finishCrop(null)}
+          onDone={(blob) => finishCrop(blob)}
+          onUnreadable={() => { setFormError("Це фото не вдалося відкрити для обрізання, його додано без змін."); finishCrop(null); }}
+        />
+      )}
       <Link className="back-link" to={backTo}>{editing ? "← До оголошення" : "← До оголошень"}</Link>
       <div className="create-page-head">
         <div className="page-heading"><h1>{editing ? "Редагувати оголошення" : "Створити оголошення"}</h1></div>
@@ -596,6 +871,9 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
                   {index === 0
                     ? <span className="photo-cover">Обкладинка</span>
                     : <button className="photo-make-cover" type="button" onClick={() => makeCover(index)}>Зробити обкладинкою</button>}
+                  <button className="photo-crop" type="button" onClick={() => startRecrop(photo)} aria-label={`Обрізати фото ${index + 1}`} title="Обрізати">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 2v14a2 2 0 0 0 2 2h14" /><path d="M18 22V8a2 2 0 0 0-2-2H2" /></svg>
+                  </button>
                   <button className="photo-remove" type="button" onClick={() => removePhoto(index)} aria-label={`Прибрати фото ${index + 1}`}>×</button>
                 </div>
               ))}
@@ -629,7 +907,13 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
 
             <section className="form-block contact-block">
               <div className="form-block-head"><span className="form-step">03</span><div><h2>Контакт</h2><p className="form-hint">Його побачать лише авторизовані користувачі.</p></div></div>
-              <label><span>Telegram або пошта</span><input value={contact} onChange={(event) => setContact(event.target.value)} minLength={3} maxLength={200} required={!editing} placeholder={editing && !initialContact ? "Залиште порожнім, щоб не змінювати" : "@username або name@ukma.edu.ua"} /></label>
+              <div className="contact-fields">
+                <label><span>Telegram або пошта</span><input value={contact} onChange={(event) => setContact(event.target.value)} minLength={3} maxLength={100} required={!editing || Boolean(initialContact)} placeholder={editing && !initialContact ? "Залиште порожнім, щоб не змінювати" : "@username або name@ukma.edu.ua"} /></label>
+                <div className="contact-extra">
+                  <label><span>Телефон <small>необов’язково</small></span><input type="tel" inputMode="tel" value={phone} onChange={(event) => setPhone(event.target.value)} maxLength={20} placeholder="+380 50 123 45 67" /></label>
+                  <label><span>Локація <small>необов’язково</small></span><input value={location} onChange={(event) => setLocation(event.target.value)} maxLength={60} placeholder="Київ, Контрактова площа" /></label>
+                </div>
+              </div>
             </section>
           </div>
         </div>
@@ -1196,7 +1480,8 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
   if (!listing) return <NotFoundPage />;
   const isOwner = Boolean(user && user.user_id === listing.user_id);
   const published = new Date(listing.created_at).toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric" });
-  const href = contact ? contactHref(contact) : null;
+  const contactParts = unpackContact(contact ?? "");
+  const href = contactParts.main ? contactHref(contactParts.main) : null;
   return (
     <main className="page-main listing-detail-page">
       <Link className="back-link" to="/listings">← До оголошень</Link>
@@ -1245,7 +1530,9 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
             ) : contact ? (
               <div className="ad-contact">
                 <span>Контакт</span>
-                {href ? <a href={href} target={href.startsWith("http") ? "_blank" : undefined} rel="noreferrer">{contact}</a> : <strong>{contact}</strong>}
+                {contactParts.main && (href ? <a href={href} target={href.startsWith("http") ? "_blank" : undefined} rel="noreferrer">{contactParts.main}</a> : <strong>{contactParts.main}</strong>)}
+                {contactParts.phone && <a href={`tel:${contactParts.phone.replace(/[^\d+]/g, "")}`}>{contactParts.phone}</a>}
+                {contactParts.location && <em className="ad-location">{contactParts.location}</em>}
               </div>
             ) : (
               <p className="ad-muted">Контакт зараз недоступний.</p>

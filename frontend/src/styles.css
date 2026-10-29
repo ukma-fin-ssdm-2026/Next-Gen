@@ -554,3 +554,50 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .ad-info, .ad-price-card, .ad-seller { padding: 18px; }
   .ad-gallery .gallery-stage { max-height: none; }
 }
+
+/* Обрізання фото */
+.photo-tile, .photo-tile:first-child, .photo-add { aspect-ratio: 4 / 3; }
+.photo-add { min-height: 0; }
+.photo-crop { position: absolute; top: 6px; left: 6px; width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.92); color: var(--green); cursor: pointer; opacity: 0; transition: opacity 140ms ease; }
+.photo-tile:hover .photo-crop, .photo-crop:focus-visible { opacity: 1; }
+@media (hover: none) { .photo-crop { opacity: 1; } }
+.crop-overlay { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 16px; background: rgba(14, 22, 18, 0.68); overscroll-behavior: contain; overflow-y: auto; }
+.crop-dialog { width: min(640px, 100%); display: grid; gap: 14px; padding: 20px; border-radius: 22px; background: var(--surface); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35); }
+.crop-head h2 { margin: 0 0 4px; font-size: 20px; }
+.crop-head p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.crop-frame { position: relative; width: 100%; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 14px; background: #101814; cursor: grab; touch-action: none; user-select: none; outline: none; }
+.crop-frame:active { cursor: grabbing; }
+.crop-frame:focus-visible { box-shadow: 0 0 0 3px rgba(15, 91, 69, 0.55); }
+.crop-frame img { position: absolute; left: 0; top: 0; max-width: none; pointer-events: none; }
+.crop-grid { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85); background-image: linear-gradient(to right, transparent calc(33.333% - 0.5px), rgba(255, 255, 255, 0.45) calc(33.333% - 0.5px), rgba(255, 255, 255, 0.45) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px), transparent calc(66.666% - 0.5px), rgba(255, 255, 255, 0.45) calc(66.666% - 0.5px), rgba(255, 255, 255, 0.45) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px)), linear-gradient(to bottom, transparent calc(33.333% - 0.5px), rgba(255, 255, 255, 0.45) calc(33.333% - 0.5px), rgba(255, 255, 255, 0.45) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px), transparent calc(66.666% - 0.5px), rgba(255, 255, 255, 0.45) calc(66.666% - 0.5px), rgba(255, 255, 255, 0.45) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px)); }
+.crop-zoom { display: flex; align-items: center; gap: 12px; }
+.crop-zoom span { color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+.crop-zoom input { flex: 1; accent-color: var(--green); }
+.crop-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 760px) { .crop-dialog { padding: 16px; } .crop-actions .button { flex: 1 1 auto; } }
+.crop-frame .crop-backdrop { left: -12%; top: -12%; width: 124%; height: 124%; object-fit: cover; filter: blur(22px); transform: none; }
+.crop-solid { position: absolute; inset: 0; pointer-events: none; }
+.crop-frame img:not(.crop-backdrop) { z-index: 1; }
+.crop-modes, .crop-fill { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.crop-modes button, .crop-fill button { height: 34px; padding: 0 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: #3d4842; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.crop-modes button.active, .crop-fill button.active { border-color: var(--green); background: var(--green); color: #fff; }
+.crop-modes button:disabled { opacity: 0.45; cursor: default; }
+.crop-fill span { margin-right: 4px; color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+
+/* Спливаючі повідомлення: текст по центру вертикально, плавна поява */
+.alert { align-items: center; animation: alert-in 220ms ease-out, alert-out 450ms ease-in 3550ms forwards; }
+.alert > span { flex: 1; min-width: 0; line-height: 1.4; }
+.alert button { flex: none; width: 28px; height: 28px; display: grid; place-items: center; padding: 0 0 2px; border-radius: 50%; color: inherit; line-height: 1; }
+.alert button:hover { background: rgba(0, 0, 0, 0.07); }
+@keyframes alert-out { to { opacity: 0; transform: translateY(-8px); } }
+@keyframes alert-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .alert { animation: none; } }
+
+/* Додаткові контакти */
+.contact-fields { display: grid; gap: 12px; min-width: 0; }
+.contact-extra { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.contact-block { align-items: stretch; }
+.ad-contact .ad-location { color: #4f5a54; font-size: 14px; font-style: normal; font-weight: 600; }
+.ad-contact .ad-location::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 7px; border: 2px solid var(--green); border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
+@media (max-width: 760px) { .contact-extra { grid-template-columns: minmax(0, 1fr); } }
+
