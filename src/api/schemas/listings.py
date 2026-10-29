@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.domain.listings import ListingCondition
 
@@ -98,6 +98,19 @@ class ListingBase(BaseModel):
 
 
 class ListingCreate(ListingBase):
+    category_id: Optional[UUID] = Field(  # type: ignore[assignment]
+        None,
+        description=(
+            "ID категорії (обов'язковий, якщо не передано suggested_category_name; "
+            "при пропозиції нової категорії оголошення публікується в «Інше»)"
+        ),
+        examples=["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
+    )
+    suggested_category_name: Optional[str] = Field(
+        None,
+        description="Назва пропонованої нової категорії (FR-015 / US-010)",
+        examples=["Музичні інструменти"],
+    )
     description: str = Field(
         "",
         max_length=2000,
@@ -121,6 +134,12 @@ class ListingCreate(ListingBase):
         ),
         examples=[["/uploads/11111111222233334444555555555555.webp"]],
     )
+
+    @model_validator(mode="after")
+    def require_category_or_suggestion(self) -> "ListingCreate":
+        if self.category_id is None and self.suggested_category_name is None:
+            raise ValueError("Потрібно вказати category_id або suggested_category_name")
+        return self
 
 
 class ListingUpdate(BaseModel):
@@ -161,6 +180,10 @@ class ListingPublicResponse(ListingBase):
 
 class ListingResponse(ListingPublicResponse):
     contact: str = Field(..., description="Контактні дані (пошта або Telegram)")
+    suggested_category_name: Optional[str] = Field(
+        None,
+        description="Назва запропонованої категорії (лише для власника, FR-015)",
+    )
 
 
 class ErrorResponse(BaseModel):

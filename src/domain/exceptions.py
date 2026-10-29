@@ -1,5 +1,7 @@
 """Доменні помилки Listing Service. Роутер перетворює їх на HTTP-коди."""
 
+from uuid import UUID
+
 
 class ListingError(Exception):
     """Базова помилка операцій з оголошеннями."""
@@ -47,6 +49,41 @@ class DuplicateCategoryError(CategoryError):
 
 class InvalidCategoryError(CategoryError):
     """Некоректні дані категорії."""
+
+
+class CategorySuggestionError(CategoryError):
+    """Базова помилка операцій з пропозиціями категорій (FR-015)."""
+
+
+class CategorySuggestionNotFoundError(CategorySuggestionError):
+    """Пропозицію категорії не знайдено."""
+
+
+class InvalidCategorySuggestionError(CategorySuggestionError):
+    """Некоректна назва пропозиції категорії (довжина або керівні символи)."""
+
+
+class DuplicateCategorySuggestionError(CategorySuggestionError):
+    """Пропозиція дублює наявну категорію або іншу активну пропозицію."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        existing_category_id: UUID | None = None,
+        existing_category_name: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.existing_category_id = existing_category_id
+        self.existing_category_name = existing_category_name
+
+
+class CategorySuggestionConflictError(CategorySuggestionError):
+    """Пропозицію категорії вже розглянуто (повторне схвалення або відхилення)."""
+
+
+class CategorySuggestionQuotaError(CategorySuggestionError):
+    """Перевищено ліміт активних (PENDING) пропозицій категорій на користувача."""
 
 
 class ModerationForbiddenError(ListingError):

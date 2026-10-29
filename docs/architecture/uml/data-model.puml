@@ -23,11 +23,25 @@ entity "Category" as category {
   * is_active : boolean
 }
 
+entity "CategorySuggestion" as suggestion {
+  * suggestion_id : UUID <<PK>>
+  --
+  * name : string
+  * proposer_id : UUID <<FK>>
+  * status : enum
+  reason : text <<nullable>>
+  category_id : UUID <<FK, nullable>>
+  reviewed_by : UUID <<FK, nullable>>
+  * created_at : datetime
+  reviewed_at : datetime <<nullable>>
+}
+
 entity "Listing" as listing {
   * listing_id : UUID <<PK>>
   --
   * seller_id : UUID <<FK>>
   * category_id : UUID <<FK>>
+  suggested_category_id : UUID <<FK, nullable>>
   * title : string
   * description : text
   * price : decimal
@@ -52,6 +66,7 @@ entity "ModerationAction" as moderation {
   * moderator_id : UUID <<FK>>
   listing_id : UUID <<FK, nullable>>
   target_user_id : UUID <<FK, nullable>>
+  suggestion_id : UUID <<FK, nullable>>
   * action_type : enum
   * reason : text
   * created_at : datetime
@@ -66,10 +81,15 @@ entity "Favorite" as favorite {
 
 user ||--o{ listing : creates
 category ||--o{ listing : categorizes
+suggestion o|--o{ listing : suggested for
+user ||--o{ suggestion : proposes
+user o|--o{ suggestion : reviews
+category o|--o| suggestion : created from
 listing ||--|{ image : contains
 user ||--o{ moderation : performs
 user o|--o{ moderation : target user
 listing o|--o{ moderation : target listing
+suggestion o|--o{ moderation : target suggestion
 user ||--o{ favorite : adds
 listing ||--o{ favorite : is_favorited
 
@@ -87,11 +107,12 @@ note right of listing
 end note
 
 note right of moderation
-  action_type: REMOVE_LISTING | RESTORE_LISTING |
-               BLOCK_USER | UNBLOCK_USER
+  action_type: WITHDRAW_LISTING |
+               BLOCK_USER | UNBLOCK_USER |
+               APPROVE_CATEGORY | REJECT_CATEGORY
 
   Exactly one target must be set:
-  listing_id XOR target_user_id
+  listing_id XOR target_user_id XOR suggestion_id
 end note
 
 @enduml

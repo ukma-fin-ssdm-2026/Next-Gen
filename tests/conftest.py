@@ -10,9 +10,10 @@ import pytest
 
 from src.api.deps import (
     SESSION_COOKIE_NAME,
-    category_service,
     get_auth_service,
     get_auth_session_store,
+    get_category_service,
+    get_category_suggestion_service,
     get_contact_service,
     get_favorite_service,
     get_image_storage,
@@ -24,6 +25,10 @@ from src.api.deps import (
 from src.api.main import app
 from src.domain.listings import SEED_CATEGORY_ID, SEED_IMAGE_URL
 from src.domain.users import User, UserRole
+from src.repositories.categories import InMemoryCategoryRepository
+from src.repositories.category_suggestions import (
+    InMemoryCategorySuggestionRepository,
+)
 from src.repositories.favorites import InMemoryFavoriteRepository
 from src.repositories.image_storage import InMemoryImageStorage
 from src.repositories.listings import InMemoryListingRepository
@@ -31,6 +36,8 @@ from src.repositories.moderation import InMemoryModerationActionRepository
 from src.repositories.users import InMemoryUserRepository
 from src.services.auth import AuthService, EntraAuthConfig
 from src.services.auth_sessions import InMemoryAuthSessionStore
+from src.services.categories import CategoryService
+from src.services.category_suggestions import CategorySuggestionService
 from src.services.contacts import SellerContactService
 from src.services.favorites import FavoriteService
 from src.services.listings import ListingService
@@ -61,6 +68,23 @@ def make_dummy_webp(w: int = 100, h: int = 100, color=(0, 0, 255)) -> bytes:
 
 
 @pytest.fixture
+def category_repository() -> InMemoryCategoryRepository:
+    return InMemoryCategoryRepository.with_seed()
+
+
+@pytest.fixture
+def category_service(
+    category_repository: InMemoryCategoryRepository,
+) -> CategoryService:
+    return CategoryService(category_repository)
+
+
+@pytest.fixture
+def category_suggestion_repository() -> InMemoryCategorySuggestionRepository:
+    return InMemoryCategorySuggestionRepository()
+
+
+@pytest.fixture
 def listing_repository() -> InMemoryListingRepository:
     return InMemoryListingRepository.with_seed()
 
@@ -76,16 +100,41 @@ def favorite_repository() -> InMemoryFavoriteRepository:
 
 
 @pytest.fixture
+def moderation_actions() -> InMemoryModerationActionRepository:
+    return InMemoryModerationActionRepository()
+
+
+@pytest.fixture
+def category_suggestion_service(
+    category_suggestion_repository: InMemoryCategorySuggestionRepository,
+    category_repository: InMemoryCategoryRepository,
+    category_service: CategoryService,
+    listing_repository: InMemoryListingRepository,
+    moderation_actions: InMemoryModerationActionRepository,
+) -> CategorySuggestionService:
+    return CategorySuggestionService(
+        suggestions=category_suggestion_repository,
+        categories=category_repository,
+        category_service=category_service,
+        listings=listing_repository,
+        actions=moderation_actions,
+    )
+
+
+@pytest.fixture
 def listing_service(
     listing_repository: InMemoryListingRepository,
     favorite_repository: InMemoryFavoriteRepository,
     image_storage: InMemoryImageStorage,
+    category_service: CategoryService,
+    category_suggestion_service: CategorySuggestionService,
 ) -> ListingService:
     return ListingService(
         listing_repository,
         image_storage=image_storage,
         favorites=favorite_repository,
         category_validator=category_service.is_valid_category_id,
+        category_suggestion_service=category_suggestion_service,
     )
 
 
@@ -105,11 +154,6 @@ def contact_service(
 
 
 @pytest.fixture
-def moderation_actions() -> InMemoryModerationActionRepository:
-    return InMemoryModerationActionRepository()
-
-
-@pytest.fixture
 def moderation_service(
     listing_repository: InMemoryListingRepository,
     favorite_repository: InMemoryFavoriteRepository,
@@ -126,12 +170,18 @@ def client(
     favorite_service: FavoriteService,
     contact_service: SellerContactService,
     moderation_service: ModerationService,
+    category_service: CategoryService,
+    category_suggestion_service: CategorySuggestionService,
     image_storage: InMemoryImageStorage,
 ):
     app.dependency_overrides[get_listing_service] = lambda: listing_service
     app.dependency_overrides[get_favorite_service] = lambda: favorite_service
     app.dependency_overrides[get_contact_service] = lambda: contact_service
     app.dependency_overrides[get_moderation_service] = lambda: moderation_service
+    app.dependency_overrides[get_category_service] = lambda: category_service
+    app.dependency_overrides[get_category_suggestion_service] = (
+        lambda: category_suggestion_service
+    )
     app.dependency_overrides[get_image_storage] = lambda: image_storage
     with TestClient(app) as test_client:
         yield test_client

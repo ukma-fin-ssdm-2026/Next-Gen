@@ -5,7 +5,7 @@ from uuid import UUID
 
 from src.domain.categories import Category
 from src.domain.exceptions import CategoryNotFoundError, DuplicateCategoryError
-from src.domain.listings import SEED_CATEGORY_ID
+from src.domain.listings import OTHER_CATEGORY_ID, SEED_CATEGORY_ID
 
 SEED_CATEGORIES = [
     Category(
@@ -37,7 +37,7 @@ SEED_CATEGORIES = [
         is_active=True,
     ),
     Category(
-        id=UUID("55555555-5555-5555-5555-555555555555"),
+        id=OTHER_CATEGORY_ID,
         name="Інше",
         slug="other",
         description="Різні корисні дрібниці",
@@ -53,6 +53,8 @@ class CategoryRepository(Protocol):
 
     def get_by_slug(self, slug: str) -> Category | None: ...
 
+    def get_by_name(self, name: str) -> Category | None: ...
+
     def list_all(self) -> list[Category]: ...
 
     def list_active(self) -> list[Category]: ...
@@ -60,6 +62,8 @@ class CategoryRepository(Protocol):
     def add(self, category: Category) -> Category: ...
 
     def update(self, category: Category) -> Category: ...
+
+    def delete(self, category_id: UUID) -> bool: ...
 
 
 class InMemoryCategoryRepository:
@@ -83,6 +87,13 @@ class InMemoryCategoryRepository:
         clean_slug = slug.strip().lower()
         for cat in self._items.values():
             if cat.slug == clean_slug:
+                return cat
+        return None
+
+    def get_by_name(self, name: str) -> Category | None:
+        key = name.strip().casefold()
+        for cat in self._items.values():
+            if cat.name.strip().casefold() == key:
                 return cat
         return None
 
@@ -111,3 +122,6 @@ class InMemoryCategoryRepository:
             )
         self._items[category.id] = category
         return category
+
+    def delete(self, category_id: UUID) -> bool:
+        return self._items.pop(category_id, None) is not None

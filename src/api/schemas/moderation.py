@@ -1,4 +1,4 @@
-"""Схеми адміністративної модерації оголошень і користувачів (FR-011, FR-013)."""
+"""Схеми модерації оголошень, користувачів і категорій (FR-011, FR-013, FR-015)."""
 
 from datetime import datetime
 from typing import Annotated
@@ -55,6 +55,9 @@ class ModerationActionResponse(BaseModel):
     listing_id: UUID | None = Field(None, description="Зняте оголошення")
     target_user_id: UUID | None = Field(
         None, description="Заблокований або розблокований користувач"
+    )
+    suggestion_id: UUID | None = Field(
+        None, description="Розглянута пропозиція категорії"
     )
     moderator_id: UUID = Field(..., description="Адміністратор із серверної сесії")
     action_type: ModerationActionType = Field(..., description="Тип дії")

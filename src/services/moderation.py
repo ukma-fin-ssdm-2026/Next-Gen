@@ -2,7 +2,6 @@
 
 from dataclasses import replace
 from datetime import timedelta
-from threading import Lock
 from uuid import UUID
 
 from src.domain.exceptions import (
@@ -19,7 +18,7 @@ from src.domain.moderation import (
 )
 from src.domain.users import CurrentUser, UserRole
 from src.repositories.favorites import FavoriteRepository
-from src.repositories.listings import ListingRepository
+from src.repositories.listings import ListingRepository, get_listing_mutation_lock
 from src.repositories.moderation import ModerationActionRepository
 
 
@@ -38,7 +37,7 @@ class ModerationService:
         # Серіалізує перевірку статусу і зміну стану: два одночасні запити
         # не можуть обидва побачити ACTIVE і створити два записи аудиту.
         # З PostgreSQL це замінюється транзакцією з SELECT ... FOR UPDATE.
-        self._lock = Lock()
+        self._lock = get_listing_mutation_lock(listings)
 
     def withdraw_listing(
         self, moderator: CurrentUser | None, listing_id: UUID, reason: str
