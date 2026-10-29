@@ -40,6 +40,7 @@ export interface Listing {
 
 export interface ListingWithContact extends Listing {
   contact: string;
+  suggested_category_name?: string | null;
 }
 
 export interface UploadedImage {
@@ -53,7 +54,8 @@ export interface ListingCreatePayload {
   title: string;
   description: string;
   price: number;
-  category_id: string;
+  category_id?: string;
+  suggested_category_name?: string;
   condition: ListingCondition;
   contact: string;
   image_urls: string[];
@@ -66,6 +68,21 @@ export interface ListingUpdatePayload {
   condition?: ListingCondition;
   contact?: string;
   image_urls?: string[];
+}
+
+export type CategorySuggestionStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export interface CategorySuggestion {
+  suggestion_id: string;
+  name: string;
+  proposer_id: string;
+  status: CategorySuggestionStatus;
+  reason: string | null;
+  category_id: string | null;
+  reviewed_by: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+  listings_count: number;
 }
 
 export interface Category {

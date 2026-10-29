@@ -1,4 +1,6 @@
 import type {
+  CategorySuggestion,
+  CategorySuggestionStatus,
   Category,
   CurrentUser,
   Listing,
@@ -191,6 +193,24 @@ export function getPublicProfile(userId: string): Promise<PublicProfile> {
 
 export function blockUser(userId: string, reason: string): Promise<ModerationAction> {
   return apiFetch<ModerationAction>(`/admin/users/${segment(userId)}/block`, { method: "POST", body: JSON.stringify({ reason }) });
+}
+
+export function getCategorySuggestions(status: CategorySuggestionStatus = "PENDING"): Promise<CategorySuggestion[]> {
+  return apiFetch<CategorySuggestion[]>(`/category-suggestions?${new URLSearchParams({ status }).toString()}`);
+}
+
+export function approveCategorySuggestion(suggestionId: string, name?: string): Promise<CategorySuggestion> {
+  return apiFetch<CategorySuggestion>(`/category-suggestions/${segment(suggestionId)}/approve`, {
+    method: "POST",
+    body: JSON.stringify(name ? { name } : {}),
+  });
+}
+
+export function rejectCategorySuggestion(suggestionId: string, reason: string): Promise<CategorySuggestion> {
+  return apiFetch<CategorySuggestion>(`/category-suggestions/${segment(suggestionId)}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
 }
 
 export function blockUserByEmail(email: string, reason: string): Promise<ModerationAction> {

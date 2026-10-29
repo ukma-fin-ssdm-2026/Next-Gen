@@ -12,11 +12,13 @@ import {
 import {
   ApiError,
   addFavorite,
+  approveCategorySuggestion,
   blockUser,
   blockUserByEmail,
   createListing,
   deleteListing,
   getCategories,
+  getCategorySuggestions,
   getCurrentUser,
   getFavorites,
   getListing,
@@ -27,6 +29,7 @@ import {
   loginUrl,
   logout,
   moderateListing,
+  rejectCategorySuggestion,
   removeFavorite,
   unblockUser,
   unblockUserByEmail,
@@ -39,6 +42,7 @@ import {
 import { NaukmaLogo } from "./NaukmaLogo";
 import type {
   Category,
+  CategorySuggestion,
   CurrentUser,
   Listing,
   ListingCondition,
@@ -148,6 +152,9 @@ function App() {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
+  const reloadCategories = useCallback(() => {
+    getCategories().then(setCategories).catch(() => undefined);
+  }, []);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -319,7 +326,7 @@ function App() {
           }
         />
         <Route path="/profile" element={<ProfilePage user={user} authChecked={authChecked} onUserChange={setUser} onError={setError} onNotice={setNotice} />} />
-        <Route path="/admin" element={<AdminPage user={user} authChecked={authChecked} onError={setError} onNotice={setNotice} />} />
+        <Route path="/admin" element={<AdminPage user={user} authChecked={authChecked} onError={setError} onNotice={setNotice} onCategoriesChanged={reloadCategories} />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       <Footer />
@@ -742,6 +749,7 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
   const editing = mode === "edit";
   const [title, setTitle] = useState(listing?.title ?? "");
   const [categoryId, setCategoryId] = useState(listing?.category_id ?? "");
+  const [suggestedName, setSuggestedName] = useState("");
   const [price, setPrice] = useState(listing ? String(listing.price) : "");
   const [condition, setCondition] = useState<ListingCondition>(listing?.condition ?? "GOOD");
   const [description, setDescription] = useState(listing?.description ?? "");
@@ -817,9 +825,19 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
     setPhotos((current) => [current[index], ...current.filter((_, position) => position !== index)]);
   };
 
+  const isOtherCategory = !editing && categoryId === OTHER_CATEGORY_ID;
+  const suggestion = isOtherCategory ? suggestedName.trim() : "";
+  const isNewCategory = suggestion.length > 0;
+
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setFormError(null);
+    if (isNewCategory) {
+      if (suggestion.length < SUGGESTION_MIN || suggestion.length > SUGGESTION_MAX) {
+        setFormError(`Назва категорії: від ${SUGGESTION_MIN} до ${SUGGESTION_MAX} символів`);
+        return;
+      }
+    }
     if (photos.length === 0) {
       setFormError("Додайте щонайменше одне фото");
       return;
@@ -857,12 +875,12 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
           title: title.trim(),
           description: description.trim(),
           price: Number(price),
-          category_id: categoryId,
+          ...(isNewCategory ? { suggested_category_name: suggestion } : { category_id: categoryId }),
           condition,
           contact: packedContact,
           image_urls: imageUrls,
         });
-        onNotice("Оголошення опубліковано");
+        onNotice(isNewCategory ? `Оголошення опубліковано в «Інше». Категорію «${suggestion}» розгляне адміністратор` : "Оголошення опубліковано");
         navigate(`/listings/${created.id}`);
       }
     } catch (reason) {
@@ -934,6 +952,9 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
                 </select></label>
                 <label><span>Ціна, грн</span><input type="number" min="0" step="1" inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value)} required placeholder="0" /></label>
               </div>
+              {isOtherCategory && (
+                <label><span>Своя категорія <small>необов’язково, {SUGGESTION_MIN}–{SUGGESTION_MAX} символів</small></span><input value={suggestedName} onChange={(event) => setSuggestedName(event.target.value)} maxLength={SUGGESTION_MAX} placeholder="Наприклад, музичні інструменти" /><small className="form-hint">Оголошення з’явиться в «Інше», доки адміністратор не схвалить вашу категорію. Одночасно можна мати до 3 пропозицій на розгляді.</small></label>
+              )}
               {editing && <p className="form-hint">Категорію після публікації змінити не можна.</p>}
               <label><span>Опис <small>необов’язково</small></span><textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} rows={5} placeholder="Розкажіть про стан, розмір, чому продаєте" /></label>
             </section>
@@ -1836,11 +1857,12 @@ function ProfilePage({ user, authChecked, onUserChange, onError, onNotice }: {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UKMA_EMAIL_PATTERN = /^[^@\s]+@ukma\.edu\.ua$/i;
 
-function AdminPage({ user, authChecked, onError, onNotice }: {
+function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }: {
   user: CurrentUser | null;
   authChecked: boolean;
   onError: (message: string) => void;
   onNotice: (message: string) => void;
+  onCategoriesChanged: () => void;
 }) {
   const [userId, setUserId] = useState("");
   const [reason, setReason] = useState("");
@@ -1909,7 +1931,88 @@ function AdminPage({ user, authChecked, onError, onNotice }: {
           </section>
         )}
       </form>
+      <CategorySuggestionsPanel onError={onError} onNotice={onNotice} onCategoriesChanged={onCategoriesChanged} />
     </main>
+  );
+}
+
+const OTHER_CATEGORY_ID = "55555555-5555-5555-5555-555555555555";
+const SUGGESTION_MIN = 2;
+const SUGGESTION_MAX = 40;
+
+function CategorySuggestionsPanel({ onError, onNotice, onCategoriesChanged }: {
+  onError: (message: string) => void;
+  onNotice: (message: string) => void;
+  onCategoriesChanged: () => void;
+}) {
+  const [items, setItems] = useState<CategorySuggestion[] | null>(null);
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setItems(await getCategorySuggestions("PENDING"));
+    } catch (requestError) {
+      setItems([]);
+      onError(errorText(requestError));
+    }
+  }, [onError]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function approve(item: CategorySuggestion) {
+    const edited = (names[item.suggestion_id] ?? item.name).trim();
+    if (edited.length < SUGGESTION_MIN || edited.length > SUGGESTION_MAX) { onError(`Назва категорії: від ${SUGGESTION_MIN} до ${SUGGESTION_MAX} символів`); return; }
+    setBusyId(item.suggestion_id);
+    try {
+      await approveCategorySuggestion(item.suggestion_id, edited === item.name ? undefined : edited);
+      onNotice(`Категорію «${edited}» створено, оголошення перенесено`);
+      onCategoriesChanged();
+      await load();
+    } catch (requestError) {
+      onError(errorText(requestError));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function reject(item: CategorySuggestion) {
+    const reason = (reasons[item.suggestion_id] ?? "").trim();
+    if (reason.length < 5) { onError("Вкажіть причину відхилення (щонайменше 5 символів)"); return; }
+    setBusyId(item.suggestion_id);
+    try {
+      await rejectCategorySuggestion(item.suggestion_id, reason);
+      onNotice("Пропозицію відхилено");
+      await load();
+    } catch (requestError) {
+      onError(errorText(requestError));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <section className="form-block suggestions-panel">
+      <div className="form-block-head"><div><h2>Пропозиції категорій</h2><p className="form-hint">Схвалення створює категорію й переносить оголошення з «Інше»; назву можна виправити. Відхилення лишає оголошення в «Інше».</p></div></div>
+      {items === null && <p className="form-hint">Завантажуємо…</p>}
+      {items?.length === 0 && <p className="form-hint">Нових пропозицій немає.</p>}
+      <ul className="suggestion-list">
+        {items?.map((item) => (
+          <li key={item.suggestion_id}>
+            <div className="suggestion-head"><strong>{item.name}</strong><span className="form-hint">оголошень: {item.listings_count}</span></div>
+            <div className="form-row">
+              <label><span>Назва категорії</span><input value={names[item.suggestion_id] ?? item.name} maxLength={SUGGESTION_MAX} onChange={(event) => setNames((current) => ({ ...current, [item.suggestion_id]: event.target.value }))} /></label>
+              <label><span>Причина відхилення</span><input value={reasons[item.suggestion_id] ?? ""} maxLength={500} onChange={(event) => setReasons((current) => ({ ...current, [item.suggestion_id]: event.target.value }))} placeholder="Для відхилення" /></label>
+            </div>
+            <div className="form-actions">
+              <button className="button button-primary" type="button" disabled={busyId === item.suggestion_id} onClick={() => void approve(item)}>Схвалити</button>
+              <button className="button button-danger" type="button" disabled={busyId === item.suggestion_id} onClick={() => void reject(item)}>Відхилити</button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
