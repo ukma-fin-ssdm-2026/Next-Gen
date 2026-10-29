@@ -34,18 +34,24 @@ class MsalEntraOidcClient:
     """Confidential web client; client secret не потрапляє у browser."""
 
     def __init__(self, settings: EntraSettings) -> None:
-        from msal import ConfidentialClientApplication
-
         self._settings = settings
-        self._client = ConfidentialClientApplication(
-            client_id=settings.client_id,
-            client_credential=settings.client_secret,
-            authority=settings.authority,
-        )
+        self._client: Any | None = None
+
+    def _get_client(self) -> Any:
+        """Creates the network-aware MSAL client only for a real Entra flow."""
+        if self._client is None:
+            from msal import ConfidentialClientApplication
+
+            self._client = ConfidentialClientApplication(
+                client_id=self._settings.client_id,
+                client_credential=self._settings.client_secret,
+                authority=self._settings.authority,
+            )
+        return self._client
 
     def begin(self) -> dict[str, Any]:
         try:
-            flow = self._client.initiate_auth_code_flow(
+            flow = self._get_client().initiate_auth_code_flow(
                 scopes=OIDC_SCOPES,
                 redirect_uri=self._settings.redirect_uri,
             )
@@ -61,7 +67,7 @@ class MsalEntraOidcClient:
         auth_response: dict[str, str],
     ) -> VerifiedEntraClaims:
         try:
-            result = self._client.acquire_token_by_auth_code_flow(
+            result = self._get_client().acquire_token_by_auth_code_flow(
                 flow,
                 auth_response,
             )
