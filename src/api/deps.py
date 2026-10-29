@@ -4,7 +4,12 @@ from typing import Annotated
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
 
-from src.config import ConfigurationError, EntraSettings, get_image_storage_dir
+from src.config import (
+    ConfigurationError,
+    EntraSettings,
+    get_admin_emails,
+    get_image_storage_dir,
+)
 from src.domain.users import CurrentUser
 from src.integrations.entra import EntraOidcClient, MsalEntraOidcClient
 from src.repositories.categories import InMemoryCategoryRepository
@@ -99,6 +104,13 @@ def get_entra_settings() -> EntraSettings:
 def get_auth_service(
     settings: EntraSettings = Depends(get_entra_settings),
 ) -> AuthService:
+    try:
+        admin_emails = get_admin_emails()
+    except ConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Список адміністраторів налаштовано некоректно",
+        ) from exc
     return AuthService(
         user_repository,
         EntraAuthConfig(
@@ -106,6 +118,7 @@ def get_auth_service(
             issuer=settings.issuer,
             audience=settings.client_id,
         ),
+        admin_emails,
     )
 
 
