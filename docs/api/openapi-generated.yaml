@@ -907,12 +907,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
     patch:
       tags:
       - Authentication
@@ -982,12 +976,6 @@ paths:
       responses:
         '204':
           description: Successful Response
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/auth/me/avatar:
     put:
       tags:
@@ -1074,12 +1062,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        '422':
-          description: Validation Error
+        '404':
+          description: Profile not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiValidationErrorResponse'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/admin/listings/{listing_id}/withdraw:
     post:
       tags:

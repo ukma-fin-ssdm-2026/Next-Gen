@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
+from fastapi.openapi.utils import get_openapi
 from fastapi import Depends, FastAPI, HTTPException, Response, status
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -38,6 +39,38 @@ app.include_router(categories.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(moderation.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
+
+
+def _custom_openapi() -> dict:
+    """Прибирає автоматичний 422 з операцій, які не мають що валідувати.
+
+    Якщо операція приймає лише cookie сесії (без тіла, path, query чи header),
+    FastAPI все одно додає `422 HTTPValidationError`, хоча ендпоїнт його не
+    повертає. Явно задекларовані 422 (власна схема помилки) не чіпаються.
+    """
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    for path_item in schema.get("paths", {}).values():
+        for operation in path_item.values():
+            if not isinstance(operation, dict) or "requestBody" in operation:
+                continue
+            params = operation.get("parameters", [])
+            response_422 = operation.get("responses", {}).get("422", {})
+            auto = "HTTPValidationError" in str(response_422)
+            if auto and all(item.get("in") == "cookie" for item in params):
+                operation["responses"].pop("422")
+    app.openapi_schema = schema
+    return schema
+
+
+app.openapi = _custom_openapi  # type: ignore[method-assign]
+
 
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 RESERVED_FRONTEND_PREFIXES = (

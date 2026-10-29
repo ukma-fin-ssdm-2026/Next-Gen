@@ -615,3 +615,5 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .profile-avatar-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .crop-frame-square { max-width: 360px; margin: 0 auto; }
 @media (max-width: 520px) { .profile-top { grid-template-columns: minmax(0, 1fr); justify-items: start; } }
+
+.card-main-static { cursor: default; }

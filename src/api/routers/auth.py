@@ -380,7 +380,11 @@ def put_avatar(
     "/me/avatar",
     response_model=CurrentUserResponse,
     summary="Видалити аватарку",
-    responses=_PROFILE_RESPONSES,
+    responses={
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Local user is blocked"},
+        404: {"model": ErrorResponse, "description": "Profile not found"},
+    },
 )
 def delete_avatar(
     current_user: CurrentUser = Depends(require_current_user),

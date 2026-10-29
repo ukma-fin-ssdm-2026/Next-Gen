@@ -990,6 +990,25 @@ function EditListingPage({ user, authChecked, categories, onError, onNotice }: {
   return <ListingForm mode="edit" listing={listing} initialContact={existingContact} categories={categories} onError={onError} onNotice={onNotice} />;
 }
 
+function MyCardContent({ listing, categoryName }: { listing: Listing; categoryName: string }) {
+  return (
+    <>
+      <ListingImage listing={listing} />
+      <div className="card-body">
+        <div className="card-meta">
+          <span>{categoryName}</span>
+          <span className={`status-chip status-${listing.status}`}>{STATUS_LABELS[listing.status] ?? listing.status}</span>
+        </div>
+        <h3>{listing.title}</h3>
+        <div className="card-foot">
+          <strong className="price">{formatPrice(listing.price)}</strong>
+          <span className="condition">{CONDITION_LABELS[listing.condition]}</span>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function MyListingsPage({ user, authChecked, categoryNames, onError, onNotice }: {
   user: CurrentUser | null;
   authChecked: boolean;
@@ -1053,20 +1072,16 @@ function MyListingsPage({ user, authChecked, categoryNames, onError, onNotice }:
         <div className="listing-grid">
           {shown.map((listing) => (
             <article className="listing-card my-card" key={listing.id}>
-              <Link className="card-main" to={`/listings/${listing.id}`}>
-                <ListingImage listing={listing} />
-                <div className="card-body">
-                  <div className="card-meta">
-                    <span>{categoryNames.get(listing.category_id) ?? "Інше"}</span>
-                    <span className={`status-chip status-${listing.status}`}>{STATUS_LABELS[listing.status] ?? listing.status}</span>
-                  </div>
-                  <h3>{listing.title}</h3>
-                  <div className="card-foot">
-                    <strong className="price">{formatPrice(listing.price)}</strong>
-                    <span className="condition">{CONDITION_LABELS[listing.condition]}</span>
-                  </div>
+              {listing.status === "ACTIVE" ? (
+                <Link className="card-main" to={`/listings/${listing.id}`}>
+                  <MyCardContent listing={listing} categoryName={categoryNames.get(listing.category_id) ?? "Інше"} />
+                </Link>
+              ) : (
+                // Публічний GET /listings/{id} не повертає знятих оголошень, тому посилання лише в активних.
+                <div className="card-main card-main-static">
+                  <MyCardContent listing={listing} categoryName={categoryNames.get(listing.category_id) ?? "Інше"} />
                 </div>
-              </Link>
+              )}
               {isLive(listing) && (
                 <div className="my-actions">
                   {confirmId === listing.id ? (
