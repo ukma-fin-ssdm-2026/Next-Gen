@@ -1,8 +1,12 @@
-"""Тести безпечної конфігурації Microsoft Entra ID."""
+"""Тести безпечної конфігурації Microsoft Entra ID та сховища зображень."""
+
+from pathlib import Path
 
 import pytest
 
-from src.config import ConfigurationError, EntraSettings
+from src.api import deps
+from src.config import ConfigurationError, EntraSettings, get_image_storage_dir
+from src.repositories.image_storage import LocalImageStorage
 
 VALID_ENV = {
     "MICROSOFT_TENANT_ID": "11111111-1111-1111-1111-111111111111",
@@ -61,3 +65,21 @@ def test_https_redirect_cannot_disable_secure_cookie(
 
     with pytest.raises(ConfigurationError, match="SESSION_COOKIE_SECURE=true"):
         EntraSettings.from_env()
+
+
+def test_production_di_wires_local_image_storage() -> None:
+    """[TP-022] [FR-002] Production DI підключає LocalImageStorage за замовчуванням."""
+    assert isinstance(deps.image_storage, LocalImageStorage)
+    assert deps.get_image_storage() is deps.image_storage
+
+
+def test_get_image_storage_dir_respects_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """[TP-022] [FR-002]
+    get_image_storage_dir використовує IMAGE_STORAGE_DIR з оточення.
+    """
+    custom_dir = tmp_path / "custom-uploads"
+    monkeypatch.setenv("IMAGE_STORAGE_DIR", str(custom_dir))
+    assert get_image_storage_dir() == custom_dir

@@ -1,11 +1,24 @@
-"""HTTP-адаптер до Listing Service. Бізнес-правила тут не живуть."""
+"""HTTP-адаптер до Listing Service та завантаження фотографій (FR-002, TM-02, TM-03)."""
 
-from typing import Annotated, Optional
+from collections.abc import Iterator, Sequence
+from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 
-from src.api.deps import get_listing_service
+from src.api.deps import (
+    get_image_storage,
+    get_listing_service,
+    require_current_user,
+)
 from src.api.schemas.listings import (
     ApiValidationErrorResponse,
     ErrorResponse,
@@ -14,8 +27,10 @@ from src.api.schemas.listings import (
     ListingPublicResponse,
     ListingResponse,
     ListingUpdate,
+    UploadedImageResponse,
 )
 from src.domain.exceptions import (
+    ImageUploadRateLimitError,
     InvalidCategoryError,
     InvalidListingImageError,
     InvalidPriceRangeError,
@@ -24,23 +39,19 @@ from src.domain.exceptions import (
     ListingUnauthorizedError,
 )
 from src.domain.listings import Listing, ListingSortOrder
+from src.domain.users import CurrentUser
+from src.repositories.image_storage import (
+    MAX_IMAGE_FILE_SIZE_BYTES,
+    MAX_IMAGES_PER_LISTING,
+    MIN_IMAGES_PER_LISTING,
+    ImageStorage,
+)
 from src.services.listings import ListingService
 
 router = APIRouter(
     prefix="/listings",
     tags=["Listings"],
 )
-
-ActorId = Annotated[
-    Optional[UUID],
-    Header(
-        alias="X-Actor-Id",
-        description=(
-            "Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003). "
-            "Сервер не приймає user_id з тіла запиту."
-        ),
-    ),
-]
 
 
 def _to_public(listing: Listing) -> ListingPublicResponse:
@@ -58,7 +69,12 @@ def _to_public(listing: Listing) -> ListingPublicResponse:
             ListingImageResponse(
                 image_id=image.image_id,
                 image_url=image.image_url,
+                thumbnail_url=image.thumbnail_url,
                 display_order=image.display_order,
+                width=image.width,
+                height=image.height,
+                thumbnail_width=image.thumbnail_width,
+                thumbnail_height=image.thumbnail_height,
             )
             for image in listing.images
         ],
@@ -107,6 +123,119 @@ def _raise_domain(exc: Exception) -> None:
     if isinstance(exc, InvalidCategoryError):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     raise exc
+
+
+def _iter_upload_bytes(files: Sequence[UploadFile]) -> Iterator[bytes]:
+    """Читає завантажені файли по одному, не тримаючи одночасно весь пакет у пам'яті."""
+    for uploaded in files:
+        chunks: list[bytes] = []
+        total = 0
+        try:
+            uploaded.file.seek(0)
+            while chunk := uploaded.file.read(1024 * 1024):
+                total += len(chunk)
+                if total > MAX_IMAGE_FILE_SIZE_BYTES:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        detail=[
+                            {
+                                "loc": ["body", "files", uploaded.filename or "file"],
+                                "msg": (
+                                    "Розмір файла перевищує максимально допустимі 10 МБ"
+                                ),
+                                "type": "value_error",
+                            }
+                        ],
+                    )
+                chunks.append(chunk)
+        finally:
+            uploaded.file.close()
+        yield b"".join(chunks)
+
+
+@router.post(
+    "/images",
+    response_model=list[UploadedImageResponse],
+    status_code=status.HTTP_201_CREATED,
+    summary="Завантажити фотографії оголошення",
+    description=(
+        "Приймає від 1 до 10 файлів через multipart/form-data, перевіряє фактичне "
+        "декодування (JPEG, PNG, WebP, HEIC/HEIF), видаляє метадані (EXIF/GPS/XMP), "
+        "оптимізує розмір (до 1600 px) та створює thumbnail (до 400 px) "
+        "у WebP quality=80 (FR-002, TM-03, TM-08)."
+    ),
+    responses={
+        401: {"model": ErrorResponse, "description": "Unauthorized"},
+        403: {"model": ErrorResponse, "description": "Forbidden"},
+        422: {
+            "model": ApiValidationErrorResponse,
+            "description": "Validation Error",
+        },
+        429: {"model": ErrorResponse, "description": "Too Many Requests"},
+    },
+)
+def upload_listing_images(
+    files: list[UploadFile] = File(
+        ...,
+        description="Список файлів фотографій (1..10 файлів до 10 МБ)",
+    ),
+    current_user: CurrentUser = Depends(require_current_user),
+    storage: ImageStorage = Depends(get_image_storage),
+) -> list[UploadedImageResponse]:
+    if len(files) < MIN_IMAGES_PER_LISTING or len(files) > MAX_IMAGES_PER_LISTING:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=[
+                {
+                    "loc": ["body", "files"],
+                    "msg": (
+                        f"Кількість файлів має бути від {MIN_IMAGES_PER_LISTING} "
+                        f"до {MAX_IMAGES_PER_LISTING}"
+                    ),
+                    "type": "value_error",
+                }
+            ],
+        )
+
+    try:
+        saved_images = storage.upload_images(
+            _iter_upload_bytes(files),
+            actor_id=current_user.user_id,
+        )
+    except ImageUploadRateLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc),
+        ) from exc
+    except InvalidListingImageError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=[
+                {
+                    "loc": ["body", "files"],
+                    "msg": str(exc),
+                    "type": "value_error",
+                }
+            ],
+        ) from exc
+    finally:
+        for uploaded in files:
+            uploaded.file.close()
+
+    return [
+        UploadedImageResponse(
+            image_id=img.image_id,
+            storage_key=img.storage_key or f"{img.image_id.hex}.webp",
+            image_url=img.image_url,
+            thumbnail_url=img.thumbnail_url or f"{img.image_url[:-5]}_thumb.webp",
+            display_order=img.display_order,
+            width=img.width,
+            height=img.height,
+            thumbnail_width=img.thumbnail_width,
+            thumbnail_height=img.thumbnail_height,
+        )
+        for img in saved_images
+    ]
 
 
 @router.get(
@@ -169,6 +298,7 @@ def get_listings(
     ),
     responses={
         401: {"model": ErrorResponse, "description": "Unauthorized"},
+        403: {"model": ErrorResponse, "description": "Forbidden"},
         422: {
             "model": ApiValidationErrorResponse,
             "description": "Validation Error",
@@ -176,11 +306,11 @@ def get_listings(
     },
 )
 def get_my_listings(
-    actor_id: ActorId = None,
+    current_user: CurrentUser = Depends(require_current_user),
     service: ListingService = Depends(get_listing_service),
 ) -> list[ListingPublicResponse]:
     try:
-        items = service.list_owner_listings(actor_id=actor_id)
+        items = service.list_owner_listings(actor_id=current_user.user_id)
     except ListingUnauthorizedError as exc:
         _raise_domain(exc)
     return [_to_public(item) for item in items]
@@ -192,12 +322,14 @@ def get_my_listings(
     status_code=status.HTTP_201_CREATED,
     summary="Створити оголошення",
     description=(
-        "Створює оголошення від імені X-Actor-Id із підтримкою фотографій "
-        "та стану товару (FR-002). Повертає об'єкт з контактами."
+        "Створює оголошення від імені автентифікованого користувача із "
+        "підтримкою фотографій та стану товару (FR-002). "
+        "Повертає об'єкт з контактами."
     ),
     responses={
         400: {"model": ErrorResponse, "description": "Bad Request"},
         401: {"model": ErrorResponse, "description": "Unauthorized"},
+        403: {"model": ErrorResponse, "description": "Forbidden"},
         422: {
             "model": ApiValidationErrorResponse,
             "description": "Validation Error",
@@ -206,12 +338,12 @@ def get_my_listings(
 )
 def create_listing(
     listing: ListingCreate,
-    actor_id: ActorId = None,
+    current_user: CurrentUser = Depends(require_current_user),
     service: ListingService = Depends(get_listing_service),
 ) -> ListingResponse:
     try:
         created = service.create(
-            actor_id=actor_id,
+            actor_id=current_user.user_id,
             title=listing.title,
             description=listing.description,
             price=listing.price,
@@ -257,7 +389,7 @@ def get_listing(
     "/{listing_id}",
     response_model=ListingPublicResponse,
     summary="Частково оновити оголошення",
-    description="Оновлює лише оголошення поточного користувача (заголовок X-Actor-Id).",
+    description="Оновлює лише оголошення поточного користувача (FR-003).",
     responses={
         401: {"model": ErrorResponse, "description": "Unauthorized"},
         403: {"model": ErrorResponse, "description": "Forbidden"},
@@ -271,13 +403,13 @@ def get_listing(
 def update_listing(
     listing_id: UUID,
     listing_update: ListingUpdate,
-    actor_id: ActorId = None,
+    current_user: CurrentUser = Depends(require_current_user),
     service: ListingService = Depends(get_listing_service),
 ) -> ListingPublicResponse:
     try:
         updated = service.update(
             listing_id=listing_id,
-            actor_id=actor_id,
+            actor_id=current_user.user_id,
             **listing_update.model_dump(exclude_unset=True),
         )
     except (
@@ -310,11 +442,11 @@ def update_listing(
 )
 def delete_listing(
     listing_id: UUID,
-    actor_id: ActorId = None,
+    current_user: CurrentUser = Depends(require_current_user),
     service: ListingService = Depends(get_listing_service),
 ) -> None:
     try:
-        service.delete(listing_id, actor_id)
+        service.delete(listing_id, current_user.user_id)
     except (
         ListingUnauthorizedError,
         ListingForbiddenError,

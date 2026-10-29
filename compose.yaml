@@ -12,6 +12,8 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+    volumes:
+      - uploads_data:/var/lib/baraholka/uploads
     security_opt:
       - no-new-privileges:true
     healthcheck:
@@ -44,3 +46,6 @@ networks:
   proxy:
     external: true
     name: ${TRAEFIK_NETWORK:?Set TRAEFIK_NETWORK in .env}
+
+volumes:
+  uploads_data:

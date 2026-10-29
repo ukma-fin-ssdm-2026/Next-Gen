@@ -45,6 +45,12 @@ class ListingImage:
     display_order: int = 0
     listing_id: UUID | None = None
     image_id: UUID = field(default_factory=uuid4)
+    thumbnail_url: str | None = None
+    storage_key: str | None = None
+    width: int | None = None
+    height: int | None = None
+    thumbnail_width: int | None = None
+    thumbnail_height: int | None = None
 
 
 @dataclass
@@ -74,6 +80,9 @@ SEED_LISTING_ID = UUID("3fa85f64-5717-4562-b3fc-2c963f66afa6")
 SEED_CATEGORY_ID = UUID("12345678-1234-5678-1234-567812345678")
 WITHDRAWN_LISTING_ID = UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
 SEED_IMAGE_ID = UUID("11111111-2222-3333-4444-555555555555")
+SEED_IMAGE_STORAGE_KEY = f"{SEED_IMAGE_ID.hex}.webp"
+SEED_IMAGE_URL = f"/uploads/{SEED_IMAGE_STORAGE_KEY}"
+SEED_THUMBNAIL_URL = f"/uploads/{SEED_IMAGE_ID.hex}_thumb.webp"
 
 
 def build_seed_listings() -> list[Listing]:
@@ -93,8 +102,14 @@ def build_seed_listings() -> list[Listing]:
                 ListingImage(
                     image_id=SEED_IMAGE_ID,
                     listing_id=SEED_LISTING_ID,
-                    image_url="https://baraholka.ukma.edu.ua/images/hoodie-naukma.jpg",
+                    image_url=SEED_IMAGE_URL,
+                    thumbnail_url=SEED_THUMBNAIL_URL,
+                    storage_key=SEED_IMAGE_STORAGE_KEY,
                     display_order=0,
+                    width=800,
+                    height=600,
+                    thumbnail_width=400,
+                    thumbnail_height=300,
                 )
             ],
         ),

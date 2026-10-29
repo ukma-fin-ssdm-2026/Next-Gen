@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from unittest.mock import Mock
 from uuid import uuid4
 
+from tests.conftest import make_dummy_jpeg, make_dummy_png, make_dummy_webp
 import pytest
 
 from src.domain.exceptions import (
@@ -16,6 +17,7 @@ from src.domain.exceptions import (
 )
 from src.domain.listings import (
     SEED_CATEGORY_ID,
+    SEED_IMAGE_URL,
     SEED_LISTING_ID,
     SEED_OWNER_ID,
     WITHDRAWN_LISTING_ID,
@@ -274,7 +276,7 @@ def test_create_delegates_to_repository_and_uses_actor_as_owner() -> None:
         price=300.0,
         category_id=SEED_CATEGORY_ID,
         contact="@student",
-        image_urls=["https://baraholka.ukma.edu.ua/images/coat.jpg"],
+        image_urls=[SEED_IMAGE_URL],
     )
 
     assert created.user_id == actor_id
@@ -296,7 +298,7 @@ def test_list_owner_listings_returns_active_and_withdrawn_for_seller(
         price=90.0,
         category_id=SEED_CATEGORY_ID,
         contact="@foreign_seller",
-        image_urls=["https://baraholka.ukma.edu.ua/images/foreign.jpg"],
+        image_urls=[SEED_IMAGE_URL],
     )
 
     history = listing_service.list_owner_listings(actor_id=SEED_OWNER_ID)
@@ -323,6 +325,13 @@ def test_create_and_update_with_images_and_condition() -> None:
     repository = InMemoryListingRepository.with_seed()
     service = ListingService(repository=repository, image_storage=storage)
 
+    uploaded = storage.upload_images(
+        [
+            make_dummy_jpeg(100, 100),
+            make_dummy_png(200, 200),
+        ]
+    )
+
     created = service.create(
         actor_id=SEED_OWNER_ID,
         title="Калькулятор Casio",
@@ -331,32 +340,26 @@ def test_create_and_update_with_images_and_condition() -> None:
         category_id=SEED_CATEGORY_ID,
         contact="@casio_seller",
         condition=ListingCondition.NEW,
-        image_urls=[
-            " https://baraholka.ukma.edu.ua/images/casio-1.jpg ",
-            "/uploads/casio-2.jpg",
-        ],
+        image_urls=[uploaded[0].image_url, uploaded[1].image_url],
     )
 
     assert created.condition == ListingCondition.NEW
     assert len(created.images) == 2
-    assert created.images[0].image_url == (
-        "https://baraholka.ukma.edu.ua/images/casio-1.jpg"
-    )
+    assert created.images[0].image_url == uploaded[0].image_url
     assert created.images[0].display_order == 0
     assert created.images[1].display_order == 1
     assert len(storage.get_images(created.id)) == 2
 
+    new_uploaded = storage.upload_images([make_dummy_webp(150, 150)])
     updated = service.update(
         created.id,
         actor_id=SEED_OWNER_ID,
         condition=ListingCondition.USED,
-        image_urls=["https://baraholka.ukma.edu.ua/images/casio-updated.jpg"],
+        image_urls=[new_uploaded[0].image_url],
     )
     assert updated.condition == ListingCondition.USED
     assert len(updated.images) == 1
-    assert updated.images[0].image_url == (
-        "https://baraholka.ukma.edu.ua/images/casio-updated.jpg"
-    )
+    assert updated.images[0].image_url == new_uploaded[0].image_url
 
 
 @pytest.mark.parametrize(
@@ -367,7 +370,10 @@ def test_create_and_update_with_images_and_condition() -> None:
         ["   "],
         ["ftp://invalid-scheme.example.com/photo.jpg"],
         ["https://baraholka.ukma.edu.ua/images/has space.jpg"],
-        [f"https://baraholka.ukma.edu.ua/images/{idx}.jpg" for idx in range(11)],
+        ["https://baraholka.ukma.edu.ua/images/external.jpg"],
+        ["/uploads/../../secret.txt"],
+        ["/uploads/00000000000000000000000000000000.webp"],
+        [f"/uploads/{uuid4().hex}.webp" for _ in range(11)],
     ],
 )
 def test_image_storage_rejects_invalid_urls_or_too_many_images(

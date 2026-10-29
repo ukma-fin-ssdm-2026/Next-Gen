@@ -164,9 +164,11 @@ def test_withdrawn_listing_disappears_from_favorites(
     # Arrange: покупець зберіг оголошення
     login_as()
     client.post(f"{URL}/{SEED_LISTING_ID}")
-    # Act: власник знімає його з публікації (блок оголошень ще на X-Actor-Id)
-    owner = {"X-Actor-Id": str(SEED_OWNER_ID)}
-    withdraw = client.delete(f"/api/v1/listings/{SEED_LISTING_ID}", headers=owner)
+    buyer_cookie = client.cookies.get(SESSION_COOKIE_NAME)
+    # Act: власник знімає його з публікації через сесію
+    login_as(user_id=SEED_OWNER_ID)
+    withdraw = client.delete(f"/api/v1/listings/{SEED_LISTING_ID}")
     # Assert: в обраному покупця його більше немає (FR-009)
     assert withdraw.status_code == 204
+    client.cookies.set(SESSION_COOKIE_NAME, buyer_cookie)
     assert client.get(URL).json() == []

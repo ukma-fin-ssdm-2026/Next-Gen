@@ -4,11 +4,12 @@ from typing import Annotated
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
 
-from src.config import ConfigurationError, EntraSettings
+from src.config import ConfigurationError, EntraSettings, get_image_storage_dir
 from src.domain.users import CurrentUser
 from src.integrations.entra import EntraOidcClient, MsalEntraOidcClient
 from src.repositories.categories import InMemoryCategoryRepository
 from src.repositories.favorites import InMemoryFavoriteRepository
+from src.repositories.image_storage import ImageStorage, LocalImageStorage
 from src.repositories.listings import InMemoryListingRepository
 from src.repositories.moderation import InMemoryModerationActionRepository
 from src.repositories.users import InMemoryUserRepository
@@ -27,10 +28,12 @@ from src.services.moderation import ModerationService
 
 category_repository = InMemoryCategoryRepository.with_seed()
 listing_repository = InMemoryListingRepository.with_seed()
+image_storage: ImageStorage = LocalImageStorage(get_image_storage_dir())
 favorite_repository = InMemoryFavoriteRepository()
 category_service = CategoryService(category_repository)
 listing_service = ListingService(
     listing_repository,
+    image_storage=image_storage,
     favorites=favorite_repository,
     category_validator=category_service.is_valid_category_id,
 )
@@ -46,6 +49,11 @@ auth_session_store = InMemoryAuthSessionStore()
 
 SESSION_COOKIE_NAME = "baraholka_session"
 OIDC_STATE_COOKIE_NAME = "baraholka_oidc_state"
+
+
+def get_image_storage() -> ImageStorage:
+    """Повертає сховище зображень для ін'єкції в роутери."""
+    return image_storage
 
 
 def get_category_service() -> CategoryService:

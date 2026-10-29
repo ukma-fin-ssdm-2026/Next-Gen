@@ -108,7 +108,9 @@ class ListingService:
             )
         listing_id = uuid4()
         images = self._image_storage.save_images(
-            listing_id, image_urls if image_urls is not None else []
+            listing_id,
+            image_urls if image_urls is not None else [],
+            actor_id=owner_id,
         )
         listing = Listing(
             id=listing_id,
@@ -138,7 +140,9 @@ class ListingService:
         """Оновлює лише власне оголошення атомарно (FR-003, TM-02)."""
         listing = self._require_owned(listing_id, actor_id)
         new_images = (
-            self._image_storage.save_images(listing.id, image_urls)
+            self._image_storage.save_images(
+                listing.id, image_urls, actor_id=listing.user_id
+            )
             if image_urls is not None
             else None
         )

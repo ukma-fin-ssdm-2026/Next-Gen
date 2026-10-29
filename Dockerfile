@@ -12,11 +12,13 @@ RUN npm run build
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    IMAGE_STORAGE_DIR=/var/lib/baraholka/uploads
 
 WORKDIR /app
 
 RUN addgroup --system app && adduser --system --ingroup app app
+RUN mkdir -p /var/lib/baraholka/uploads && chown -R app:app /var/lib/baraholka/uploads
 
 COPY requirements.txt requirements.lock ./
 RUN python -m pip install \

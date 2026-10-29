@@ -5,6 +5,67 @@ info:
     академії (Baraholka NaUKMA). Розроблено за підходом Code-First.
   version: 1.0.0
 paths:
+  /api/v1/listings/images:
+    post:
+      tags:
+      - Listings
+      summary: Завантажити фотографії оголошення
+      description: Приймає від 1 до 10 файлів через multipart/form-data, перевіряє
+        фактичне декодування (JPEG, PNG, WebP, HEIC/HEIF), видаляє метадані (EXIF/GPS/XMP),
+        оптимізує розмір (до 1600 px) та створює thumbnail (до 400 px) у WebP quality=80
+        (FR-002, TM-03, TM-08).
+      operationId: upload_listing_images_api_v1_listings_images_post
+      parameters:
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_listing_images_api_v1_listings_images_post'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UploadedImageResponse'
+                title: Response Upload Listing Images Api V1 Listings Images Post
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+        '429':
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/listings:
     get:
       tags:
@@ -108,23 +169,20 @@ paths:
       tags:
       - Listings
       summary: Створити оголошення
-      description: Створює оголошення від імені X-Actor-Id із підтримкою фотографій
-        та стану товару (FR-002). Повертає об'єкт з контактами.
+      description: Створює оголошення від імені автентифікованого користувача із підтримкою
+        фотографій та стану товару (FR-002). Повертає об'єкт з контактами.
       operationId: create_listing_api_v1_listings_post
       parameters:
-      - name: X-Actor-Id
-        in: header
+      - name: baraholka_session
+        in: cookie
         required: false
         schema:
           anyOf:
           - type: string
-            format: uuid
           - type: 'null'
-          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-            Сервер не приймає user_id з тіла запиту.
-          title: X-Actor-Id
-        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-          Сервер не приймає user_id з тіла запиту.
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
       requestBody:
         required: true
         content:
@@ -150,6 +208,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Validation Error
           content:
@@ -165,19 +229,16 @@ paths:
         користувача з відповідним статусом кожного оголошення (FR-005).
       operationId: get_my_listings_api_v1_listings_my_get
       parameters:
-      - name: X-Actor-Id
-        in: header
+      - name: baraholka_session
+        in: cookie
         required: false
         schema:
           anyOf:
           - type: string
-            format: uuid
           - type: 'null'
-          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-            Сервер не приймає user_id з тіла запиту.
-          title: X-Actor-Id
-        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-          Сервер не приймає user_id з тіла запиту.
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
       responses:
         '200':
           description: Successful Response
@@ -190,6 +251,12 @@ paths:
                 title: Response Get My Listings Api V1 Listings My Get
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -238,7 +305,7 @@ paths:
       tags:
       - Listings
       summary: Частково оновити оголошення
-      description: Оновлює лише оголошення поточного користувача (заголовок X-Actor-Id).
+      description: Оновлює лише оголошення поточного користувача (FR-003).
       operationId: update_listing_api_v1_listings__listing_id__patch
       parameters:
       - name: listing_id
@@ -248,19 +315,16 @@ paths:
           type: string
           format: uuid
           title: Listing Id
-      - name: X-Actor-Id
-        in: header
+      - name: baraholka_session
+        in: cookie
         required: false
         schema:
           anyOf:
           - type: string
-            format: uuid
           - type: 'null'
-          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-            Сервер не приймає user_id з тіла запиту.
-          title: X-Actor-Id
-        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-          Сервер не приймає user_id з тіла запиту.
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
       requestBody:
         required: true
         content:
@@ -313,19 +377,16 @@ paths:
           type: string
           format: uuid
           title: Listing Id
-      - name: X-Actor-Id
-        in: header
+      - name: baraholka_session
+        in: cookie
         required: false
         schema:
           anyOf:
           - type: string
-            format: uuid
           - type: 'null'
-          description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-            Сервер не приймає user_id з тіла запиту.
-          title: X-Actor-Id
-        description: Тимчасовий ідентифікатор користувача до впровадження JWT (ADR-003).
-          Сервер не приймає user_id з тіла запиту.
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
       responses:
         '204':
           description: Successful Response
@@ -972,6 +1033,19 @@ components:
       - detail
       title: ApiValidationErrorResponse
       description: Узгоджений формат 422 для доменних і Pydantic-помилок API.
+    Body_upload_listing_images_api_v1_listings_images_post:
+      properties:
+        files:
+          items:
+            type: string
+            contentMediaType: application/octet-stream
+          type: array
+          title: Files
+          description: Список файлів фотографій (1..10 файлів до 10 МБ)
+      type: object
+      required:
+      - files
+      title: Body_upload_listing_images_api_v1_listings_images_post
     CategoryCreateRequest:
       properties:
         name:
@@ -1223,9 +1297,10 @@ components:
           maxItems: 10
           minItems: 1
           title: Image Urls
-          description: URL фотографій оголошення (від 1 до 10 зображень, FR-002)
+          description: Ключі або шляхи завантажених фотографій оголошення (від 1 до
+            10 зображень, FR-002)
           examples:
-          - - https://baraholka.ukma.edu.ua/images/hoodie-naukma.jpg
+          - - /uploads/11111111222233334444555555555555.webp
       type: object
       required:
       - title
@@ -1247,7 +1322,15 @@ components:
           title: Image Url
           description: URL або шлях до збереженого зображення
           examples:
-          - https://baraholka.ukma.edu.ua/images/hoodie-naukma.jpg
+          - /uploads/11111111222233334444555555555555.webp
+        thumbnail_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Thumbnail Url
+          description: URL або шлях до оптимізованого thumbnail
+          examples:
+          - /uploads/11111111222233334444555555555555_thumb.webp
         display_order:
           type: integer
           minimum: 0.0
@@ -1255,6 +1338,30 @@ components:
           description: Порядок відображення зображення
           examples:
           - 0
+        width:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Width
+          description: Ширина в пікселях
+        height:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Height
+          description: Висота в пікселях
+        thumbnail_width:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Thumbnail Width
+          description: Ширина thumbnail
+        thumbnail_height:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Thumbnail Height
+          description: Висота thumbnail
       type: object
       required:
       - image_id
@@ -1558,6 +1665,70 @@ components:
       - listing_id
       - contact
       title: SellerContactResponse
+    UploadedImageResponse:
+      properties:
+        image_id:
+          type: string
+          format: uuid
+          title: Image Id
+          description: Унікальний ідентифікатор зображення
+        storage_key:
+          type: string
+          title: Storage Key
+          description: Серверний ключ збереженого WebP-файлу
+          examples:
+          - 11111111222233334444555555555555.webp
+        image_url:
+          type: string
+          title: Image Url
+          description: URL або шлях до основного нормалізованого зображення
+          examples:
+          - /uploads/11111111222233334444555555555555.webp
+        thumbnail_url:
+          type: string
+          title: Thumbnail Url
+          description: URL або шлях до оптимізованого thumbnail
+          examples:
+          - /uploads/11111111222233334444555555555555_thumb.webp
+        display_order:
+          type: integer
+          minimum: 0.0
+          title: Display Order
+          description: Початковий порядок відображення
+          examples:
+          - 0
+        width:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Width
+          description: Ширина основного зображення в пікселях
+        height:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Height
+          description: Висота основного зображення в пікселях
+        thumbnail_width:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Thumbnail Width
+          description: Ширина thumbnail в пікселях
+        thumbnail_height:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Thumbnail Height
+          description: Висота thumbnail в пікселях
+      type: object
+      required:
+      - image_id
+      - storage_key
+      - image_url
+      - thumbnail_url
+      - display_order
+      title: UploadedImageResponse
     UserRole:
       type: string
       enum:
