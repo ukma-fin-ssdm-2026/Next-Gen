@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import timedelta
+from threading import Lock
 from uuid import UUID
 
 from src.domain.exceptions import (
@@ -34,6 +35,10 @@ class ModerationService:
         self._listings = listings
         self._favorites = favorites
         self._actions = actions
+        # Серіалізує перевірку статусу і зміну стану: два одночасні запити
+        # не можуть обидва побачити ACTIVE і створити два записи аудиту.
+        # З PostgreSQL це замінюється транзакцією з SELECT ... FOR UPDATE.
+        self._lock = Lock()
 
     def withdraw_listing(
         self, moderator: CurrentUser | None, listing_id: UUID, reason: str
@@ -55,6 +60,13 @@ class ModerationService:
             reason=normalize_moderation_reason(reason),
         )
 
+        with self._lock:
+            return self._withdraw_locked(action, listing_id)
+
+    def _withdraw_locked(
+        self, action: ModerationAction, listing_id: UUID
+    ) -> ModerationAction:
+        """Перевірка статусу і всі зміни стану під одним замком."""
         original = self._listings.get(listing_id)
         if original is None or not original.is_public():
             raise ListingNotFoundError("Оголошення не знайдено або вже зняте")

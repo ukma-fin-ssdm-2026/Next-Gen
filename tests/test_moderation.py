@@ -1,5 +1,7 @@
 """Модульні тести Moderation Service (FR-011). Підхід AAA."""
 
+import threading
+import time
 from dataclasses import FrozenInstanceError
 from uuid import uuid4
 
@@ -202,3 +204,44 @@ def test_moderation_action_is_immutable(service) -> None:
     action = service.withdraw_listing(ADMIN, SEED_LISTING_ID, REASON)
     with pytest.raises(FrozenInstanceError):
         action.reason = "інша причина"
+
+
+class SlowListingRepository(InMemoryListingRepository):
+    """Розширює вікно гонки: після читання оголошення потік «думає» 50 мс."""
+
+    def get(self, listing_id):
+        listing = super().get(listing_id)
+        time.sleep(0.05)
+        return listing
+
+
+def test_concurrent_withdrawals_create_single_audit_record(favorites, actions) -> None:
+    """[TP-020] [FR-011]
+    Два адміністратори одночасно знімають одне оголошення: успішний лише один,
+    у журналі рівно один запис, другий отримує ListingNotFoundError.
+    """
+    # Arrange
+    listings = SlowListingRepository(InMemoryListingRepository.with_seed().list_all())
+    service = ModerationService(listings, favorites, actions)
+    admins = [make_user(UserRole.ADMIN), make_user(UserRole.ADMIN)]
+    start = threading.Barrier(len(admins))
+    outcomes: list[str] = []
+
+    def withdraw(admin: CurrentUser) -> None:
+        start.wait()
+        try:
+            service.withdraw_listing(admin, SEED_LISTING_ID, REASON)
+            outcomes.append("ok")
+        except ListingNotFoundError:
+            outcomes.append("not_found")
+
+    # Act
+    threads = [threading.Thread(target=withdraw, args=(a,)) for a in admins]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=5)
+
+    # Assert
+    assert sorted(outcomes) == ["not_found", "ok"]
+    assert len(actions.list_by_listing(SEED_LISTING_ID)) == 1
