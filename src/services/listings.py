@@ -121,12 +121,7 @@ class ListingService:
             raise InvalidCategoryError(
                 "Потрібно вказати category_id або suggested_category_name"
             )
-        if self._category_validator is not None and not self._category_validator(
-            target_category_id
-        ):
-            raise InvalidCategoryError(
-                f"Категорія {target_category_id} не існує або була деактивована"
-            )
+        self._validate_target_category(target_category_id)
 
         if suggested_category_name is not None:
             if self._category_suggestion_service is None:
@@ -182,6 +177,7 @@ class ListingService:
                             saved = self._repository.save(saved)
                     return saved
             with self._listing_lock:
+                self._validate_target_category(target_category_id)
                 return self._repository.add(listing)
         except Exception:
             if (
@@ -262,6 +258,23 @@ class ListingService:
         if listing is None:
             raise ListingNotFoundError("Оголошення не знайдено")
         return listing
+
+    def _validate_target_category(self, target_category_id: UUID) -> None:
+        if (
+            self._category_suggestion_service is not None
+            and self._category_suggestion_service.is_uncommitted_category(
+                target_category_id
+            )
+        ):
+            raise InvalidCategoryError(
+                f"Категорія {target_category_id} ще не опублікована"
+            )
+        if self._category_validator is not None and not self._category_validator(
+            target_category_id
+        ):
+            raise InvalidCategoryError(
+                f"Категорія {target_category_id} не існує або була деактивована"
+            )
 
     def _require_actor(self, actor_id: UUID | CurrentUser | User | None) -> UUID:
         if actor_id is None:

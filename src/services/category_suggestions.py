@@ -54,11 +54,16 @@ class CategorySuggestionService:
         self._actions = actions
         self._lock = RLock()
         self._listing_lock = get_listing_mutation_lock(listings)
+        self._uncommitted_category_ids: set[UUID] = set()
 
     @property
     def lock(self) -> RLock:
         """Спільний RLock для координації створення пропозиції та оголошення."""
         return self._lock
+
+    def is_uncommitted_category(self, category_id: UUID) -> bool:
+        """Перевіряє, чи категорія перебуває в процесі незбереженого approve()."""
+        return category_id in self._uncommitted_category_ids
 
     def validate_submission(
         self, actor: CurrentUser | User | UUID | None, name: str
@@ -160,6 +165,8 @@ class CategorySuggestionService:
                     name=final_name, slug=slug
                 )
                 created_category_id = created_category.id
+                self._uncommitted_category_ids.add(created_category_id)
+                self._categories.update(replace(created_category, is_active=False))
                 with self._listing_lock:
                     for candidate in list(self._listings.list_all()):
                         if candidate.suggested_category_id != suggestion_id:
@@ -182,23 +189,25 @@ class CategorySuggestionService:
                             ),
                         )
                         self._listings.save(moved)
-                approved = replace(
-                    original,
-                    name=final_name,
-                    status=CategorySuggestionStatus.APPROVED,
-                    category_id=created_category.id,
-                    reviewed_by=admin.user_id,
-                    reviewed_at=utc_now(),
-                )
-                self._suggestions.save(approved)
-                self._actions.add(
-                    ModerationAction(
-                        moderator_id=admin.user_id,
-                        suggestion_id=suggestion_id,
-                        action_type=ModerationActionType.APPROVE_CATEGORY,
-                        reason=f"Схвалено категорію: {final_name}",
+                    approved = replace(
+                        original,
+                        name=final_name,
+                        status=CategorySuggestionStatus.APPROVED,
+                        category_id=created_category.id,
+                        reviewed_by=admin.user_id,
+                        reviewed_at=utc_now(),
                     )
-                )
+                    self._suggestions.save(approved)
+                    self._actions.add(
+                        ModerationAction(
+                            moderator_id=admin.user_id,
+                            suggestion_id=suggestion_id,
+                            action_type=ModerationActionType.APPROVE_CATEGORY,
+                            reason=f"Схвалено категорію: {final_name}",
+                        )
+                    )
+                    self._categories.update(created_category)
+                    self._uncommitted_category_ids.discard(created_category_id)
                 return approved
             except DuplicateCategoryError as exc:
                 self._rollback_changes(
@@ -324,6 +333,7 @@ class CategorySuggestionService:
                 else:
                     self._listings.save(snap)
         if created_category_id is not None:
+            self._uncommitted_category_ids.discard(created_category_id)
             self._categories.delete(created_category_id)
         self._suggestions.save(original_suggestion)
 

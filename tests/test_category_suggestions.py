@@ -281,9 +281,12 @@ def test_atomic_rollback_on_approve_and_listing_create_failure(
         )
     assert category_suggestion_repository.list_all() == []
 
-    # Збій запису ModerationAction при approve відкочує всі зміни
+    # Збій запису ModerationAction при approve відкочує всі зміни,
+    # а до завершення approve() нова категорія ще не публікується в list_active()
     class FailingActions(InMemoryModerationActionRepository):
         def add(self, action):
+            active_names = [cat.name for cat in category_service.list_active()]
+            assert "Силовий спорт" not in active_names
             raise RuntimeError("DB failure during audit log")
 
     failing_service = CategorySuggestionService(
