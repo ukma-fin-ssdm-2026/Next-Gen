@@ -110,20 +110,27 @@ function errorText(error: unknown): string {
   return "Щось пішло не так. Спробуйте ще раз.";
 }
 
-function filtersFromParams(params: URLSearchParams): ListingFilters {
+function filtersFromParams(params: URLSearchParams, categories: Category[]): ListingFilters {
+  const categoryParam = params.get("category") ?? "";
+  const category = categories.find(
+    (item) => item.slug === categoryParam || item.id === categoryParam,
+  );
   return {
     q: params.get("q") ?? "",
-    categoryId: params.get("category") ?? "",
+    categoryId: category?.id ?? "",
     minPrice: params.get("min_price") ?? "",
     maxPrice: params.get("max_price") ?? "",
     sort: params.get("sort") === "oldest" ? "oldest" : "newest",
   };
 }
 
-function paramsFromFilters(filters: ListingFilters): URLSearchParams {
+function paramsFromFilters(filters: ListingFilters, categories: Category[]): URLSearchParams {
   const params = new URLSearchParams();
   if (filters.q.trim()) params.set("q", filters.q.trim());
-  if (filters.categoryId) params.set("category", filters.categoryId);
+  if (filters.categoryId) {
+    const category = categories.find((item) => item.id === filters.categoryId);
+    params.set("category", category?.slug ?? filters.categoryId);
+  }
   if (filters.minPrice) params.set("min_price", filters.minPrice);
   if (filters.maxPrice) params.set("max_price", filters.maxPrice);
   if (filters.sort !== "newest") params.set("sort", filters.sort);
@@ -1240,7 +1247,7 @@ function HomePage({ categories, categoryNames, user, favorites, busy, onFavorite
           {categories.length > 0 && (
             <div className="chip-row" aria-label="Категорії">
               {categories.slice(0, 6).map((category) => (
-                <Link className="chip" key={category.id} to={`/listings?${new URLSearchParams({ category: category.id }).toString()}`}>{category.name}</Link>
+                <Link className="chip" key={category.id} to={`/listings?${new URLSearchParams({ category: category.slug }).toString()}`}>{category.name}</Link>
               ))}
             </div>
           )}
@@ -1285,7 +1292,10 @@ function CatalogPage({ categories, categoryNames, favorites, busy, onFavorite, o
   onError: (message: string) => void;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const filters = useMemo(() => filtersFromParams(searchParams), [searchParams]);
+  const filters = useMemo(
+    () => filtersFromParams(searchParams, categories),
+    [searchParams, categories],
+  );
   const [draftFilters, setDraftFilters] = useState<ListingFilters>(filters);
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1294,6 +1304,14 @@ function CatalogPage({ categories, categoryNames, favorites, busy, onFavorite, o
   const requestGeneration = useRef(0);
 
   useEffect(() => setDraftFilters(filters), [filters]);
+  useEffect(() => {
+    const categoryParam = searchParams.get("category");
+    const category = categories.find((item) => item.id === categoryParam);
+    if (!category) return;
+    const canonicalParams = new URLSearchParams(searchParams);
+    canonicalParams.set("category", category.slug);
+    setSearchParams(canonicalParams, { replace: true });
+  }, [categories, searchParams, setSearchParams]);
   useEffect(() => {
     const generation = requestGeneration.current + 1;
     requestGeneration.current = generation;
@@ -1349,7 +1367,7 @@ function CatalogPage({ categories, categoryNames, favorites, busy, onFavorite, o
 
   function applyFilters(event: FormEvent) {
     event.preventDefault();
-    setSearchParams(paramsFromFilters(draftFilters));
+    setSearchParams(paramsFromFilters(draftFilters, categories));
   }
 
   function clearFilters() {
