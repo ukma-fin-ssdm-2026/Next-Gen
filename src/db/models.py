@@ -69,11 +69,7 @@ class UserRow(Base):
         Boolean, nullable=False, default=False
     )
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    contact: Mapped[str | None] = mapped_column(
-        String(300),
-        nullable=True,
-        comment="Контакти профілю. Не віддаються публічно (FR-014).",
-    )
+    contact: Mapped[str | None] = mapped_column(String(300), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
@@ -197,11 +193,7 @@ class ListingRow(Base):
         ForeignKey("categories.category_id", ondelete="RESTRICT"),
         nullable=False,
     )
-    contact: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-        comment="Personal Data. Видимий лише автентифікованим. (SEC-002)",
-    )
+    contact: Mapped[str] = mapped_column(Text, nullable=False)
     user_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("users.user_id", ondelete="CASCADE"),
@@ -300,12 +292,9 @@ class ListingImageRow(Base):
 
 
 class FavoriteRow(Base):
-    """Запис в обраному (FR-009). Пара (user_id, listing_id) унікальна."""
+    """Запис в обраному (FR-009). Складений первинний ключ (user_id, listing_id)."""
 
     __tablename__ = "favorites"
-    __table_args__ = (
-        UniqueConstraint("user_id", "listing_id", name="uq_favorites_user_listing"),
-    )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True),

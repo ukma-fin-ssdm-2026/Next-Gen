@@ -270,7 +270,6 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.func.now(),
         ),
-        sa.UniqueConstraint("user_id", "listing_id", name="uq_favorites_user_listing"),
     )
 
     # --- moderation_actions ---
