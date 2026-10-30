@@ -14,6 +14,7 @@ from sqlalchemy import (
     Enum as SAEnum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -47,6 +48,8 @@ class UserRow(Base):
             "tenant_id", "entra_object_id", name="uq_users_entra_identity"
         ),
         UniqueConstraint("email", name="uq_users_email"),
+        Index("ix_users_email", "email"),
+        Index("ix_users_entra_identity", "tenant_id", "entra_object_id"),
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -107,6 +110,7 @@ class CategoryRow(Base):
     __table_args__ = (
         UniqueConstraint("name", name="uq_categories_name"),
         UniqueConstraint("slug", name="uq_categories_slug"),
+        Index("ix_categories_is_active", "is_active"),
     )
 
     category_id: Mapped[uuid.UUID] = mapped_column(
@@ -134,6 +138,7 @@ class CategorySuggestionRow(Base):
     """Пропозиція нової категорії від продавця (FR-015 / US-010)."""
 
     __tablename__ = "category_suggestions"
+    __table_args__ = (Index("ix_category_suggestions_status", "status"),)
 
     suggestion_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -175,6 +180,10 @@ class ListingRow(Base):
     __tablename__ = "listings"
     __table_args__ = (
         CheckConstraint("price >= 0", name="ck_listings_price_non_negative"),
+        Index("ix_listings_user_id", "user_id"),
+        Index("ix_listings_category_id", "category_id"),
+        Index("ix_listings_status", "status"),
+        Index("ix_listings_created_at", "created_at"),
     )
 
     listing_id: Mapped[uuid.UUID] = mapped_column(
@@ -261,6 +270,7 @@ class ListingImageRow(Base):
     """Зображення, прикріплене до оголошення (FR-002). Бінарні дані не зберігаються."""
 
     __tablename__ = "listing_images"
+    __table_args__ = (Index("ix_listing_images_listing_id", "listing_id"),)
 
     image_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -331,6 +341,10 @@ class ModerationActionRow(Base):
     """
 
     __tablename__ = "moderation_actions"
+    __table_args__ = (
+        Index("ix_moderation_actions_listing_id", "listing_id"),
+        Index("ix_moderation_actions_target_user_id", "target_user_id"),
+    )
 
     action_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
