@@ -1,4 +1,4 @@
-"""Alembic environment — підключає SQLAlchemy metadata та DATABASE_URL зі змінних середовища."""
+"""Alembic environment — підключає SQLAlchemy metadata та DATABASE_URL."""
 
 import os
 import sys

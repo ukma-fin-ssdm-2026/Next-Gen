@@ -51,11 +51,13 @@ def upgrade() -> None:
         create_type=True,
     )
 
-    user_role.create(op.get_bind(), checkfirst=True)
-    listing_condition.create(op.get_bind(), checkfirst=True)
-    listing_status.create(op.get_bind(), checkfirst=True)
-    suggestion_status.create(op.get_bind(), checkfirst=True)
-    moderation_action_type.create(op.get_bind(), checkfirst=True)
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        user_role.create(bind, checkfirst=True)
+        listing_condition.create(bind, checkfirst=True)
+        listing_status.create(bind, checkfirst=True)
+        suggestion_status.create(bind, checkfirst=True)
+        moderation_action_type.create(bind, checkfirst=True)
 
     # --- users ---
     op.create_table(
@@ -72,13 +74,11 @@ def upgrade() -> None:
         sa.Column("display_name", sa.String(200), nullable=False),
         sa.Column(
             "role",
-            sa.Enum("USER", "ADMIN", name="user_role"),
+            sa.Enum("USER", "ADMIN", name="user_role", create_type=False),
             nullable=False,
             server_default="USER",
         ),
-        sa.Column(
-            "is_blocked", sa.Boolean, nullable=False, server_default=sa.false()
-        ),
+        sa.Column("is_blocked", sa.Boolean, nullable=False, server_default=sa.false()),
         sa.Column(
             "display_name_customized",
             sa.Boolean,
@@ -108,15 +108,11 @@ def upgrade() -> None:
     # --- categories ---
     op.create_table(
         "categories",
-        sa.Column(
-            "category_id", postgresql.UUID(as_uuid=True), primary_key=True
-        ),
+        sa.Column("category_id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("name", sa.String(200), nullable=False),
         sa.Column("slug", sa.String(200), nullable=False),
         sa.Column("description", sa.Text, nullable=True),
-        sa.Column(
-            "is_active", sa.Boolean, nullable=False, server_default=sa.true()
-        ),
+        sa.Column("is_active", sa.Boolean, nullable=False, server_default=sa.true()),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -131,9 +127,7 @@ def upgrade() -> None:
     # --- category_suggestions ---
     op.create_table(
         "category_suggestions",
-        sa.Column(
-            "suggestion_id", postgresql.UUID(as_uuid=True), primary_key=True
-        ),
+        sa.Column("suggestion_id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("name", sa.String(40), nullable=False),
         sa.Column(
             "proposer_id",
@@ -143,7 +137,13 @@ def upgrade() -> None:
         ),
         sa.Column(
             "status",
-            sa.Enum("PENDING", "APPROVED", "REJECTED", name="suggestion_status"),
+            sa.Enum(
+                "PENDING",
+                "APPROVED",
+                "REJECTED",
+                name="suggestion_status",
+                create_type=False,
+            ),
             nullable=False,
             server_default="PENDING",
         ),
@@ -162,9 +162,7 @@ def upgrade() -> None:
     # --- listings ---
     op.create_table(
         "listings",
-        sa.Column(
-            "listing_id", postgresql.UUID(as_uuid=True), primary_key=True
-        ),
+        sa.Column("listing_id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("title", sa.String(200), nullable=False),
         sa.Column("description", sa.Text, nullable=False),
         sa.Column("price", sa.Float, nullable=False),
@@ -183,7 +181,14 @@ def upgrade() -> None:
         ),
         sa.Column(
             "condition",
-            sa.Enum("NEW", "LIKE_NEW", "GOOD", "USED", name="listing_condition"),
+            sa.Enum(
+                "NEW",
+                "LIKE_NEW",
+                "GOOD",
+                "USED",
+                name="listing_condition",
+                create_type=False,
+            ),
             nullable=False,
             server_default="GOOD",
         ),
@@ -196,6 +201,7 @@ def upgrade() -> None:
                 "RESERVED",
                 "SOLD",
                 name="listing_status",
+                create_type=False,
             ),
             nullable=False,
             server_default="ACTIVE",
@@ -225,9 +231,7 @@ def upgrade() -> None:
     # --- listing_images ---
     op.create_table(
         "listing_images",
-        sa.Column(
-            "image_id", postgresql.UUID(as_uuid=True), primary_key=True
-        ),
+        sa.Column("image_id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column(
             "listing_id",
             postgresql.UUID(as_uuid=True),
@@ -266,17 +270,13 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.func.now(),
         ),
-        sa.UniqueConstraint(
-            "user_id", "listing_id", name="uq_favorites_user_listing"
-        ),
+        sa.UniqueConstraint("user_id", "listing_id", name="uq_favorites_user_listing"),
     )
 
     # --- moderation_actions ---
     op.create_table(
         "moderation_actions",
-        sa.Column(
-            "action_id", postgresql.UUID(as_uuid=True), primary_key=True
-        ),
+        sa.Column("action_id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column(
             "moderator_id",
             postgresql.UUID(as_uuid=True),
@@ -292,6 +292,7 @@ def upgrade() -> None:
                 "APPROVE_CATEGORY",
                 "REJECT_CATEGORY",
                 name="moderation_action_type",
+                create_type=False,
             ),
             nullable=False,
         ),
@@ -344,11 +345,12 @@ def downgrade() -> None:
 
     # Drop enum types
     bind = op.get_bind()
-    for name in [
-        "moderation_action_type",
-        "suggestion_status",
-        "listing_status",
-        "listing_condition",
-        "user_role",
-    ]:
-        postgresql.ENUM(name=name).drop(bind, checkfirst=True)
+    if bind.dialect.name == "postgresql":
+        for name in [
+            "moderation_action_type",
+            "suggestion_status",
+            "listing_status",
+            "listing_condition",
+            "user_role",
+        ]:
+            postgresql.ENUM(name=name).drop(bind, checkfirst=True)
