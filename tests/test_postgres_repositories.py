@@ -782,3 +782,106 @@ def test_alembic_migration_round_trip(monkeypatch):
         )
     finally:
         os.unlink(db_path)
+
+
+def test_seed_categories_exist_after_migration(monkeypatch):
+    """[FR-012] [TP-015] [TP-016] Початкові категорії після upgrade head."""
+    import os
+    import tempfile
+
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+    from src.domain.listings import OTHER_CATEGORY_ID
+    from src.repositories.postgres_categories import PostgresCategoryRepository
+
+    db_url = os.getenv("DATABASE_URL", "").strip()
+    if db_url:
+        eng = create_engine(db_url)
+        with Session(eng) as session:
+            repo = PostgresCategoryRepository(session)
+            cats = repo.list_all()
+            cats_dict = {c.slug: c for c in cats}
+            assert (
+                len(cats) >= 5
+            ), f"Очікувалося щонайменше 5 категорій, знайдено {len(cats)}"
+            assert "other" in cats_dict
+            assert cats_dict["other"].id == OTHER_CATEGORY_ID
+            assert cats_dict["other"].name == "Інше"
+            assert cats_dict["other"].is_active is True
+        eng.dispose()
+    else:
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+            db_path = tmp.name
+        try:
+            cfg = Config()
+            cfg.set_main_option("script_location", "alembic")
+            cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+            command.upgrade(cfg, "head")
+            eng = create_engine(f"sqlite:///{db_path}")
+            with Session(eng) as session:
+                repo = PostgresCategoryRepository(session)
+                cats = repo.list_all()
+                cats_dict = {c.slug: c for c in cats}
+                assert (
+                    len(cats) >= 5
+                ), f"Очікувалося щонайменше 5 категорій, знайдено {len(cats)}"
+                assert "other" in cats_dict
+                assert cats_dict["other"].id == OTHER_CATEGORY_ID
+                assert cats_dict["other"].name == "Інше"
+                assert cats_dict["other"].is_active is True
+            eng.dispose()
+        finally:
+            if os.path.exists(db_path):
+                os.remove(db_path)
+
+
+def test_api_categories_returns_seeded_categories_on_fresh_db(monkeypatch):
+    """[FR-012] [TP-016] GET /api/v1/categories повертає категорії на свіжій базі."""
+    import os
+    import tempfile
+    from alembic import command
+    from alembic.config import Config
+    from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from src.api import deps
+    from src.api.main import app
+    from src.domain.listings import OTHER_CATEGORY_ID
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db_path = tmp.name
+    try:
+        cfg = Config()
+        cfg.set_main_option("script_location", "alembic")
+        cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+        command.upgrade(cfg, "head")
+
+        eng = create_engine(f"sqlite:///{db_path}")
+
+        def override_db_session():
+            with Session(eng) as s:
+                yield s
+
+        app.dependency_overrides[deps.get_db_session] = override_db_session
+
+        with TestClient(app) as client:
+            resp = client.get("/api/v1/categories")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert len(data) >= 5
+            slugs = [c["slug"] for c in data]
+            assert "other" in slugs
+            assert "textbooks" in slugs
+            other = next(c for c in data if c["slug"] == "other")
+            assert other["id"] == str(OTHER_CATEGORY_ID)
+            assert other["name"] == "Інше"
+            assert other["is_active"] is True
+    finally:
+        app.dependency_overrides.clear()
+        if os.path.exists(db_path):
+            os.remove(db_path)

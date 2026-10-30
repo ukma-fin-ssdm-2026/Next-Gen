@@ -106,7 +106,7 @@ def upgrade() -> None:
     )
 
     # --- categories ---
-    op.create_table(
+    categories_table = op.create_table(
         "categories",
         sa.Column("category_id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("name", sa.String(200), nullable=False),
@@ -123,6 +123,73 @@ def upgrade() -> None:
         sa.UniqueConstraint("slug", name="uq_categories_slug"),
     )
     op.create_index("ix_categories_is_active", "categories", ["is_active"])
+
+    # Seed initial categories (with_seed, FR-012)
+    bind = op.get_bind()
+    seed_categories = [
+        {
+            "category_id": "11111111-1111-1111-1111-111111111111",
+            "name": "Підручники та конспекти",
+            "slug": "textbooks",
+            "description": ("Навчальна література, посібники, конспекти лекцій НаУКМА"),
+            "is_active": True,
+        },
+        {
+            "category_id": "22222222-2222-2222-2222-222222222222",
+            "name": "Електроніка та техніка",
+            "slug": "electronics",
+            "description": "Ноутбуки, аксесуари, зарядні пристрої, калькулятори",
+            "is_active": True,
+        },
+        {
+            "category_id": "33333333-3333-3333-3333-333333333333",
+            "name": "Одяг та мерч Могилянки",
+            "slug": "clothing",
+            "description": "Фірмові худі НаУКМА, футболки, сумки та аксесуари",
+            "is_active": True,
+        },
+        {
+            "category_id": "44444444-4444-4444-4444-444444444444",
+            "name": "Канцелярія та побут",
+            "slug": "stationery",
+            "description": (
+                "Зошити, приладдя для письма, побутові речі для гуртожитку"
+            ),
+            "is_active": True,
+        },
+        {
+            "category_id": "55555555-5555-5555-5555-555555555555",
+            "name": "Інше",
+            "slug": "other",
+            "description": "Різні корисні дрібниці",
+            "is_active": True,
+        },
+    ]
+
+    if bind.dialect.name == "postgresql":
+        op.bulk_insert(
+            categories_table,
+            [
+                {**cat, "category_id": uuid.UUID(cat["category_id"])}
+                for cat in seed_categories
+            ],
+        )
+    else:
+        for cat in seed_categories:
+            bind.execute(
+                sa.text(
+                    "INSERT INTO categories "
+                    "(category_id, name, slug, description, is_active) "
+                    "VALUES (:id, :name, :slug, :desc, :act)"
+                ),
+                {
+                    "id": cat["category_id"],
+                    "name": cat["name"],
+                    "slug": cat["slug"],
+                    "desc": cat["description"],
+                    "act": 1 if cat["is_active"] else 0,
+                },
+            )
 
     # --- category_suggestions ---
     op.create_table(
