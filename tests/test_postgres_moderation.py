@@ -145,7 +145,7 @@ def pg_engine() -> Iterator:
 
 @requires_postgres
 def test_withdraw_commits_status_favorites_and_audit_together(pg_engine) -> None:
-    """[TP-031] [FR-011]
+    """[TP-035] [FR-011]
     Успішне зняття: після commit у БД WITHDRAWN, обране очищене, один запис аудиту.
     """
     # Arrange
@@ -167,7 +167,7 @@ def test_withdraw_commits_status_favorites_and_audit_together(pg_engine) -> None
 
 @requires_postgres
 def test_audit_insert_failure_rolls_back_whole_transaction(pg_engine) -> None:
-    """[TP-031] [FR-011]
+    """[TP-035] [FR-011]
     Збій запису аудиту в БД (FK модератора) відкочує статус і обране;
     назовні йде саме помилка БД, а не помилка компенсації.
     """
@@ -199,7 +199,7 @@ class _HoldingListingRepository(PostgresListingRepository):
 
 @requires_postgres
 def test_concurrent_withdrawals_serialize_on_row_lock(pg_engine) -> None:
-    """[TP-031] [FR-011]
+    """[TP-035] [FR-011]
     Два паралельні запити (окремі сесії) на одне оголошення: успішний один,
     другий чекає на блокування рядка, бачить WITHDRAWN і отримує 404-помилку.
     """
@@ -253,7 +253,7 @@ def test_concurrent_withdrawals_serialize_on_row_lock(pg_engine) -> None:
 
 @requires_postgres
 def test_admin_withdraw_api_on_postgres(pg_engine) -> None:
-    """[TP-031] [FR-011]
+    """[TP-035] [FR-011]
     Через API з реальними Postgres-репозиторіями: 201 і закомічений стан у БД.
     """
     from fastapi.testclient import TestClient
@@ -301,7 +301,7 @@ def test_admin_withdraw_api_on_postgres(pg_engine) -> None:
 
 
 def test_get_for_update_returns_listing_on_sqlite() -> None:
-    """[TP-031] [FR-011]
+    """[TP-035] [FR-011]
     get_for_update повертає те саме оголошення, що й get (SQLite ігнорує FOR UPDATE).
     """
     engine = create_engine("sqlite:///:memory:")
