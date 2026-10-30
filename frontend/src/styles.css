@@ -691,3 +691,15 @@ footer a { color: inherit; text-decoration: underline; }
 .log-group-chip { margin-left: 8px; padding: 2px 8px; border-radius: 999px; background: #e7ece8; color: var(--muted); font-size: 11px; font-weight: 700; }
 .category-option-hint { color: var(--muted); font-weight: 500; }
 @media (max-width: 640px) { .log-toolbar { grid-template-columns: 1fr; } }
+
+/* Мобільна версія: панель дій форм закріплена внизу екрана (створення, редагування, профіль) */
+@media (max-width: 760px) {
+  .form-actions.sticky-actions {
+    position: sticky; z-index: 40; bottom: 0; justify-content: stretch; gap: 10px;
+    margin: 0 -16px -24px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    border: 0; border-top: 1px solid var(--line); border-radius: 0;
+    background: rgba(252, 252, 250, 0.96); box-shadow: 0 -8px 24px rgba(20, 35, 28, 0.08);
+    backdrop-filter: blur(8px);
+  }
+  .form-actions.sticky-actions .button { flex: 1; justify-content: center; }
+}

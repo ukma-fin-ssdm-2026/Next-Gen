@@ -76,10 +76,11 @@ const STATS_SAMPLE_SIZE = 100;
 const MAX_PHOTOS = 10;
 
 const CONDITION_LABELS: Record<ListingCondition, string> = {
-  NEW: "Нове",
-  LIKE_NEW: "Як нове",
-  GOOD: "Добрий стан",
-  USED: "Вживане",
+  NEW: "Новий",
+  LIKE_NEW: "Як новий",
+  GOOD: "Задовільний",
+  USED: "З помітними дефектами",
+  FOR_PARTS: "На запчастини",
 };
 
 const MAX_PRICE = 100_000_000;
@@ -439,6 +440,7 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
+  const onFormPage = /^\/(listings\/new|listings\/[^/]+\/edit|profile)\/?$/.test(location.pathname);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
   useEffect(() => { setMenuOpen(false); setHidden(false); }, [location.pathname]);
@@ -519,9 +521,9 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
 
       {!onCreatePage && (
         user ? (
-          <Link className={`fab${hidden || menuOpen ? " fab-hidden" : ""}`} to="/listings/new" aria-label="Створити оголошення">+</Link>
+          <Link className={`fab${hidden || menuOpen || onFormPage ? " fab-hidden" : ""}`} to="/listings/new" aria-label="Створити оголошення">+</Link>
         ) : (
-          <a className={`fab${hidden || menuOpen ? " fab-hidden" : ""}`} href={createLoginUrl} aria-label="Створити оголошення">+</a>
+          <a className={`fab${hidden || menuOpen || onFormPage ? " fab-hidden" : ""}`} href={createLoginUrl} aria-label="Створити оголошення">+</a>
         )
       )}
 
@@ -1018,7 +1020,7 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
         </div>
 
         {formError && <p className="form-error" role="alert">{formError}</p>}
-        <div className="form-actions">
+        <div className="form-actions sticky-actions">
           <button className="button button-primary" type="submit" disabled={submitting}>{submitting ? "Зберігаємо…" : editing ? "Зберегти зміни" : "Опублікувати"}</button>
           <Link className="button button-text" to={backTo}>Скасувати</Link>
         </div>
@@ -1891,7 +1893,7 @@ function ProfilePage({ user, authChecked, onUserChange, onError, onNotice }: {
         </section>
 
         {formError && <p className="form-error" role="alert">{formError}</p>}
-        <div className="form-actions">
+        <div className="form-actions sticky-actions">
           <button className="button button-primary" type="submit" disabled={saving}>{saving ? "Зберігаємо…" : "Зберегти профіль"}</button>
           <Link className="button button-text" to="/my">Мої оголошення</Link>
         </div>

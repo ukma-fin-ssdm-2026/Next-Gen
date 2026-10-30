@@ -492,3 +492,19 @@ def test_catalog_accepts_price_sort_orders(client: TestClient) -> None:
     assert (
         client.get("/api/v1/listings", params={"sort": "cheapest"}).status_code == 422
     )
+
+
+def test_listing_accepts_for_parts_condition(
+    client: TestClient, login_as, listing_payload
+) -> None:
+    """[TP-001] [FR-002] Стан FOR_PARTS приймається, невідомий стан — 422."""
+    login_as()
+    created = client.post(
+        "/api/v1/listings", json={**listing_payload, "condition": "FOR_PARTS"}
+    )
+    assert created.status_code == 201
+    assert created.json()["condition"] == "FOR_PARTS"
+    bad = client.post(
+        "/api/v1/listings", json={**listing_payload, "condition": "BROKEN"}
+    )
+    assert bad.status_code == 422

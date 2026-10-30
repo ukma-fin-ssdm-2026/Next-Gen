@@ -98,7 +98,7 @@ class ListingBase(BaseModel):
     )
     condition: ListingCondition = Field(
         ListingCondition.GOOD,
-        description="Стан товару (NEW, LIKE_NEW, GOOD, USED)",
+        description="Стан товару (NEW, LIKE_NEW, GOOD, USED, FOR_PARTS)",
         examples=[ListingCondition.GOOD],
     )
 

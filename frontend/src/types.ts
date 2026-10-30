@@ -15,7 +15,7 @@ export interface PublicProfile {
   avatar_url: string | null;
 }
 
-export type ListingCondition = "NEW" | "LIKE_NEW" | "GOOD" | "USED";
+export type ListingCondition = "NEW" | "LIKE_NEW" | "GOOD" | "USED" | "FOR_PARTS";
 
 export interface ListingImage {
   image_id: string;

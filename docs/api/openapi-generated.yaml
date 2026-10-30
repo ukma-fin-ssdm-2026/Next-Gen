@@ -2945,6 +2945,7 @@ components:
       - LIKE_NEW
       - GOOD
       - USED
+      - FOR_PARTS
       title: ListingCondition
       description: Стан товару в оголошенні згідно з моделлю даних (FR-002).
     ListingCreate:
@@ -2985,7 +2986,7 @@ components:
           - 3fa85f64-5717-4562-b3fc-2c963f66afa6
         condition:
           $ref: '#/components/schemas/ListingCondition'
-          description: Стан товару (NEW, LIKE_NEW, GOOD, USED)
+          description: Стан товару (NEW, LIKE_NEW, GOOD, USED, FOR_PARTS)
           default: GOOD
           examples:
           - GOOD
@@ -3115,7 +3116,7 @@ components:
           - 3fa85f64-5717-4562-b3fc-2c963f66afa6
         condition:
           $ref: '#/components/schemas/ListingCondition'
-          description: Стан товару (NEW, LIKE_NEW, GOOD, USED)
+          description: Стан товару (NEW, LIKE_NEW, GOOD, USED, FOR_PARTS)
           default: GOOD
           examples:
           - GOOD
@@ -3197,7 +3198,7 @@ components:
           - 3fa85f64-5717-4562-b3fc-2c963f66afa6
         condition:
           $ref: '#/components/schemas/ListingCondition'
-          description: Стан товару (NEW, LIKE_NEW, GOOD, USED)
+          description: Стан товару (NEW, LIKE_NEW, GOOD, USED, FOR_PARTS)
           default: GOOD
           examples:
           - GOOD

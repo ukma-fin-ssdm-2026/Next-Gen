@@ -223,7 +223,14 @@ class ListingRow(Base):
         nullable=False,
     )
     condition: Mapped[str] = mapped_column(
-        SAEnum("NEW", "LIKE_NEW", "GOOD", "USED", name="listing_condition"),
+        SAEnum(
+            "NEW",
+            "LIKE_NEW",
+            "GOOD",
+            "USED",
+            "FOR_PARTS",
+            name="listing_condition",
+        ),
         nullable=False,
         default="GOOD",
     )

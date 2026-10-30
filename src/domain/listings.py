@@ -23,6 +23,7 @@ class ListingCondition(str, Enum):
     LIKE_NEW = "LIKE_NEW"
     GOOD = "GOOD"
     USED = "USED"
+    FOR_PARTS = "FOR_PARTS"
 
 
 MAX_LISTING_PRICE = 100_000_000.0

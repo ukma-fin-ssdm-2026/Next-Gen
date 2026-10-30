@@ -1174,6 +1174,7 @@ def test_api_support_flow_on_postgres(monkeypatch):
                     "description": "Друкований конспект.",
                     "price": 80,
                     "category_id": str(OTHER_CATEGORY_ID),
+                    "condition": "FOR_PARTS",
                     "contact": "@seller",
                     "image_urls": [SEED_IMAGE_URL],
                 },
