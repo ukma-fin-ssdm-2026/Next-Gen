@@ -19,3 +19,6 @@ mutants/
 .mutmut-cache
 bandit-report.json
 .secrets.baseline.bak
+
+# Звіти покриття (генерує pytest-cov)
+htmlcov/

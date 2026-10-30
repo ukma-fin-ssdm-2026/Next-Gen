@@ -39,6 +39,7 @@ import {
   uploadAvatar,
   uploadListingImages,
 } from "./api";
+import { contactHref } from "./contactLinks";
 import { NaukmaLogo } from "./NaukmaLogo";
 import type {
   Category,
@@ -566,6 +567,39 @@ const CROP_OUTPUT_WIDTH = 1600;
 
 type CropJob = { id: string; kind: "new"; file: File } | { id: string; kind: "edit"; photoId: string; src: string; name: string; revoke: boolean };
 
+type CropFill = "blur" | "light" | "dark";
+
+const GAP_COLORS: Record<Exclude<CropFill, "blur">, string> = { light: "#ffffff", dark: "#101814" };
+const BLUR_SAMPLE = { w: 32, h: 24 };
+
+/** Малює фон полів навколо фото: розмита копія або однотонна заливка. */
+function paintGaps(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  natural: { w: number; h: number },
+  fill: CropFill,
+  outW: number,
+  outH: number,
+) {
+  if (fill !== "blur") {
+    context.fillStyle = GAP_COLORS[fill];
+    context.fillRect(0, 0, outW, outH);
+    return;
+  }
+  const tiny = document.createElement("canvas");
+  tiny.width = BLUR_SAMPLE.w;
+  tiny.height = BLUR_SAMPLE.h;
+  const tinyContext = tiny.getContext("2d");
+  if (!tinyContext) return;
+  const cover = Math.max(BLUR_SAMPLE.w / natural.w, BLUR_SAMPLE.h / natural.h);
+  tinyContext.drawImage(image, (BLUR_SAMPLE.w - natural.w * cover) / 2, (BLUR_SAMPLE.h - natural.h * cover) / 2, natural.w * cover, natural.h * cover);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(tiny, 0, 0, outW, outH);
+  context.fillStyle = "rgba(255, 255, 255, 0.18)";
+  context.fillRect(0, 0, outW, outH);
+}
+
 function PhotoCropper({ src, name, queued, aspect = CROP_ASPECT, outputWidth = CROP_OUTPUT_WIDTH, title = "Обріжте фото", hint, onCancel, onSkip, onDone, onUnreadable }: {
   src: string;
   name: string;
@@ -585,7 +619,7 @@ function PhotoCropper({ src, name, queued, aspect = CROP_ASPECT, outputWidth = C
   const [frame, setFrame] = useState({ w: 0, h: 0 });
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [fill, setFill] = useState<"blur" | "light" | "dark">("blur");
+  const [fill, setFill] = useState<CropFill>("blur");
   const imageRef = useRef<HTMLImageElement | null>(null);
 
   const minScale = natural && frame.w ? Math.max(frame.w / natural.w, frame.h / natural.h) : 1;
@@ -647,26 +681,7 @@ function PhotoCropper({ src, name, queued, aspect = CROP_ASPECT, outputWidth = C
     canvas.height = outH;
     const context = canvas.getContext("2d");
     if (!context) { onSkip(); return; }
-    if (hasGaps) {
-      if (fill === "blur") {
-        const tiny = document.createElement("canvas");
-        tiny.width = 32;
-        tiny.height = 24;
-        const tinyContext = tiny.getContext("2d");
-        if (tinyContext) {
-          const cover = Math.max(32 / natural.w, 24 / natural.h);
-          tinyContext.drawImage(image, (32 - natural.w * cover) / 2, (24 - natural.h * cover) / 2, natural.w * cover, natural.h * cover);
-          context.imageSmoothingEnabled = true;
-          context.imageSmoothingQuality = "high";
-          context.drawImage(tiny, 0, 0, outW, outH);
-          context.fillStyle = "rgba(255, 255, 255, 0.18)";
-          context.fillRect(0, 0, outW, outH);
-        }
-      } else {
-        context.fillStyle = fill === "light" ? "#ffffff" : "#101814";
-        context.fillRect(0, 0, outW, outH);
-      }
-    }
+    if (hasGaps) paintGaps(context, image, natural, fill, outW, outH);
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = "high";
     context.drawImage(image, offset.x * k, offset.y * k, natural.w * scale * k, natural.h * scale * k);
@@ -1489,14 +1504,6 @@ function ListingGrid({ listings, categoryNames, favorites, busy, onFavorite }: {
       ))}
     </div>
   );
-}
-
-function contactHref(contact: string): string | null {
-  const value = contact.trim();
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return `mailto:${value}`;
-  if (/^@[A-Za-z0-9_]{3,}$/.test(value)) return `https://t.me/${value.slice(1)}`;
-  if (/^\+?[0-9][0-9\s()-]{6,}$/.test(value)) return `tel:${value.replace(/[^\d+]/g, "")}`;
-  return null;
 }
 
 function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy, onError, onNotice }: {

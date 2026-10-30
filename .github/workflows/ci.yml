@@ -38,6 +38,17 @@ jobs:
       - name: Tests with coverage gate (85%)
         run: pytest -q --cov=src --cov-report=term-missing --cov-report=html --cov-fail-under=85
 
+      - name: Coverage summary
+        if: always()
+        run: |
+          {
+            echo "### Покриття тестами"
+            echo
+            coverage report --format=markdown
+            echo
+            echo "Повний HTML-звіт: артефакт \`htmlcov\` цього прогону."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
