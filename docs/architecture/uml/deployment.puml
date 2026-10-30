@@ -1,5 +1,5 @@
 @startuml
-title Baraholka NaUKMA - Deployment Diagram
+title Baraholka NaUKMA - Deployment Diagram (стан на 31.10.2026)
 
 skinparam shadowing false
 skinparam componentStyle rectangle
@@ -18,32 +18,52 @@ rectangle "Недовірене середовище клієнта" #FFF2CC {
 cloud "Інтернет" as internet
 cloud "Microsoft Entra ID\nNaUKMA tenant" as entra
 
-rectangle "Серверна зона застосунку" #D5E8D4 {
-  node "Сервер застосунку" as app_server {
-    component "FastAPI backend\n(модульний моноліт)" as backend
-  }
-}
+node "Сервер розгортання (Docker Compose)" as host {
 
-rectangle "Зона даних" #DAE8FC {
-  database "PostgreSQL" as database
-  node "Сховище зображень\n(провайдер не визначений)" as image_storage
+  rectangle "Мережа proxy" #F5F5F5 {
+    node "Traefik\n(reverse proxy, TLS Let's Encrypt,\nHTTP -> HTTPS)" as traefik
+  }
+
+  rectangle "Серверна зона застосунку" #D5E8D4 {
+    node "Контейнер api" as api_container {
+      component "FastAPI backend\n(модульний моноліт)" as backend
+      artifact "frontend/dist\n(зібраний React)" as dist
+      component "Серверні сесії\n(пам'ять процесу)" as sessions
+    }
+    node "Контейнер migrate\n(alembic upgrade head,\nодноразово)" as migrate
+  }
+
+  rectangle "Зона даних (мережа internal)" #DAE8FC {
+    database "PostgreSQL 16\n(порт не публікується)" as database
+    folder "Том uploads_data\n/var/lib/baraholka/uploads" as uploads
+    folder "Том postgres_data" as pgdata
+  }
 }
 
 user --> browser : використовує
 frontend --> internet : HTTPS
-internet --> backend : REST API / JSON\nHTTPS
+internet --> traefik : HTTPS 443\nbaraholka-naukma.duckdns.org
+traefik --> backend : HTTP :8000\n(мережа proxy)
+backend --> dist : віддає SPA
+backend --> sessions : cookie baraholka_session
 backend --> entra : OIDC authorization code / tokens\nHTTPS
-backend --> database : SQL\nзахищене з'єднання
-backend --> image_storage : API сховища\nHTTPS
+backend --> database : SQL (SQLAlchemy)\nмережа internal
+backend --> uploads : файли WebP
+migrate --> database : міграції схеми
+database --> pgdata : дані
 
 note top of internet
   Межа довіри TB-1:
   клієнтська зона ↔ серверна зона
+  (вхід через Traefik, лише HTTPS)
 end note
 
-note bottom of app_server
+note bottom of api_container
   Межа довіри TB-2:
-  серверна зона ↔ зона даних
+  серверна зона ↔ зона даних.
+  Контейнер read-only,
+  no-new-privileges,
+  непривілейований користувач.
 end note
 
 note right of entra
@@ -60,9 +80,9 @@ note right of frontend
   повторно виконує backend.
 end note
 
-note right of image_storage
-  Зберігає файли фотографій.
-  PostgreSQL зберігає image_url
+note right of uploads
+  Зберігає фото оголошень і аватарки.
+  PostgreSQL зберігає ключі
   та метадані ListingImage.
 end note
 
