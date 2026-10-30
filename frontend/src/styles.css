@@ -518,43 +518,43 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 
 /* Сторінка оголошення у стилі дошки оголошень */
 .listing-detail-page .back-link { max-width: 1180px; margin-left: auto; margin-right: auto; display: flex; width: 100%; }
-.ad-layout { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-areas: "gallery side" "info side"; gap: 18px; align-items: start; }
-.ad-card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 10px 34px rgba(20, 35, 28, 0.045); }
-.ad-gallery { grid-area: gallery; overflow: hidden; }
-.ad-gallery .gallery-stage { min-height: 0; aspect-ratio: 4 / 3; max-height: 620px; width: 100%; }
-.ad-info { grid-area: info; padding: 26px; }
-.ad-side { grid-area: side; display: grid; gap: 14px; position: sticky; top: 92px; }
-.ad-price-card, .ad-seller { display: grid; gap: 14px; padding: 22px; }
-.ad-date { color: var(--muted); font-size: 12px; font-weight: 700; }
-.ad-title { margin: 0; font-size: clamp(22px, 2.2vw, 28px); line-height: 1.2; overflow-wrap: anywhere; }
-.ad-price { color: var(--green); font-family: "Unbounded", sans-serif; font-size: 28px; line-height: 1.1; }
-.ad-tags { display: flex; flex-wrap: wrap; gap: 8px; }
-.ad-tags span { padding: 5px 10px; border-radius: 999px; background: #edf0eb; color: #5c6861; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; }
-.ad-actions { display: grid; gap: 8px; }
-.ad-seller h2, .ad-info h2 { margin: 0; font-size: 17px; }
-.ad-seller-row { display: flex; align-items: center; gap: 12px; }
-.ad-seller-row > div { display: grid; gap: 2px; }
-.ad-seller-row small { color: var(--muted); font-size: 12px; }
-.ad-avatar { flex: none; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 50%; background: #dfe8df; color: var(--green); }
-.ad-contact { display: grid; gap: 6px; padding-top: 14px; border-top: 1px solid var(--line); }
-.ad-contact > span { color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
-.ad-contact a, .ad-contact strong { color: var(--green); font-size: 17px; font-weight: 800; overflow-wrap: anywhere; }
-.ad-contact a:hover { text-decoration: underline; }
-.ad-contact.skeleton-line { height: 72px; border-radius: 10px; border-top: 0; margin-top: 14px; padding: 0; background: linear-gradient(90deg, #eef1ea, #f7f8f3, #eef1ea); }
-.ad-contact-button { width: 100%; text-align: center; }
-.ad-muted { margin: 0; color: var(--muted); font-size: 14px; }
-.ad-description { margin: 14px 0 0; color: #3f4a44; font-size: 15px; line-height: 1.75; white-space: pre-line; overflow-wrap: anywhere; }
-.ad-facts { display: flex; flex-wrap: wrap; gap: 10px 36px; margin: 22px 0 0; padding-top: 18px; border-top: 1px solid var(--line); }
-.ad-facts div { display: grid; gap: 3px; }
-.ad-facts dt { color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
-.ad-facts dd { margin: 0; font-size: 14px; font-weight: 700; }
+.lot-layout { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-areas: "gallery side" "info side"; gap: 18px; align-items: start; }
+.lot-card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 10px 34px rgba(20, 35, 28, 0.045); }
+.lot-gallery { grid-area: gallery; overflow: hidden; }
+.lot-gallery .gallery-stage { min-height: 0; aspect-ratio: 4 / 3; max-height: 620px; width: 100%; }
+.lot-info { grid-area: info; padding: 26px; }
+.lot-side { grid-area: side; display: grid; gap: 14px; position: sticky; top: 92px; }
+.lot-price-card, .lot-seller { display: grid; gap: 14px; padding: 22px; }
+.lot-date { color: var(--muted); font-size: 12px; font-weight: 700; }
+.lot-title { margin: 0; font-size: clamp(22px, 2.2vw, 28px); line-height: 1.2; overflow-wrap: anywhere; }
+.lot-price { color: var(--green); font-family: "Unbounded", sans-serif; font-size: 28px; line-height: 1.1; }
+.lot-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.lot-tags span { padding: 5px 10px; border-radius: 999px; background: #edf0eb; color: #5c6861; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; }
+.lot-actions { display: grid; gap: 8px; }
+.lot-seller h2, .lot-info h2 { margin: 0; font-size: 17px; }
+.lot-seller-row { display: flex; align-items: center; gap: 12px; }
+.lot-seller-row > div { display: grid; gap: 2px; }
+.lot-seller-row small { color: var(--muted); font-size: 12px; }
+.lot-avatar { flex: none; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 50%; background: #dfe8df; color: var(--green); }
+.lot-contact { display: grid; gap: 6px; padding-top: 14px; border-top: 1px solid var(--line); }
+.lot-contact > span { color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+.lot-contact a, .lot-contact strong { color: var(--green); font-size: 17px; font-weight: 800; overflow-wrap: anywhere; }
+.lot-contact a:hover { text-decoration: underline; }
+.lot-contact.skeleton-line { height: 72px; border-radius: 10px; border-top: 0; margin-top: 14px; padding: 0; background: linear-gradient(90deg, #eef1ea, #f7f8f3, #eef1ea); }
+.lot-contact-button { width: 100%; text-align: center; }
+.lot-muted { margin: 0; color: var(--muted); font-size: 14px; }
+.lot-description { margin: 14px 0 0; color: #3f4a44; font-size: 15px; line-height: 1.75; white-space: pre-line; overflow-wrap: anywhere; }
+.lot-facts { display: flex; flex-wrap: wrap; gap: 10px 36px; margin: 22px 0 0; padding-top: 18px; border-top: 1px solid var(--line); }
+.lot-facts div { display: grid; gap: 3px; }
+.lot-facts dt { color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+.lot-facts dd { margin: 0; font-size: 14px; font-weight: 700; }
 @media (max-width: 960px) {
-  .ad-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "gallery" "side" "info"; }
-  .ad-side { position: static; }
+  .lot-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "gallery" "side" "info"; }
+  .lot-side { position: static; }
 }
 @media (max-width: 760px) {
-  .ad-info, .ad-price-card, .ad-seller { padding: 18px; }
-  .ad-gallery .gallery-stage { max-height: none; }
+  .lot-info, .lot-price-card, .lot-seller { padding: 18px; }
+  .lot-gallery .gallery-stage { max-height: none; }
 }
 
 /* Обрізання фото */
@@ -599,8 +599,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .contact-fields { display: grid; gap: 12px; min-width: 0; }
 .contact-extra { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .contact-block { align-items: stretch; }
-.ad-contact .ad-location { color: #4f5a54; font-size: 14px; font-style: normal; font-weight: 600; }
-.ad-contact .ad-location::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 7px; border: 2px solid var(--green); border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
+.lot-contact .lot-location { color: #4f5a54; font-size: 14px; font-style: normal; font-weight: 600; }
+.lot-contact .lot-location::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 7px; border: 2px solid var(--green); border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
 @media (max-width: 760px) { .contact-extra { grid-template-columns: minmax(0, 1fr); } }
 
 
@@ -608,7 +608,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .avatar { overflow: hidden; flex: none; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .avatar-xl { width: 96px; height: 96px; font-family: "Unbounded", sans-serif; font-size: 36px; background: var(--green); color: var(--lime); }
-.ad-avatar-img { width: 46px; height: 46px; font-size: 18px; }
+.lot-avatar-img { width: 46px; height: 46px; font-size: 18px; }
 .profile-form { display: grid; gap: 16px; }
 .profile-top { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 22px; }
 .profile-top-info { display: grid; gap: 6px; min-width: 0; }

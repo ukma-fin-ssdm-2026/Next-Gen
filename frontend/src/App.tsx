@@ -1641,16 +1641,16 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
   return (
     <main className="page-main listing-detail-page">
       <Link className="back-link" to="/listings">← До оголошень</Link>
-      <div className="ad-layout">
-        <section className="ad-card ad-gallery"><ListingGallery listing={listing} /></section>
+      <div className="lot-layout">
+        <section className="lot-card lot-gallery"><ListingGallery listing={listing} /></section>
 
-        <aside className="ad-side">
-          <div className="ad-card ad-price-card">
-            <time className="ad-date" dateTime={listing.created_at}>Опубліковано {published}</time>
-            <h1 className="ad-title">{listing.title}</h1>
-            <strong className="ad-price">{formatPrice(listing.price)}</strong>
-            <div className="ad-tags"><span>{categoryNames.get(listing.category_id) ?? "Інше"}</span><span>{CONDITION_LABELS[listing.condition]}</span></div>
-            <div className="ad-actions">
+        <aside className="lot-side">
+          <div className="lot-card lot-price-card">
+            <time className="lot-date" dateTime={listing.created_at}>Опубліковано {published}</time>
+            <h1 className="lot-title">{listing.title}</h1>
+            <strong className="lot-price">{formatPrice(listing.price)}</strong>
+            <div className="lot-tags"><span>{categoryNames.get(listing.category_id) ?? "Інше"}</span><span>{CONDITION_LABELS[listing.condition]}</span></div>
+            <div className="lot-actions">
               {isOwner ? (
                 <>
                   <Link className="button button-primary" to={`/listings/${listing.id}/edit`}>Редагувати оголошення</Link>
@@ -1678,31 +1678,31 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
             </div>
           </div>
 
-          <div className="ad-card ad-seller">
+          <div className="lot-card lot-seller">
             <h2>{isOwner ? "Ваш контакт" : "Продавець"}</h2>
-            <div className="ad-seller-row">
+            <div className="lot-seller-row">
               {sellerName ? (
-                <Avatar name={sellerName} url={sellerAvatar} className="ad-avatar-img" />
+                <Avatar name={sellerName} url={sellerAvatar} className="lot-avatar-img" />
               ) : (
-                <span className="ad-avatar" aria-hidden="true">
+                <span className="lot-avatar" aria-hidden="true">
                   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.2 3.6-7 8-7s8 2.8 8 7" /></svg>
                 </span>
               )}
               <div><strong>{sellerName ?? "Продавець"}</strong><small>Вхід через корпоративну пошту</small></div>
             </div>
             {!user ? (
-              <a className="button button-primary ad-contact-button" href={currentLoginUrl}>Увійти, щоб побачити контакт</a>
+              <a className="button button-primary lot-contact-button" href={currentLoginUrl}>Увійти, щоб побачити контакт</a>
             ) : contactState === "loading" ? (
-              <div className="ad-contact skeleton-line" aria-busy="true" />
+              <div className="lot-contact skeleton-line" aria-busy="true" />
             ) : contact ? (
-              <div className="ad-contact">
+              <div className="lot-contact">
                 <span>Контакт</span>
                 {contactParts.main && (href ? <a href={href} target={href.startsWith("http") ? "_blank" : undefined} rel="noreferrer">{contactParts.main}</a> : <strong>{contactParts.main}</strong>)}
                 {contactParts.phone && <a href={`tel:${contactParts.phone.replace(/[^\d+]/g, "")}`}>{contactParts.phone}</a>}
-                {contactParts.location && <em className="ad-location">{contactParts.location}</em>}
+                {contactParts.location && <em className="lot-location">{contactParts.location}</em>}
               </div>
             ) : (
-              <p className="ad-muted">Контакт зараз недоступний.</p>
+              <p className="lot-muted">Контакт зараз недоступний.</p>
             )}
             {user?.role === "ADMIN" && !isOwner && (
               blockOpen ? (
@@ -1720,10 +1720,10 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
           </div>
         </aside>
 
-        <section className="ad-card ad-info">
+        <section className="lot-card lot-info">
           <h2>Опис</h2>
-          {listing.description ? <p className="ad-description">{listing.description}</p> : <p className="ad-muted">Продавець не додав опису.</p>}
-          <dl className="ad-facts">
+          {listing.description ? <p className="lot-description">{listing.description}</p> : <p className="lot-muted">Продавець не додав опису.</p>}
+          <dl className="lot-facts">
             <div><dt>Стан</dt><dd>{CONDITION_LABELS[listing.condition]}</dd></div>
             <div><dt>Категорія</dt><dd>{categoryNames.get(listing.category_id) ?? "Інше"}</dd></div>
             <div><dt>Опубліковано</dt><dd>{published}</dd></div>
