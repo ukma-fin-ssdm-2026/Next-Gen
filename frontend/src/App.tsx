@@ -613,7 +613,7 @@ function PhotoCropper({ src, name, queued, aspect = CROP_ASPECT, outputWidth = C
   onDone: (blob: Blob) => void;
   onUnreadable: () => void;
 }) {
-  const frameRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLButtonElement>(null);
   const dragRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [frame, setFrame] = useState({ w: 0, h: 0 });
@@ -695,11 +695,12 @@ function PhotoCropper({ src, name, queued, aspect = CROP_ASPECT, outputWidth = C
           <h2>{title}</h2>
           <p>{hint ?? "Кадр 4:3 такий самий, як у каталозі й на сторінці оголошення. Можна заповнити його фото або вписати фото повністю, а порожні місця заповнити полями."}{queued > 0 ? ` Ще фото в черзі: ${queued}.` : ""}</p>
         </div>
-        <div
+        <button
+          type="button"
           className={`crop-frame${aspect === 1 ? " crop-frame-square" : ""}`}
           style={{ aspectRatio: String(aspect) }}
           ref={frameRef}
-          tabIndex={0}
+          aria-label="Кадр: перетягніть фото мишею, пальцем або стрілками, масштаб колесом миші"
           onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); dragRef.current = { x: event.clientX, y: event.clientY, ox: offset.x, oy: offset.y }; }}
           onPointerMove={(event) => { const drag = dragRef.current; if (drag) setOffset(clamp(drag.ox + event.clientX - drag.x, drag.oy + event.clientY - drag.y, scale)); }}
           onPointerUp={() => { dragRef.current = null; }}
@@ -725,7 +726,7 @@ function PhotoCropper({ src, name, queued, aspect = CROP_ASPECT, outputWidth = C
             style={natural ? { width: natural.w * scale, height: natural.h * scale, transform: `translate(${offset.x}px, ${offset.y}px)` } : { visibility: "hidden" }}
           />
           <span className="crop-grid" aria-hidden="true" />
-        </div>
+        </button>
         <div className="crop-modes" role="group" aria-label="Режим кадру">
           <button type="button" className={!hasGaps ? "active" : ""} onClick={() => { if (!natural) return; setZoom(1); setOffset({ x: (frame.w - natural.w * minScale) / 2, y: (frame.h - natural.h * minScale) / 2 }); }}>Заповнити кадр</button>
           <button type="button" className={hasGaps ? "active" : ""} disabled={fitRatio > 0.995} onClick={() => { if (!natural) return; const nextScale = minScale * fitRatio; setZoom(fitRatio); setOffset({ x: (frame.w - natural.w * nextScale) / 2, y: (frame.h - natural.h * nextScale) / 2 }); }}>Вписати повністю</button>
@@ -1166,25 +1167,21 @@ function ListingGallery({ listing }: { listing: Listing }) {
   const current = images[Math.min(index, count - 1)];
   const go = (step: number) => setIndex((value) => (value + step + count) % count);
   const markBroken = (id: string) => setBroken((value) => new Set(value).add(id));
+  const onArrowKey = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === "ArrowLeft") { event.preventDefault(); go(-1); }
+    if (event.key === "ArrowRight") { event.preventDefault(); go(1); }
+  };
 
   return (
-    <div
-      className="gallery"
-      tabIndex={0}
-      aria-label="Фотографії оголошення"
-      onKeyDown={(event) => {
-        if (event.key === "ArrowLeft") { event.preventDefault(); go(-1); }
-        if (event.key === "ArrowRight") { event.preventDefault(); go(1); }
-      }}
-    >
+    <section className="gallery" aria-label="Фотографії оголошення">
       <div className="gallery-stage">
         {broken.has(current.image_id)
           ? <span className="gallery-fallback" aria-hidden="true">Б</span>
           : <img key={current.image_id} src={current.image_url} alt={`Фото ${index + 1} з ${count}`} onError={() => markBroken(current.image_id)} />}
         {count > 1 && (
           <>
-            <button className="gallery-nav prev" type="button" onClick={() => go(-1)} aria-label="Попереднє фото">‹</button>
-            <button className="gallery-nav next" type="button" onClick={() => go(1)} aria-label="Наступне фото">›</button>
+            <button className="gallery-nav prev" type="button" onClick={() => go(-1)} onKeyDown={onArrowKey} aria-label="Попереднє фото">‹</button>
+            <button className="gallery-nav next" type="button" onClick={() => go(1)} onKeyDown={onArrowKey} aria-label="Наступне фото">›</button>
             <span className="gallery-count">{index + 1} / {count}</span>
           </>
         )}
@@ -1197,6 +1194,7 @@ function ListingGallery({ listing }: { listing: Listing }) {
               type="button"
               key={image.image_id}
               onClick={() => setIndex(position)}
+              onKeyDown={onArrowKey}
               aria-label={`Показати фото ${position + 1}`}
               aria-current={position === index}
             >
@@ -1210,7 +1208,7 @@ function ListingGallery({ listing }: { listing: Listing }) {
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 

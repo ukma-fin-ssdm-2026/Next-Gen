@@ -103,13 +103,50 @@ Python-залежностей у GitHub Actions. Три Low issues стосую�
 - **Підтвердження:** TODO: додати скриншот успішного прогону CI з підсумком
   покриття та артефактом `htmlcov` у розділі Artifacts.
 
-### 4.4. Відкладені кандидати
+### 4.4. Інтерактивні `div` в кадруванні фото і галереї
 
-| Знахідка | Техніка | Стан |
-| --- | --- | --- |
-| Інтерактивний `div` у кадруванні фото | Replace Element with Semantic Element | не виконано |
-| Інтерактивний `div` у галереї | Replace Element with Semantic Element | не виконано |
-| Medium-знахідки щодо встановлення Python-залежностей у GitHub Actions | зміна CI-кроків | не виконано, потрібен текст знахідки |
+- **Запах:** чотири знахідки Sonar у `App.tsx` (Reliability Medium, accessibility):
+  «Avoid non-native interactive elements» і «`tabIndex` should only be declared on
+  interactive elements» для кадру обрізання (L698, L702) і галереї (L1171, L1173):
+  `div` із `tabIndex`, обробниками миші, дотику й клавіатури.
+- **Техніка:** Replace Element with Semantic Element: кадр обрізання став `button`
+  (`type="button"`, `aria-label`, скидання стилів кнопки в CSS), галерея стала
+  `section`, а обробка стрілок перенесена на справжні кнопки галереї (попереднє
+  й наступне фото та мініатюри).
+- **Що лишається незмінним:** перетягування фото мишею й дотиком, масштаб колесом
+  і повзунком, рух стрілками в кадрі; перемикання фото кнопками, мініатюрами та
+  стрілками вліво/вправо; зображення, яке отримує сервер.
+- **Що змінюється в структурі:** кадр і галерея використовують нативні елементи
+  замість `div` з `tabIndex`. Стрілки в галереї тепер працюють, коли фокус на
+  кнопці галереї (раніше на всьому блоці), бо блок більше не фокусується.
+- **Який тест це доводить:** порівняння байтів кадрованого зображення до і після
+  для трьох режимів заливки (однакові SHA-256 і розмір) та автоматизований
+  Playwright-сценарій: у кадрі працюють перетягування, масштаб і стрілки; у галереї
+  стрілки вліво/вправо на кнопках «наступне», «попереднє» і на мініатюрі
+  перемикають фото, Enter на кнопці теж.
+- **ШІ-агент:** виконано з Claude (Claude Code), зміни переглянуто вручну.
+
+### 4.5. Залежності в GitHub Actions
+
+- **Запах:** чотири знахідки Medium у `ci.yml` (L23–24) і дві в `docs.yml` (L33):
+  «Omitting `--only-binary :all:` can lead to the execution of setup scripts» і
+  «Using dependencies without locking resolved versions is security-sensitive».
+  CI ставив залежності без lock-файла (`pip install -r requirements-dev.txt`,
+  `pip install fastapi pyyaml`) і не вказував `--only-binary`.
+- **Техніка:** зміна кроків CI та lock-файл із хешами: створено `requirements-ci.txt`
+  (лише потрібне CI) і `requirements-ci.lock` (`pip-compile --generate-hashes`,
+  Python 3.12); `ci.yml` ставить `pip install --require-hashes --only-binary :all:
+  -r requirements-ci.lock`, `docs.yml` робить те саме з `requirements.lock`. Крок
+  `pip install --upgrade pip` прибрано.
+- **Що лишається незмінним:** набір перевірок CI (Black, flake8, Bandit, pip-audit,
+  pytest з порогом 85%) і версії пакетів з `requirements-dev.txt`.
+- **Що змінюється:** усі пакети, включно з транзитивними, закріплено за хешами;
+  `mutmut`, `fastmcp`, `pre-commit` і `detect-secrets` не потрібні CI й не
+  встановлюються там (залишилися в `requirements-dev.txt` для локальної роботи).
+- **Який тест це доводить:** у чистому середовищі Python 3.12 обидва lock-файли
+  встановлюються командою з `--require-hashes --only-binary :all:`, після чого
+  працюють `pytest`, `black`, `import fastapi, yaml`. Остаточне підтвердження дасть
+  зелений прогін CI на PR.
 
 ## 5. Регресійне тестування
 
@@ -120,6 +157,7 @@ Python-залежностей у GitHub Actions. Три Low issues стосую�
 | Frontend: тести | `npm test` | 3 passed |
 | Frontend: типи | `tsc -b` | без помилок |
 | Frontend: збірка | `npm run build` | успішно |
+| CI-залежності | `pip install --require-hashes --only-binary :all: -r requirements-ci.lock` | успішно (чисте середовище Python 3.12) |
 
 ## 6. Скриншоти
 
@@ -129,8 +167,8 @@ Python-залежностей у GitHub Actions. Три Low issues стосую�
 ## 7. Використання ШІ
 
 > - **Інструмент:** OpenAI Codex (структура звіту), Claude (виконання рефакторингів).
-> - **Етап:** читання вимог Lab08, інтерпретація метрик SonarQube Cloud, підготовка звіту; потім виконання рефакторингів 4.1 і 4.2 та виключення згенерованих файлів 4.3.
-> - **Що згенеровано:** таблиця «до/після», пояснення Security Rating, модуль `contactLinks.ts` і тест `contactLinks.test.mjs`, функція `paintGaps`, `sonar-project.properties`.
+> - **Етап:** читання вимог Lab08, інтерпретація метрик SonarQube Cloud, підготовка звіту; потім виконання рефакторингів 4.1, 4.2 і 4.4, виключення згенерованих файлів 4.3 та виправлення залежностей CI 4.5.
+> - **Що згенеровано:** таблиця «до/після», пояснення Security Rating, модуль `contactLinks.ts` і тест `contactLinks.test.mjs`, функція `paintGaps`, семантичні елементи в `App.tsx`, `sonar-project.properties`, `requirements-ci.txt` і `requirements-ci.lock`, зміни в `ci.yml` і `docs.yml`.
 > - **Як перевірено:** змінені рядки переглянуто вручну; запущено `npm test`, `tsc -b`, `npm run build` і `pytest`; для 4.2 порівняно байти кадрованого зображення до і після. Метрики «після» ще не зняті: потрібен повторний аналіз SonarQube Cloud.
 
 ## 8. Бонуси

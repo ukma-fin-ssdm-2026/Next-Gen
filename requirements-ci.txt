@@ -1,0 +1,10 @@
+# Залежності CI: лише те, що потрібно кроку перевірок у .github/workflows/ci.yml.
+# Lock із хешами: pip-compile --generate-hashes --output-file=requirements-ci.lock --strip-extras requirements-ci.txt
+-r requirements.txt
+pytest==8.4.2
+pytest-cov==7.1.0
+black==25.9.0
+flake8==7.3.0
+bandit==1.9.4
+pip-audit==2.9.0
+hypothesis==6.170.5
