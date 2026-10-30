@@ -19,6 +19,13 @@ React 19, TypeScript, Vite, `react-router-dom`. Стилі лежать в од�
 Якщо `frontend/dist` існує, FastAPI (`src/api/main.py`) віддає його з порту 8000. Після змін у клієнті
 для цього режиму потрібно знову виконати `npm run build`.
 
+SPA fallback (`resolve_frontend_file` у `src/api/main.py`): маршрути React без розширення файла
+(`/listings`, `/listings/{id}`, `/admin/...`) віддають `index.html`; наявні файли build-у віддаються як є;
+невідомі шляхи з розширенням (`/secret.txt`, `/uploads/../../secret.txt`, `/assets/nonexistent.js`)
+і зарезервовані префікси backend (`api/`, `uploads/`, `docs`, `redoc`, `openapi.json`, `health`)
+повертають 404. Регресійні тести: `tests/test_spa_fallback.py`. CI збирає frontend перед pytest,
+тому HTTP-перевірки виконуються з реальним `frontend/dist`.
+
 ## Структура
 
 | Файл | Вміст |
