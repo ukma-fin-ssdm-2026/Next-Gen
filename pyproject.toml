@@ -1,6 +1,6 @@
 [project]
 name = "baraholka-naukma"
-version = "1.0.0"
+version = "1.0.1"
 description = "Baraholka NaUKMA — маркетплейс студентських оголошень"
 requires-python = ">=3.12"
 

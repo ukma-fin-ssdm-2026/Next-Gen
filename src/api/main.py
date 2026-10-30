@@ -28,7 +28,7 @@ app = FastAPI(
         "REST API для маркетплейсу студентських оголошень Києво-Могилянської академії "
         "(Baraholka NaUKMA). Розроблено за підходом Code-First."
     ),
-    version="1.0.0",
+    version="1.0.1",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -92,7 +92,7 @@ class HealthResponse(BaseModel):
         description="Назва застосунку",
         examples=["Baraholka NaUKMA API"],
     )
-    version: str = Field(..., description="Поточна версія API", examples=["1.0.0"])
+    version: str = Field(..., description="Поточна версія API", examples=["1.0.1"])
     timestamp: datetime = Field(..., description="Час серверної перевірки")
 
 
@@ -112,7 +112,7 @@ def health_check() -> dict:
     return {
         "status": "ok",
         "app": "Baraholka NaUKMA API",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "timestamp": datetime.now(timezone.utc),
     }
 
