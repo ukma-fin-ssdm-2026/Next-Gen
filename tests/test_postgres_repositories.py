@@ -1105,3 +1105,254 @@ def test_api_category_suggestion_flow_on_postgres(monkeypatch):
             assert music in cats
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.mark.skipif(
+    not os.getenv("DATABASE_URL", "").startswith("postgresql"),
+    reason="Потрібен реальний PostgreSQL (DATABASE_URL).",
+)
+def test_api_support_flow_on_postgres(monkeypatch):
+    """[FR-013] [FR-016] [FR-017] [FR-018] [TP-034] Скарги, звернення, журнали.
+
+    Наскрізний прогін через API з реальними Postgres-репозиторіями після
+    `alembic upgrade head` (міграція 0003).
+    """
+    import tempfile
+
+    from alembic import command
+    from alembic.config import Config
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import Session
+
+    from src.api import deps
+    from src.api.main import app
+    from src.domain.listings import OTHER_CATEGORY_ID, SEED_IMAGE_URL
+    from src.domain.users import CurrentUser
+
+    url = os.environ["DATABASE_URL"]
+    monkeypatch.setenv("IMAGE_STORAGE_DIR", tempfile.mkdtemp())
+    try:
+        cfg = Config()
+        cfg.set_main_option("script_location", "alembic")
+        cfg.set_main_option("sqlalchemy.url", url)
+        command.upgrade(cfg, "head")
+        eng = create_engine(url)
+
+        with Session(eng) as s:
+            repo = PostgresUserRepository(s)
+            seller = repo.save(make_user())
+            reporter = repo.save(make_user())
+            admin = repo.save(make_user(role=UserRole.ADMIN))
+            s.commit()
+
+        def as_current(u: User) -> CurrentUser:
+            return CurrentUser(
+                user_id=u.user_id,
+                tenant_id=u.tenant_id,
+                entra_object_id=u.entra_object_id,
+                email=u.email,
+                display_name=u.display_name,
+                role=u.role,
+            )
+
+        def override_db_session():
+            with Session(eng) as s:
+                yield s
+                s.commit()
+
+        app.dependency_overrides[deps.get_db_session] = override_db_session
+        actor = {"user": seller}
+        app.dependency_overrides[deps.require_current_user] = lambda: as_current(
+            actor["user"]
+        )
+
+        with TestClient(app) as client:
+            created = client.post(
+                "/api/v1/listings",
+                json={
+                    "title": "Конспект з алгебри",
+                    "description": "Друкований конспект.",
+                    "price": 80,
+                    "category_id": str(OTHER_CATEGORY_ID),
+                    "condition": "FOR_PARTS",
+                    "contact": "@seller",
+                    "image_urls": [SEED_IMAGE_URL],
+                },
+            )
+            assert created.status_code == 201, created.text
+            listing_id = created.json()["id"]
+
+            actor["user"] = reporter
+            complaint = client.post(
+                f"/api/v1/listings/{listing_id}/complaints",
+                json={"reason": "SPAM", "details": "Реклама"},
+            )
+            assert complaint.status_code == 201, complaint.text
+            dup = client.post(
+                f"/api/v1/listings/{listing_id}/complaints", json={"reason": "SPAM"}
+            )
+            assert dup.status_code == 409, dup.text
+            fb = client.post(
+                "/api/v1/feedback",
+                json={"subject": "Питання", "message": "Коли додасте категорії?"},
+            )
+            assert fb.status_code == 201, fb.text
+
+            actor["user"] = admin
+            listed = client.get("/api/v1/admin/complaints?status=OPEN").json()
+            mine = [c for c in listed if c["listing_id"] == listing_id]
+            assert mine and mine[0]["reporter_email"] == reporter.email
+            done = client.post(
+                f"/api/v1/admin/complaints/{mine[0]['id']}/resolve",
+                json={"status": "RESOLVED", "note": "Ок"},
+            )
+            assert done.status_code == 200, done.text
+            feedback = client.get("/api/v1/admin/feedback?status=NEW").json()
+            item = next(f for f in feedback if f["user_id"] == str(reporter.user_id))
+            assert (
+                client.post(f"/api/v1/admin/feedback/{item['id']}/resolve").json()[
+                    "status"
+                ]
+                == "RESOLVED"
+            )
+
+            blocked = client.post(
+                f"/api/v1/admin/users/{reporter.user_id}/block",
+                json={"reason": "Систематичні порушення"},
+            )
+            assert blocked.status_code == 201, blocked.text
+            bl = client.get("/api/v1/admin/users/blocked").json()
+            row = next(b for b in bl if b["user_id"] == str(reporter.user_id))
+            assert row["reason"] == "Систематичні порушення"
+            assert row["blocked_at"] is not None
+
+            users_log = client.get("/api/v1/admin/logs/users").json()
+            kinds = {e["action_type"] for e in users_log}
+            assert {"LISTING_CREATED", "COMPLAINT_SUBMITTED"} <= kinds
+            admin_log = client.get("/api/v1/admin/logs/admins").json()
+            admin_kinds = {e["action_type"] for e in admin_log}
+            assert {"COMPLAINT_RESOLVED", "BLOCK_USER"} <= admin_kinds
+    finally:
+        app.dependency_overrides.clear()
+
+
+class TestPostgresSupportRepositories:
+    """[FR-013] [FR-016] [FR-017] [FR-018] [TP-034] Збереження скарг і журналу."""
+
+    def _setup(self, session, user_repo, category_repo, listing_repo):
+        from src.repositories.postgres_support import (
+            PostgresActivityRepository,
+            PostgresComplaintRepository,
+            PostgresFeedbackRepository,
+        )
+
+        seller = user_repo.save(make_user())
+        reporter = user_repo.save(make_user())
+        category = category_repo.add(make_category())
+        listing = listing_repo.add(make_listing(seller.user_id, category.id))
+        return (
+            seller,
+            reporter,
+            listing,
+            PostgresComplaintRepository(session),
+            PostgresFeedbackRepository(session),
+            PostgresActivityRepository(session),
+        )
+
+    def test_complaint_roundtrip_and_status_filter(
+        self, session, user_repo, category_repo, listing_repo
+    ):
+        """[FR-016] [TP-034] Скарга зберігається і фільтрується за статусом."""
+        from src.domain.complaints import (
+            Complaint,
+            ComplaintReason,
+            ComplaintStatus,
+        )
+
+        _, reporter, listing, complaints, _, _ = self._setup(
+            session, user_repo, category_repo, listing_repo
+        )
+        saved = complaints.add(
+            Complaint(
+                listing_id=listing.id,
+                reporter_id=reporter.user_id,
+                reason=ComplaintReason.SPAM,
+                details="Реклама",
+            )
+        )
+        assert complaints.get(saved.id).details == "Реклама"
+        assert complaints.find(listing.id, reporter.user_id).id == saved.id
+        assert complaints.find(listing.id, uuid.uuid4()) is None
+        saved.status = ComplaintStatus.RESOLVED
+        saved.resolved_by = reporter.user_id
+        saved.resolution_note = "Готово"
+        complaints.save(saved)
+        assert complaints.list_all(ComplaintStatus.OPEN) == []
+        resolved = complaints.list_all(ComplaintStatus.RESOLVED)
+        assert [c.resolution_note for c in resolved] == ["Готово"]
+        assert len(complaints.list_all()) == 1
+
+    def test_feedback_roundtrip_and_status_filter(
+        self, session, user_repo, category_repo, listing_repo
+    ):
+        """[FR-017] [TP-034] Звернення зберігається, оновлюється і фільтрується."""
+        from src.domain.feedback import Feedback, FeedbackStatus
+
+        _, reporter, _, _, feedback, _ = self._setup(
+            session, user_repo, category_repo, listing_repo
+        )
+        saved = feedback.add(
+            Feedback(
+                user_id=reporter.user_id, subject="Тема", message="Текст звернення"
+            )
+        )
+        assert feedback.get(saved.id).subject == "Тема"
+        saved.status = FeedbackStatus.RESOLVED
+        feedback.save(saved)
+        assert feedback.list_all(FeedbackStatus.NEW) == []
+        assert len(feedback.list_all(FeedbackStatus.RESOLVED)) == 1
+
+    def test_activity_events_are_split_by_role(
+        self, session, user_repo, category_repo, listing_repo
+    ):
+        """[FR-018] [TP-034] Події фільтруються за роллю виконавця, нові першими."""
+        from src.domain.activity import ActivityEvent, ActivityType
+
+        seller, reporter, listing, _, _, activity = self._setup(
+            session, user_repo, category_repo, listing_repo
+        )
+        activity.add(
+            ActivityEvent(
+                actor_id=seller.user_id,
+                actor_role=UserRole.USER,
+                action_type=ActivityType.LISTING_CREATED,
+                listing_id=listing.id,
+                details="Назва",
+            )
+        )
+        activity.add(
+            ActivityEvent(
+                actor_id=reporter.user_id,
+                actor_role=UserRole.ADMIN,
+                action_type=ActivityType.COMPLAINT_RESOLVED,
+            )
+        )
+        users = activity.list_by_role(UserRole.USER)
+        admins = activity.list_by_role(UserRole.ADMIN)
+        assert [e.action_type for e in users] == [ActivityType.LISTING_CREATED]
+        assert users[0].details == "Назва"
+        assert [e.action_type for e in admins] == [ActivityType.COMPLAINT_RESOLVED]
+        assert activity.list_by_role(UserRole.USER, skip=1) == []
+
+    def test_blocked_users_keep_reason(self, user_repo):
+        """[FR-013] [TP-034] Причина й час блокування зберігаються у БД."""
+        blocked = make_user()
+        blocked.is_blocked = True
+        blocked.block_reason = "Спам"
+        blocked.blocked_at = datetime.now(timezone.utc)
+        user_repo.save(blocked)
+        user_repo.save(make_user())
+        listed = user_repo.list_blocked()
+        assert [u.user_id for u in listed] == [blocked.user_id]
+        assert listed[0].block_reason == "Спам"
+        assert listed[0].blocked_at is not None

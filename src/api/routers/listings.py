@@ -15,6 +15,7 @@ from fastapi import (
 )
 
 from src.api.deps import (
+    get_activity_service,
     get_image_storage,
     get_listing_service,
     require_current_user,
@@ -29,6 +30,8 @@ from src.api.schemas.listings import (
     ListingUpdate,
     UploadedImageResponse,
 )
+from src.domain.activity import ActivityType
+from src.services.activity import ActivityLogService
 from src.domain.exceptions import (
     CategorySuggestionQuotaError,
     DuplicateCategorySuggestionError,
@@ -41,7 +44,7 @@ from src.domain.exceptions import (
     ListingNotFoundError,
     ListingUnauthorizedError,
 )
-from src.domain.listings import Listing, ListingSortOrder
+from src.domain.listings import MAX_LISTING_PRICE, Listing, ListingSortOrder
 from src.domain.users import CurrentUser
 from src.repositories.image_storage import (
     MAX_IMAGE_FILE_SIZE_BYTES,
@@ -287,12 +290,19 @@ def get_listings(
         max_length=100,
         description="Пошук за назвою та описом",
     ),
-    min_price: Optional[float] = Query(None, ge=0, description="Мінімальна ціна"),
-    max_price: Optional[float] = Query(None, ge=0, description="Максимальна ціна"),
+    min_price: Optional[float] = Query(
+        None, ge=0, le=MAX_LISTING_PRICE, description="Мінімальна ціна"
+    ),
+    max_price: Optional[float] = Query(
+        None, ge=0, le=MAX_LISTING_PRICE, description="Максимальна ціна"
+    ),
     sort_order: ListingSortOrder = Query(
         ListingSortOrder.NEWEST,
         alias="sort",
-        description="Порядок за датою публікації: newest або oldest",
+        description=(
+            "Порядок: newest, oldest (за датою публікації), "
+            "price_asc або price_desc (за ціною)"
+        ),
     ),
     service: ListingService = Depends(get_listing_service),
 ) -> list[ListingPublicResponse]:
@@ -365,6 +375,7 @@ def create_listing(
     listing: ListingCreate,
     current_user: CurrentUser = Depends(require_current_user),
     service: ListingService = Depends(get_listing_service),
+    activity: ActivityLogService = Depends(get_activity_service),
 ) -> ListingResponse:
     try:
         created = service.create(
@@ -388,6 +399,9 @@ def create_listing(
         CategorySuggestionQuotaError,
     ) as exc:
         _raise_domain(exc)
+    activity.record(
+        current_user, ActivityType.LISTING_CREATED, created.id, created.title
+    )
     return _to_private(created, service.get_suggested_category_name(created))
 
 
@@ -435,6 +449,7 @@ def update_listing(
     listing_update: ListingUpdate,
     current_user: CurrentUser = Depends(require_current_user),
     service: ListingService = Depends(get_listing_service),
+    activity: ActivityLogService = Depends(get_activity_service),
 ) -> ListingPublicResponse:
     try:
         updated = service.update(
@@ -449,6 +464,9 @@ def update_listing(
         InvalidListingImageError,
     ) as exc:
         _raise_domain(exc)
+    activity.record(
+        current_user, ActivityType.LISTING_UPDATED, listing_id, updated.title
+    )
     return _to_public(updated)
 
 
@@ -474,6 +492,7 @@ def delete_listing(
     listing_id: UUID,
     current_user: CurrentUser = Depends(require_current_user),
     service: ListingService = Depends(get_listing_service),
+    activity: ActivityLogService = Depends(get_activity_service),
 ) -> None:
     try:
         service.delete(listing_id, current_user.user_id)
@@ -483,3 +502,4 @@ def delete_listing(
         ListingNotFoundError,
     ) as exc:
         _raise_domain(exc)
+    activity.record(current_user, ActivityType.LISTING_WITHDRAWN, listing_id)

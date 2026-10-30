@@ -21,6 +21,10 @@ class InvalidIdentityError(AuthenticationError):
 class BlockedUserError(AuthenticationError):
     """Локальний профіль користувача заблоковано."""
 
+    def __init__(self, message: str, user_id: UUID | None = None) -> None:
+        super().__init__(message)
+        self.user_id = user_id
+
 
 class InvalidSessionError(AuthenticationError):
     """Сесія не вказує на наявного локального користувача."""
@@ -78,7 +82,9 @@ class AuthService:
             claims.tenant_id, claims.object_id
         )
         if user is not None and user.is_blocked:
-            raise BlockedUserError("Обліковий запис користувача заблоковано")
+            raise BlockedUserError(
+                "Обліковий запис користувача заблоковано", user.user_id
+            )
 
         if user is None:
             user = User(
@@ -115,7 +121,9 @@ class AuthService:
         if user is None:
             raise InvalidSessionError("Сесія користувача недійсна")
         if user.is_blocked:
-            raise BlockedUserError("Обліковий запис користувача заблоковано")
+            raise BlockedUserError(
+                "Обліковий запис користувача заблоковано", user.user_id
+            )
         return CurrentUser(
             user_id=user.user_id,
             tenant_id=user.tenant_id,

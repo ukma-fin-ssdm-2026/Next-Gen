@@ -19,6 +19,7 @@ import {
   deleteListing,
   getCategories,
   getCategorySuggestions,
+  getBlockedStatus,
   getCurrentUser,
   getFavorites,
   getListing,
@@ -41,7 +42,17 @@ import {
 } from "./api";
 import { contactHref } from "./contactLinks";
 import { NaukmaLogo } from "./NaukmaLogo";
+import {
+  ActivityLogPanel,
+  BlockedNotice,
+  BlockedUsersPanel,
+  ComplaintDialog,
+  ComplaintsPanel,
+  FeedbackAdminPanel,
+  FeedbackPage,
+} from "./SupportPanels";
 import type {
+  BlockedStatus,
   Category,
   CategorySuggestion,
   CurrentUser,
@@ -65,11 +76,19 @@ const STATS_SAMPLE_SIZE = 100;
 const MAX_PHOTOS = 10;
 
 const CONDITION_LABELS: Record<ListingCondition, string> = {
-  NEW: "Нове",
-  LIKE_NEW: "Як нове",
-  GOOD: "Добрий стан",
-  USED: "Вживане",
+  NEW: "Новий",
+  LIKE_NEW: "Як новий",
+  GOOD: "Задовільний",
+  USED: "З помітними дефектами",
+  FOR_PARTS: "На запчастини",
 };
+
+const MAX_PRICE = 100_000_000;
+const SORT_VALUES: ListingFilters["sort"][] = ["newest", "oldest", "price_asc", "price_desc"];
+
+function parseSort(value: string | null): ListingFilters["sort"] {
+  return SORT_VALUES.find((item) => item === value) ?? "newest";
+}
 
 function formatPrice(price: number): string {
   return new Intl.NumberFormat("uk-UA", {
@@ -125,7 +144,7 @@ function filtersFromParams(params: URLSearchParams, categories: Category[]): Lis
     categoryId: category?.id ?? "",
     minPrice: params.get("min_price") ?? "",
     maxPrice: params.get("max_price") ?? "",
-    sort: params.get("sort") === "oldest" ? "oldest" : "newest",
+    sort: parseSort(params.get("sort")),
   };
 }
 
@@ -152,6 +171,7 @@ function App() {
   const currentLoginUrl = useCurrentLoginUrl();
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [blocked, setBlocked] = useState<BlockedStatus | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const reloadCategories = useCallback(() => {
     getCategories().then((items) => setCategories(sortCategories(items))).catch(() => undefined);
@@ -182,7 +202,17 @@ function App() {
     void Promise.all([
       getCurrentUser()
         .then(setUser)
-        .catch(() => setUser(null))
+        .catch((requestError) => {
+          setUser(null);
+          // Заблокований користувач бачить вікно з причиною (FR-013): або сервер
+          // повернув 403, або /auth/callback перенаправив сюди з ?blocked=1.
+          const redirected = new URLSearchParams(window.location.search).get("blocked") === "1";
+          if ((requestError instanceof ApiError && requestError.status === 403) || redirected) {
+            return getBlockedStatus()
+              .then((status) => setBlocked(status.is_blocked ? status : null))
+              .catch(() => undefined);
+          }
+        })
         .finally(() => setAuthChecked(true)),
       getCategories().then((items) => setCategories(sortCategories(items))).catch(() => setCategories([])),
     ]);
@@ -211,6 +241,7 @@ function App() {
     try {
       await logout();
       setUser(null);
+      setBlocked(null);
       setFavorites(new Set());
       setNotice("Ви вийшли з облікового запису");
       navigate("/");
@@ -248,6 +279,7 @@ function App() {
   return (
     <div className="app-shell">
       <Header user={user} authChecked={authChecked} busy={busy} favoritesCount={favorites.size} onLogout={() => void handleLogout()} />
+      {blocked && <BlockedNotice status={blocked} busy={busy} onLogout={() => void handleLogout()} />}
 
       {error && (
         <div className="global-alert-wrap">
@@ -326,8 +358,9 @@ function App() {
             />
           }
         />
+        <Route path="/feedback" element={<FeedbackPage user={user} authChecked={authChecked} loginHref={currentLoginUrl} onError={setError} onNotice={setNotice} />} />
         <Route path="/profile" element={<ProfilePage user={user} authChecked={authChecked} onUserChange={setUser} onError={setError} onNotice={setNotice} />} />
-        <Route path="/admin" element={<AdminPage user={user} authChecked={authChecked} onError={setError} onNotice={setNotice} onCategoriesChanged={reloadCategories} />} />
+        <Route path="/admin/*" element={<AdminPage user={user} authChecked={authChecked} onError={setError} onNotice={setNotice} onCategoriesChanged={reloadCategories} />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       <Footer />
@@ -382,10 +415,11 @@ function AccountMenu({ user, busy, onLogout }: { user: CurrentUser; busy: boolea
           <div className="account-head">
             <strong>{user.display_name}</strong>
             <small>{user.email}</small>
-            <small>{user.role === "ADMIN" ? "Адміністратор" : "Студент"}</small>
+            {user.role === "ADMIN" && <small>Адміністратор</small>}
           </div>
           <Link role="menuitem" to="/my">Мої оголошення</Link>
           <Link role="menuitem" to="/profile">Профіль</Link>
+          <Link role="menuitem" to="/feedback">Написати адміністрації</Link>
           {user.role === "ADMIN" && <Link role="menuitem" to="/admin">Адмін-панель</Link>}
           <button role="menuitem" type="button" disabled={busy} onClick={onLogout}>Вийти</button>
         </div>
@@ -406,6 +440,7 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
+  const onFormPage = /^\/(listings\/new|listings\/[^/]+\/edit|profile)\/?$/.test(location.pathname);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
   useEffect(() => { setMenuOpen(false); setHidden(false); }, [location.pathname]);
@@ -486,9 +521,9 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
 
       {!onCreatePage && (
         user ? (
-          <Link className={`fab${hidden || menuOpen ? " fab-hidden" : ""}`} to="/listings/new" aria-label="Створити оголошення">+</Link>
+          <Link className={`fab${hidden || menuOpen || onFormPage ? " fab-hidden" : ""}`} to="/listings/new" aria-label="Створити оголошення">+</Link>
         ) : (
-          <a className={`fab${hidden || menuOpen ? " fab-hidden" : ""}`} href={createLoginUrl} aria-label="Створити оголошення">+</a>
+          <a className={`fab${hidden || menuOpen || onFormPage ? " fab-hidden" : ""}`} href={createLoginUrl} aria-label="Створити оголошення">+</a>
         )
       )}
 
@@ -957,12 +992,12 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
             <section className="form-block">
               <div className="form-block-head"><span className="form-step">02</span><div><h2>Про товар</h2><p className="form-hint">Основна інформація для покупців.</p></div></div>
               <label><span>Назва</span><input value={title} onChange={(event) => setTitle(event.target.value)} minLength={3} maxLength={100} required placeholder="Наприклад, худі з логотипом НаУКМА" /></label>
-              <div className="form-row">
-                <div className="field"><span>Категорія</span><CategorySelect categories={categories} value={categoryId} onChange={setCategoryId} placeholder="Оберіть категорію" required disabled={editing} /></div>
+              <div className="form-row form-row-category">
+                <div className="field"><span>Категорія</span><CategorySelect categories={categories} value={categoryId} onChange={setCategoryId} placeholder="Оберіть категорію" otherHint required disabled={editing} /></div>
                 <label><span>Стан</span><select value={condition} onChange={(event) => setCondition(event.target.value as ListingCondition)}>
                   {(Object.keys(CONDITION_LABELS) as ListingCondition[]).map((key) => <option value={key} key={key}>{CONDITION_LABELS[key]}</option>)}
                 </select></label>
-                <label><span>Ціна, грн</span><input type="number" min="0" step="1" inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value)} required placeholder="0" /></label>
+                <label><span>Ціна, грн</span><input type="number" min="0" max={MAX_PRICE} step="1" inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value)} required placeholder="0" /></label>
               </div>
               {isOtherCategory && (
                 <label><span>Своя категорія <small>необов’язково, {SUGGESTION_MIN}–{SUGGESTION_MAX} символів</small></span><input value={suggestedName} onChange={(event) => setSuggestedName(event.target.value)} maxLength={SUGGESTION_MAX} placeholder="Наприклад, музичні інструменти" /><small className="form-hint">Оголошення з’явиться в «Інше», доки адміністратор не схвалить вашу категорію. Одночасно можна мати до 3 пропозицій на розгляді.</small></label>
@@ -985,7 +1020,7 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
         </div>
 
         {formError && <p className="form-error" role="alert">{formError}</p>}
-        <div className="form-actions">
+        <div className="form-actions sticky-actions">
           <button className="button button-primary" type="submit" disabled={submitting}>{submitting ? "Зберігаємо…" : editing ? "Зберегти зміни" : "Опублікувати"}</button>
           <Link className="button button-text" to={backTo}>Скасувати</Link>
         </div>
@@ -1105,7 +1140,7 @@ function MyListingsPage({ user, authChecked, categoryNames, onError, onNotice }:
       <div className="my-toolbar">
         <div className="segmented" role="tablist">
           <button type="button" role="tab" aria-selected={tab === "active"} className={tab === "active" ? "active" : ""} onClick={() => setTab("active")}>Активні <b>{live.length}</b></button>
-          <button type="button" role="tab" aria-selected={tab === "archive"} className={tab === "archive" ? "active" : ""} onClick={() => setTab("archive")}>Знято <b>{archive.length}</b></button>
+          <button type="button" role="tab" aria-selected={tab === "archive"} className={tab === "archive" ? "active" : ""} onClick={() => setTab("archive")}>Зняті <b>{archive.length}</b></button>
         </div>
         <Link className="button button-primary" to="/listings/new">+ Створити</Link>
       </div>
@@ -1307,9 +1342,20 @@ function HomePage({ categories, categoryNames, user, favorites, busy, onFavorite
       <section className="how-section">
         <div><span className="eyebrow dark">Без зайвого клопоту</span><h2>Три кроки до вдалої знахідки</h2></div>
         <div className="steps">
-          <article><span>01</span><h3>Знайдіть</h3><p>Скористайтеся пошуком і фільтрами каталогу.</p></article>
-          <article><span>02</span><h3>Увійдіть</h3><p>Підтвердьте належність до спільноти через Microsoft.</p></article>
-          <article><span>03</span><h3>Домовтеся</h3><p>Отримайте контакт продавця і напишіть напряму.</p></article>
+          <article>
+            <span>01</span><h3>Знайдіть</h3><p>Скористайтеся пошуком і фільтрами каталогу.</p>
+            <Link className="button button-light step-button" to="/listings">Відкрити каталог</Link>
+          </article>
+          <article>
+            <span>02</span><h3>Увійдіть</h3><p>Підтвердьте належність до спільноти через Microsoft.</p>
+            {user
+              ? <div className="step-done">Ви вже увійшли</div>
+              : <a className="button button-light step-button" href={loginUrl("/listings")}>Увійти через Microsoft</a>}
+          </article>
+          <article>
+            <span>03</span><h3>Домовтеся</h3><p>Отримайте контакт продавця і напишіть напряму.</p>
+            <Link className="button button-light step-button" to="/listings">Обрати оголошення</Link>
+          </article>
         </div>
       </section>
     </main>
@@ -1459,10 +1505,11 @@ function FilterForm({ filters, categories, onChange, onSubmit, onClear }: {
       </button>
       <div className="filters-extra">
         <div className="field"><span>Категорія</span><CategorySelect categories={categories} value={filters.categoryId} onChange={(id) => onChange({ ...filters, categoryId: id })} placeholder="Усі категорії" allLabel="Усі категорії" /></div>
-        <label><span>Ціна від</span><input type="number" min="0" inputMode="numeric" value={filters.minPrice} onChange={(event) => onChange({ ...filters, minPrice: event.target.value })} placeholder="0" /></label>
-        <label><span>Ціна до</span><input type="number" min="0" inputMode="numeric" value={filters.maxPrice} onChange={(event) => onChange({ ...filters, maxPrice: event.target.value })} placeholder="Будь-яка" /></label>
+        <label><span>Ціна від</span><input type="number" min="0" max={MAX_PRICE} inputMode="numeric" value={filters.minPrice} onChange={(event) => onChange({ ...filters, minPrice: event.target.value })} placeholder="0" /></label>
+        <label><span>Ціна до</span><input type="number" min="0" max={MAX_PRICE} inputMode="numeric" value={filters.maxPrice} onChange={(event) => onChange({ ...filters, maxPrice: event.target.value })} placeholder="Будь-яка" /></label>
         <label><span>Сортування</span><select value={filters.sort} onChange={(event) => onChange({ ...filters, sort: event.target.value as ListingFilters["sort"] })}>
           <option value="newest">Спочатку нові</option><option value="oldest">Спочатку старі</option>
+          <option value="price_asc">Спочатку дешевші</option><option value="price_desc">Спочатку дорожчі</option>
         </select></label>
       </div>
       <button className="button button-primary filter-submit" type="submit">Знайти</button>
@@ -1527,6 +1574,7 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
   const [seller, setSeller] = useState<PublicProfile | null>(null);
   const [blockOpen, setBlockOpen] = useState(false);
   const [blockReason, setBlockReason] = useState("");
+  const [complaintOpen, setComplaintOpen] = useState(false);
   const userId = user?.user_id ?? null;
 
   useEffect(() => {
@@ -1593,16 +1641,16 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
   return (
     <main className="page-main listing-detail-page">
       <Link className="back-link" to="/listings">← До оголошень</Link>
-      <div className="ad-layout">
-        <section className="ad-card ad-gallery"><ListingGallery listing={listing} /></section>
+      <div className="lot-layout">
+        <section className="lot-card lot-gallery"><ListingGallery listing={listing} /></section>
 
-        <aside className="ad-side">
-          <div className="ad-card ad-price-card">
-            <time className="ad-date" dateTime={listing.created_at}>Опубліковано {published}</time>
-            <h1 className="ad-title">{listing.title}</h1>
-            <strong className="ad-price">{formatPrice(listing.price)}</strong>
-            <div className="ad-tags"><span>{categoryNames.get(listing.category_id) ?? "Інше"}</span><span>{CONDITION_LABELS[listing.condition]}</span></div>
-            <div className="ad-actions">
+        <aside className="lot-side">
+          <div className="lot-card lot-price-card">
+            <time className="lot-date" dateTime={listing.created_at}>Опубліковано {published}</time>
+            <h1 className="lot-title">{listing.title}</h1>
+            <strong className="lot-price">{formatPrice(listing.price)}</strong>
+            <div className="lot-tags"><span>{categoryNames.get(listing.category_id) ?? "Інше"}</span><span>{CONDITION_LABELS[listing.condition]}</span></div>
+            <div className="lot-actions">
               {isOwner ? (
                 <>
                   <Link className="button button-primary" to={`/listings/${listing.id}/edit`}>Редагувати оголошення</Link>
@@ -1617,37 +1665,44 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
                   )}
                 </>
               ) : (
-                <button className="button button-light" disabled={busy} onClick={() => onFavorite(listing.id)}>{favorites.has(listing.id) ? "♥ В обраному" : "♡ Додати в обране"}</button>
+                <>
+                  <button className="button button-light" disabled={busy} onClick={() => onFavorite(listing.id)}>{favorites.has(listing.id) ? "♥ В обраному" : "♡ Додати в обране"}</button>
+                  {user ? (
+                    <button className="button button-text report-button" type="button" disabled={busy} onClick={() => setComplaintOpen(true)}>Поскаржитись на оголошення</button>
+                  ) : (
+                    <a className="button button-text report-button" href={currentLoginUrl}>Увійти, щоб поскаржитись</a>
+                  )}
+                </>
               )}
               {user?.role === "ADMIN" && <button className="button button-danger" disabled={busy} onClick={() => void moderate()}>Зняти з публікації (модератор)</button>}
             </div>
           </div>
 
-          <div className="ad-card ad-seller">
+          <div className="lot-card lot-seller">
             <h2>{isOwner ? "Ваш контакт" : "Продавець"}</h2>
-            <div className="ad-seller-row">
+            <div className="lot-seller-row">
               {sellerName ? (
-                <Avatar name={sellerName} url={sellerAvatar} className="ad-avatar-img" />
+                <Avatar name={sellerName} url={sellerAvatar} className="lot-avatar-img" />
               ) : (
-                <span className="ad-avatar" aria-hidden="true">
+                <span className="lot-avatar" aria-hidden="true">
                   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.2 3.6-7 8-7s8 2.8 8 7" /></svg>
                 </span>
               )}
-              <div><strong>{sellerName ?? "Студент НаУКМА"}</strong><small>Вхід через корпоративну пошту</small></div>
+              <div><strong>{sellerName ?? "Продавець"}</strong><small>Вхід через корпоративну пошту</small></div>
             </div>
             {!user ? (
-              <a className="button button-primary ad-contact-button" href={currentLoginUrl}>Увійти, щоб побачити контакт</a>
+              <a className="button button-primary lot-contact-button" href={currentLoginUrl}>Увійти, щоб побачити контакт</a>
             ) : contactState === "loading" ? (
-              <div className="ad-contact skeleton-line" aria-busy="true" />
+              <div className="lot-contact skeleton-line" aria-busy="true" />
             ) : contact ? (
-              <div className="ad-contact">
+              <div className="lot-contact">
                 <span>Контакт</span>
                 {contactParts.main && (href ? <a href={href} target={href.startsWith("http") ? "_blank" : undefined} rel="noreferrer">{contactParts.main}</a> : <strong>{contactParts.main}</strong>)}
                 {contactParts.phone && <a href={`tel:${contactParts.phone.replace(/[^\d+]/g, "")}`}>{contactParts.phone}</a>}
-                {contactParts.location && <em className="ad-location">{contactParts.location}</em>}
+                {contactParts.location && <em className="lot-location">{contactParts.location}</em>}
               </div>
             ) : (
-              <p className="ad-muted">Контакт зараз недоступний.</p>
+              <p className="lot-muted">Контакт зараз недоступний.</p>
             )}
             {user?.role === "ADMIN" && !isOwner && (
               blockOpen ? (
@@ -1665,16 +1720,24 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
           </div>
         </aside>
 
-        <section className="ad-card ad-info">
+        <section className="lot-card lot-info">
           <h2>Опис</h2>
-          {listing.description ? <p className="ad-description">{listing.description}</p> : <p className="ad-muted">Продавець не додав опису.</p>}
-          <dl className="ad-facts">
+          {listing.description ? <p className="lot-description">{listing.description}</p> : <p className="lot-muted">Продавець не додав опису.</p>}
+          <dl className="lot-facts">
             <div><dt>Стан</dt><dd>{CONDITION_LABELS[listing.condition]}</dd></div>
             <div><dt>Категорія</dt><dd>{categoryNames.get(listing.category_id) ?? "Інше"}</dd></div>
             <div><dt>Опубліковано</dt><dd>{published}</dd></div>
           </dl>
         </section>
       </div>
+      {complaintOpen && (
+        <ComplaintDialog
+          listingId={listing.id}
+          onClose={() => setComplaintOpen(false)}
+          onDone={() => { setComplaintOpen(false); onNotice("Скаргу надіслано адміністраторам"); }}
+          onError={onError}
+        />
+      )}
     </main>
   );
 }
@@ -1798,7 +1861,7 @@ function ProfilePage({ user, authChecked, onUserChange, onError, onNotice }: {
           <Avatar name={user.display_name} url={user.avatar_url} className="avatar-xl" />
           <div className="profile-top-info">
             <strong>{user.display_name}</strong>
-            <small>{user.email} · {user.role === "ADMIN" ? "Адміністратор" : "Студент"}</small>
+            <small>{user.role === "ADMIN" ? `${user.email} · Адміністратор` : user.email}</small>
             <div className="profile-avatar-actions">
               <input
                 ref={fileInput}
@@ -1830,7 +1893,7 @@ function ProfilePage({ user, authChecked, onUserChange, onError, onNotice }: {
         </section>
 
         {formError && <p className="form-error" role="alert">{formError}</p>}
-        <div className="form-actions">
+        <div className="form-actions sticky-actions">
           <button className="button button-primary" type="submit" disabled={saving}>{saving ? "Зберігаємо…" : "Зберегти профіль"}</button>
           <Link className="button button-text" to="/my">Мої оголошення</Link>
         </div>
@@ -1859,6 +1922,22 @@ function ProfilePage({ user, authChecked, onUserChange, onError, onNotice }: {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UKMA_EMAIL_PATTERN = /^[^@\s]+@ukma\.edu\.ua$/i;
 
+type AdminTab = "moderation" | "complaints" | "feedback" | "blocked" | "user-log" | "admin-log";
+/** Кожна вкладка має власну адресу, щоб на неї можна було посилатися. */
+const ADMIN_TABS: { id: AdminTab; label: string; path: string }[] = [
+  { id: "moderation", label: "Модерація", path: "/admin" },
+  { id: "complaints", label: "Скарги", path: "/admin/complaints" },
+  { id: "feedback", label: "Звернення", path: "/admin/feedback" },
+  { id: "blocked", label: "Заблоковані", path: "/admin/blocked" },
+  { id: "user-log", label: "Журнал користувачів", path: "/admin/logs/users" },
+  { id: "admin-log", label: "Журнал адмінів", path: "/admin/logs/admins" },
+];
+
+function adminTabFromPath(pathname: string): AdminTab | null {
+  const clean = pathname.replace(/\/+$/, "") || "/";
+  return ADMIN_TABS.find((item) => item.path === clean)?.id ?? null;
+}
+
 function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }: {
   user: CurrentUser | null;
   authChecked: boolean;
@@ -1871,6 +1950,8 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
   const [working, setWorking] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [history, setHistory] = useState<ModerationAction[]>([]);
+  const adminLocation = useLocation();
+  const tab = adminTabFromPath(adminLocation.pathname);
 
   if (!authChecked) return <PageLoading />;
   if (!user) return <SignInRequired title="Адмін-панель доступна після входу" />;
@@ -1906,6 +1987,18 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
   return (
     <main className="page-main narrow-page">
       <PageHeading eyebrow="Модерація" title="Адмін-панель" />
+      <div className="admin-tabs" role="tablist" aria-label="Розділи адмін-панелі">
+        {ADMIN_TABS.map((item) => (
+          <Link key={item.id} role="tab" aria-selected={tab === item.id} className={tab === item.id ? "is-active" : ""} to={item.path}>{item.label}</Link>
+        ))}
+      </div>
+      {tab === null && <NotFoundPage />}
+      {tab === "complaints" && <ComplaintsPanel onError={onError} onNotice={onNotice} />}
+      {tab === "feedback" && <FeedbackAdminPanel onError={onError} onNotice={onNotice} />}
+      {tab === "blocked" && <BlockedUsersPanel onError={onError} onNotice={onNotice} />}
+      {tab === "user-log" && <ActivityLogPanel kind="users" onError={onError} />}
+      {tab === "admin-log" && <ActivityLogPanel kind="admins" onError={onError} />}
+      {tab === "moderation" && (<>
       <form className="profile-form" onSubmit={(event) => event.preventDefault()}>
         <section className="form-block">
           <div className="form-block-head"><div><h2>Блокування користувачів</h2><p className="form-hint">Заблокований користувач втрачає чинні сесії й не може входити; його оголошення не видаляються. Зручніше блокувати зі сторінки оголошення кнопкою «Заблокувати продавця».</p></div></div>
@@ -1920,7 +2013,7 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
         </section>
         {history.length > 0 && (
           <section className="form-block">
-            <div className="form-block-head"><div><h2>Дії в цій сесії</h2><p className="form-hint">Журнал на сервері зберігається, але читання журналу через API ще немає.</p></div></div>
+            <div className="form-block-head"><div><h2>Дії в цій сесії</h2><p className="form-hint">Повний журнал — у вкладці «Журнал адмінів».</p></div></div>
             <ul className="admin-log">
               {history.map((item) => (
                 <li key={item.id}>
@@ -1934,6 +2027,7 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
         )}
       </form>
       <CategorySuggestionsPanel onError={onError} onNotice={onNotice} onCategoriesChanged={onCategoriesChanged} />
+      </>)}
     </main>
   );
 }
@@ -1945,12 +2039,14 @@ function sortCategories(items: Category[]): Category[] {
   return [...items].sort((a, b) => Number(a.id === OTHER_CATEGORY_ID) - Number(b.id === OTHER_CATEGORY_ID));
 }
 
-function CategorySelect({ categories, value, onChange, placeholder, allLabel, required = false, disabled = false }: {
+function CategorySelect({ categories, value, onChange, placeholder, allLabel, otherHint = false, required = false, disabled = false }: {
   categories: Category[];
   value: string;
   onChange: (id: string) => void;
   placeholder: string;
   allLabel?: string;
+  /** У формі оголошення біля «Інше» підказує, що можна запропонувати власну категорію. */
+  otherHint?: boolean;
   required?: boolean;
   disabled?: boolean;
 }) {
@@ -2002,7 +2098,7 @@ function CategorySelect({ categories, value, onChange, placeholder, allLabel, re
           <input ref={searchRef} className="category-select-search" type="search" value={query} onChange={(event) => { setQuery(event.target.value); setActive(0); }} onKeyDown={onSearchKeyDown} placeholder="Пошук категорії" aria-label="Пошук категорії" />
           <ul role="listbox">
             {options.map((option, index) => (
-              <li key={option.id || "all"} role="option" aria-selected={option.id === value} className={index === active ? "is-active" : ""} onMouseEnter={() => setActive(index)} onMouseDown={(event) => { event.preventDefault(); choose(option.id); }}>{option.name}</li>
+              <li key={option.id || "all"} role="option" aria-selected={option.id === value} className={index === active ? "is-active" : ""} onMouseEnter={() => setActive(index)} onMouseDown={(event) => { event.preventDefault(); choose(option.id); }}>{option.name}{otherHint && option.id === OTHER_CATEGORY_ID && <small className="category-option-hint"> (або запропонуйте свою)</small>}</li>
             ))}
             {options.length === 0 && <li className="category-select-empty">Нічого не знайдено</li>}
           </ul>
@@ -2112,7 +2208,7 @@ function ListingImage({ listing, large = false }: { listing: Listing; large?: bo
 }
 
 function Footer() {
-  return <footer><Link className="brand footer-brand" to="/" aria-label="Барахолка НаУКМА, на головну"><span className="brand-mark">Б</span><span className="brand-divider" aria-hidden="true" /><NaukmaLogo className="naukma-logo" /></Link><p>Проєкт створюється в рамках курсу SSDM 2026 · Без платежів і доставки всередині сервісу</p></footer>;
+  return <footer><Link className="brand footer-brand" to="/" aria-label="Барахолка НаУКМА, на головну"><span className="brand-mark">Б</span><span className="brand-divider" aria-hidden="true" /><NaukmaLogo className="naukma-logo" /></Link><p>Проєкт створюється в рамках курсу SSDM 2026 · Без платежів і доставки всередині сервісу · <Link to="/feedback">Зворотний зв'язок</Link></p></footer>;
 }
 
 export default App;

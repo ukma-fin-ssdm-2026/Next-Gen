@@ -14,7 +14,7 @@ from src.domain.moderation import (
     ModerationActionType,
     normalize_moderation_reason,
 )
-from src.domain.users import CurrentUser, UserRole
+from src.domain.users import CurrentUser, User, UserRole
 from src.repositories.moderation import ModerationActionRepository
 from src.repositories.users import UserRepository
 from src.services.auth_sessions import InMemoryAuthSessionStore
@@ -61,6 +61,11 @@ class UserModerationService:
         """Розблоковує користувача за email."""
         user_id = self._resolve_email(moderator, email)
         return self._set_blocked(moderator, user_id, reason, blocked=False)
+
+    def list_blocked(self, moderator: CurrentUser | None) -> list[User]:
+        """Список заблокованих користувачів із причиною (лише для ADMIN)."""
+        self._require_admin(moderator)
+        return self._users.list_blocked()
 
     def _resolve_email(self, moderator: CurrentUser | None, email: str) -> UUID:
         """Спершу перевіряє права, щоб не-адміністратор не міг перебирати адреси."""
@@ -113,12 +118,15 @@ class UserModerationService:
                     if blocked
                     else "Користувача не заблоковано"
                 )
+            previous = (user.is_blocked, user.block_reason, user.blocked_at)
             user.is_blocked = blocked
+            user.block_reason = action.reason if blocked else None
+            user.blocked_at = action.created_at if blocked else None
             try:
                 self._users.save(user)
                 self._actions.add(action)
             except Exception:
-                user.is_blocked = not blocked
+                user.is_blocked, user.block_reason, user.blocked_at = previous
                 self._users.save(user)
                 raise
         if blocked:

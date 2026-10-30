@@ -73,6 +73,10 @@ class UserRow(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
+    block_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    blocked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     listings: Mapped[list["ListingRow"]] = relationship(
         "ListingRow", back_populates="owner", lazy="select"
@@ -219,7 +223,14 @@ class ListingRow(Base):
         nullable=False,
     )
     condition: Mapped[str] = mapped_column(
-        SAEnum("NEW", "LIKE_NEW", "GOOD", "USED", name="listing_condition"),
+        SAEnum(
+            "NEW",
+            "LIKE_NEW",
+            "GOOD",
+            "USED",
+            "FOR_PARTS",
+            name="listing_condition",
+        ),
         nullable=False,
         default="GOOD",
     )
@@ -416,4 +427,107 @@ class ModerationActionRow(Base):
         foreign_keys=[suggestion_id],
         back_populates="moderation_actions",
         lazy="select",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Complaint / Feedback / ActivityEvent
+# ---------------------------------------------------------------------------
+
+
+class ComplaintRow(Base):
+    """Скарга користувача на оголошення (FR-016)."""
+
+    __tablename__ = "complaints"
+    __table_args__ = (
+        UniqueConstraint(
+            "listing_id", "reporter_id", name="uq_complaints_listing_reporter"
+        ),
+        Index("ix_complaints_status", "status"),
+    )
+
+    complaint_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    listing_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("listings.listing_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    reporter_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    reason: Mapped[str] = mapped_column(String(20), nullable=False)
+    details: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="OPEN")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+    resolved_by: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    resolution_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
+class FeedbackRow(Base):
+    """Звернення користувача до адміністрації (FR-017)."""
+
+    __tablename__ = "feedback_messages"
+    __table_args__ = (Index("ix_feedback_messages_status", "status"),)
+
+    feedback_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    subject: Mapped[str] = mapped_column(String(120), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="NEW")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+    resolved_by: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class ActivityEventRow(Base):
+    """Незмінний запис журналу дій користувача або адміністратора (FR-018)."""
+
+    __tablename__ = "activity_events"
+    __table_args__ = (
+        Index("ix_activity_events_role_created", "actor_role", "created_at"),
+    )
+
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    actor_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    actor_role: Mapped[str] = mapped_column(String(10), nullable=False)
+    action_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    listing_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    details: Mapped[str] = mapped_column(String(300), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
     )

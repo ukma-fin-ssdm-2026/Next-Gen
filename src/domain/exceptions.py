@@ -112,3 +112,39 @@ class UserNotFoundError(ListingError):
 
 class InvalidUserModerationError(ListingError):
     """Дію над користувачем не можна виконати (самоблокування, адміністратор, стан)."""
+
+
+class ComplaintError(Exception):
+    """Базова помилка скарг на оголошення (FR-016)."""
+
+
+class InvalidComplaintError(ComplaintError):
+    """Некоректні дані скарги."""
+
+
+class ComplaintNotFoundError(ComplaintError):
+    """Скаргу не знайдено."""
+
+
+class DuplicateComplaintError(ComplaintError):
+    """Користувач уже скаржився на це оголошення."""
+
+
+class ComplaintConflictError(ComplaintError):
+    """Скаргу вже розглянуто."""
+
+
+class FeedbackError(Exception):
+    """Базова помилка звернень до адміністрації (FR-017)."""
+
+
+class InvalidFeedbackError(FeedbackError):
+    """Некоректні дані звернення."""
+
+
+class FeedbackNotFoundError(FeedbackError):
+    """Звернення не знайдено."""
+
+
+class FeedbackConflictError(FeedbackError):
+    """Звернення вже опрацьовано."""
