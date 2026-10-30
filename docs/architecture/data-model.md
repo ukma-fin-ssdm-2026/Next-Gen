@@ -35,6 +35,8 @@ ER-діаграма зберігається у файлі:
 | `display_name` | string | Personal Data | Ім'я, яке відображається у маркетплейсі |
 | `role` | enum | Required | Роль `USER` або `ADMIN` |
 | `is_blocked` | boolean | Required, default `false` | Ознака блокування облікового запису |
+| `block_reason` | text | Nullable | Причина останнього блокування; показується заблокованому користувачеві та в списку заблокованих, очищується при розблокуванні (`FR-013`) |
+| `blocked_at` | datetime | Nullable | Час блокування (`FR-013`) |
 | `display_name_customized` | boolean | Required, default `false` | Ознака, що ім'я змінив сам користувач; повторний вхід тоді не перезаписує його іменем з Entra (`FR-014`) |
 | `avatar_url` | string | Nullable | Публічний URL аватарки (`/uploads/{key}.webp`); файл зберігається в сховищі зображень як зображення з псевдо-ідентифікатором `user_id`, тому не підпадає під TTL staged-завантажень (`FR-014`) |
 | `contact` | string | Nullable, ≤ 300 символів, Personal Data | Контакти за замовчуванням (формат як у `Listing.contact`: основний контакт, `Тел.: …`, `Локація: …`); підставляються клієнтом у форму нового оголошення; публічно не віддаються (`FR-014`) |
@@ -88,7 +90,7 @@ ER-діаграма зберігається у файлі:
 | `suggested_category_id` | UUID | FK → `CategorySuggestion.suggestion_id`, Nullable | Прив'язана пропозиція нової категорії (`FR-015`) |
 | `title` | string | Required | Заголовок оголошення |
 | `description` | text | Required | Опис оголошення |
-| `price` | decimal | Required | Ціна |
+| `price` | decimal | Required, `0 ≤ price ≤ 100 000 000` | Ціна в гривнях |
 | `contact` | string | Required, Personal Data | Email або Telegram продавця, видимий лише автентифікованим користувачам. Веб-клієнт може дописувати в цей самий рядок необов'язкові телефон і локацію окремими рядками (`Тел.: ...`, `Локація: ...`, див. [frontend.md](../frontend/frontend.md#контакт-телефон-і-локація)); вони мають ту саму класифікацію Personal Data |
 | `condition` | enum | Required | Стан товару |
 | `status` | enum | Required | Поточний статус оголошення |
@@ -144,6 +146,38 @@ ER-діаграма зберігається у файлі:
 Рівно одне з полів `listing_id`, `target_user_id` і `suggestion_id` має бути заповнене залежно від типу дії (`WITHDRAW_LISTING` → `listing_id`; `BLOCK_USER` / `UNBLOCK_USER` → `target_user_id`; `APPROVE_CATEGORY` / `REJECT_CATEGORY` → `suggestion_id`). Це обмеження перевіряється на рівні домену і БД (`CHECK`).
 
 Зміна стану цільової сутності та створення `ModerationAction` виконуються в одній атомарній операції, а записи журналу не видаляються.
+
+---
+
+### Complaint
+
+Скарга користувача на оголошення (`FR-016`). Таблиця `complaints`.
+
+| Атрибут | Тип | Обмеження | Опис |
+|---|---|---|---|
+| `complaint_id` | UUID | PK | Ідентифікатор скарги |
+| `listing_id` | UUID | FK → `Listing.listing_id`, Required, ON DELETE CASCADE | Оголошення, на яке скаржаться |
+| `reporter_id` | UUID | FK → `User.user_id`, Required | Автор скарги (береться із сесії) |
+| `reason` | enum | Required | `SPAM`, `FRAUD`, `PROHIBITED`, `INAPPROPRIATE`, `WRONG_CATEGORY`, `OTHER` |
+| `details` | text | ≤ 500 символів; для `OTHER` обов'язковий | Опис проблеми |
+| `status` | enum | Required, default `OPEN` | `OPEN`, `RESOLVED`, `DISMISSED` |
+| `created_at`, `resolved_at` | datetime | | Час подання і розгляду |
+| `resolved_by` | UUID | FK → `User.user_id`, Nullable | Адміністратор, який розглянув скаргу |
+| `resolution_note` | text | ≤ 500 символів | Примітка адміністратора |
+
+Обмеження `UNIQUE (listing_id, reporter_id)`: одна скарга від користувача на оголошення; індекс за `status`.
+
+---
+
+### FeedbackMessage
+
+Звернення користувача до адміністрації (`FR-017`). Таблиця `feedback_messages`: `feedback_id` (PK), `user_id` (FK → `User`), `subject` (3–120 символів), `message` (10–2000), `status` (`NEW` / `RESOLVED`), `created_at`, `resolved_at`, `resolved_by`; індекс за `status`.
+
+---
+
+### ActivityEvent
+
+Незмінний запис журналу дій (`FR-018`). Таблиця `activity_events`: `event_id` (PK), `actor_id` (FK → `User`), `actor_role` (`USER` / `ADMIN` на момент дії), `action_type` (`LISTING_CREATED`, `LISTING_UPDATED`, `LISTING_WITHDRAWN`, `FAVORITE_ADDED`, `FAVORITE_REMOVED`, `PROFILE_UPDATED`, `COMPLAINT_SUBMITTED`, `COMPLAINT_RESOLVED`, `COMPLAINT_DISMISSED`, `FEEDBACK_SUBMITTED`, `FEEDBACK_RESOLVED`), `listing_id` (Nullable), `details` (≤ 300 символів), `created_at`; індекс `(actor_role, created_at)`. Журнал адміністраторів додатково об'єднує записи `ModerationAction` (блокування, зняття оголошень, категорії); оновлення й видалення записів не передбачені.
 
 ---
 
@@ -297,6 +331,7 @@ ER-діаграма зберігається у файлі:
 | Зв'язок локального профілю з Microsoft Entra ID | `User` |
 | Створення, редагування і зняття оголошень із фотографіями | `User`, `Listing`, `Category`, `ListingImage` |
 | Пропозиції нових категорій і перехід оголошень після схвалення | `CategorySuggestion`, `Listing.suggested_category_id`, `Category`, `ModerationAction` |
+| Скарги, звернення та журнали дій | `Complaint`, `FeedbackMessage`, `ActivityEvent`, `User.block_reason` |
 | Перегляд і фільтрація | `Listing`, `Category`, `ListingImage`, `User` |
 | Текстовий пошук | `Listing.title`, `Listing.description` |
 | Додавання до обраного | `User`, `Favorite`, `Listing` |
