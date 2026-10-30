@@ -1,8 +1,15 @@
-"""Залежності FastAPI: збирає сервіси на краю застосунку."""
+"""Залежності FastAPI: збирає сервіси на краю застосунку.
 
+PostgreSQL-адаптери підключаються через DATABASE_URL (ADR-002).
+Якщо DATABASE_URL не задано, використовується in-memory fallback
+(лише для локальної розробки без Docker).
+"""
+
+import os
 from typing import Annotated
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
+from sqlalchemy.orm import Session
 
 from src.config import (
     ConfigurationError,
@@ -37,41 +44,118 @@ from src.services.moderation import ModerationService
 from src.services.profile import ProfileService
 from src.services.user_moderation import UserModerationService
 
-category_repository = InMemoryCategoryRepository.with_seed()
-category_suggestion_repository = InMemoryCategorySuggestionRepository()
-listing_repository = InMemoryListingRepository.with_seed()
+# ---------------------------------------------------------------------------
+# Визначаємо, чи доступний PostgreSQL
+# ---------------------------------------------------------------------------
+
+_USE_POSTGRES = bool(os.getenv("DATABASE_URL", "").strip())
+
+# ---------------------------------------------------------------------------
+# Singleton репозиторії (in-memory fallback для розробки без Docker)
+# ---------------------------------------------------------------------------
+
 image_storage: ImageStorage = LocalImageStorage(get_image_storage_dir())
-favorite_repository = InMemoryFavoriteRepository()
-moderation_action_repository = InMemoryModerationActionRepository()
-category_service = CategoryService(category_repository)
-category_suggestion_service = CategorySuggestionService(
-    suggestions=category_suggestion_repository,
-    categories=category_repository,
-    category_service=category_service,
-    listings=listing_repository,
-    actions=moderation_action_repository,
-)
-listing_service = ListingService(
-    listing_repository,
-    image_storage=image_storage,
-    favorites=favorite_repository,
-    category_validator=category_service.is_valid_category_id,
-    category_suggestion_service=category_suggestion_service,
-)
-favorite_service = FavoriteService(favorite_repository, listing_repository)
-contact_service = SellerContactService(listing_repository)
-moderation_service = ModerationService(
-    listing_repository, favorite_repository, moderation_action_repository
-)
-user_repository = InMemoryUserRepository()
 oidc_flow_store = InMemoryOidcFlowStore()
 auth_session_store = InMemoryAuthSessionStore()
-user_moderation_service = UserModerationService(
-    user_repository, moderation_action_repository, auth_session_store
-)
+
+# In-memory singletons (використовуються якщо немає DATABASE_URL)
+_inmem_category_repository = InMemoryCategoryRepository.with_seed()
+_inmem_category_suggestion_repository = InMemoryCategorySuggestionRepository()
+_inmem_listing_repository = InMemoryListingRepository.with_seed()
+_inmem_favorite_repository = InMemoryFavoriteRepository()
+_inmem_moderation_action_repository = InMemoryModerationActionRepository()
+_inmem_user_repository = InMemoryUserRepository()
 
 SESSION_COOKIE_NAME = "baraholka_session"
 OIDC_STATE_COOKIE_NAME = "baraholka_oidc_state"
+
+
+# ---------------------------------------------------------------------------
+# FastAPI залежність: сесія БД (PostgreSQL або None для in-memory)
+# ---------------------------------------------------------------------------
+
+
+def get_db_session():
+    """FastAPI залежність: повертає SQLAlchemy Session або None."""
+    if not _USE_POSTGRES:
+        yield None
+        return
+    from src.db.engine import get_db_session as _get_session
+
+    yield from _get_session()
+
+
+DbSession = Annotated[Session | None, Depends(get_db_session)]
+
+
+# ---------------------------------------------------------------------------
+# Repository factories (вибирають PostgreSQL або in-memory залежно від конфігурації)
+# ---------------------------------------------------------------------------
+
+
+def get_user_repository(session: DbSession = None):
+    """Повертає PostgreSQL або in-memory репозиторій користувачів."""
+    if session is not None:
+        from src.repositories.postgres_users import PostgresUserRepository
+
+        return PostgresUserRepository(session)
+    return _inmem_user_repository
+
+
+def get_category_repository(session: DbSession = None):
+    """Повертає PostgreSQL або in-memory репозиторій категорій."""
+    if session is not None:
+        from src.repositories.postgres_categories import PostgresCategoryRepository
+
+        return PostgresCategoryRepository(session)
+    return _inmem_category_repository
+
+
+def get_category_suggestion_repository(session: DbSession = None):
+    """Повертає PostgreSQL або in-memory репозиторій пропозицій категорій."""
+    if session is not None:
+        from src.repositories.postgres_category_suggestions import (
+            PostgresCategorySuggestionRepository,
+        )
+
+        return PostgresCategorySuggestionRepository(session)
+    return _inmem_category_suggestion_repository
+
+
+def get_listing_repository(session: DbSession = None):
+    """Повертає PostgreSQL або in-memory репозиторій оголошень."""
+    if session is not None:
+        from src.repositories.postgres_listings import PostgresListingRepository
+
+        return PostgresListingRepository(session)
+    return _inmem_listing_repository
+
+
+def get_favorite_repository(session: DbSession = None):
+    """Повертає PostgreSQL або in-memory репозиторій обраного."""
+    if session is not None:
+        from src.repositories.postgres_favorites_moderation import (
+            PostgresFavoriteRepository,
+        )
+
+        return PostgresFavoriteRepository(session)
+    return _inmem_favorite_repository
+
+
+def get_moderation_repository(session: DbSession = None):
+    """Повертає PostgreSQL або in-memory репозиторій дій модерації."""
+    if session is not None:
+        from src.repositories.postgres_favorites_moderation import (
+            PostgresModerationActionRepository,
+        )
+
+        return PostgresModerationActionRepository(session)
+    return _inmem_moderation_action_repository
+
+
+# ---------------------------------------------------------------------------
+# Service factories
+# ---------------------------------------------------------------------------
 
 
 def get_image_storage() -> ImageStorage:
@@ -79,34 +163,75 @@ def get_image_storage() -> ImageStorage:
     return image_storage
 
 
-def get_category_service() -> CategoryService:
+def get_category_service(
+    session: DbSession = None,
+) -> CategoryService:
     """Повертає Category Service для ін'єкції в роутери."""
-    return category_service
+    return CategoryService(get_category_repository(session))
 
 
-def get_category_suggestion_service() -> CategorySuggestionService:
+def get_category_suggestion_service(
+    session: DbSession = None,
+) -> CategorySuggestionService:
     """Повертає Category Suggestion Service для ін'єкції в роутери (FR-015)."""
-    return category_suggestion_service
+    cat_repo = get_category_repository(session)
+    cat_service = CategoryService(cat_repo)
+    return CategorySuggestionService(
+        suggestions=get_category_suggestion_repository(session),
+        categories=cat_repo,
+        category_service=cat_service,
+        listings=get_listing_repository(session),
+        actions=get_moderation_repository(session),
+    )
 
 
-def get_listing_service() -> ListingService:
+def get_listing_service(
+    session: DbSession = None,
+) -> ListingService:
     """Повертає Listing Service для ін'єкції в роутери."""
-    return listing_service
+    cat_repo = get_category_repository(session)
+    cat_service = CategoryService(cat_repo)
+    cat_suggestion_service = CategorySuggestionService(
+        suggestions=get_category_suggestion_repository(session),
+        categories=cat_repo,
+        category_service=cat_service,
+        listings=get_listing_repository(session),
+        actions=get_moderation_repository(session),
+    )
+    return ListingService(
+        get_listing_repository(session),
+        image_storage=image_storage,
+        favorites=get_favorite_repository(session),
+        category_validator=cat_service.is_valid_category_id,
+        category_suggestion_service=cat_suggestion_service,
+    )
 
 
-def get_favorite_service() -> FavoriteService:
+def get_favorite_service(
+    session: DbSession = None,
+) -> FavoriteService:
     """Повертає Favorite Service, що ділить сховища з Listing Service."""
-    return favorite_service
+    return FavoriteService(
+        get_favorite_repository(session), get_listing_repository(session)
+    )
 
 
-def get_contact_service() -> SellerContactService:
+def get_contact_service(
+    session: DbSession = None,
+) -> SellerContactService:
     """Повертає Seller Contact Service, що читає те саме сховище оголошень."""
-    return contact_service
+    return SellerContactService(get_listing_repository(session))
 
 
-def get_moderation_service() -> ModerationService:
+def get_moderation_service(
+    session: DbSession = None,
+) -> ModerationService:
     """Повертає Moderation Service зі спільними сховищами оголошень і обраного."""
-    return moderation_service
+    return ModerationService(
+        get_listing_repository(session),
+        get_favorite_repository(session),
+        get_moderation_repository(session),
+    )
 
 
 def get_entra_settings() -> EntraSettings:
@@ -130,7 +255,7 @@ def get_auth_service(
             detail="Список адміністраторів налаштовано некоректно",
         ) from exc
     return AuthService(
-        user_repository,
+        _inmem_user_repository,
         EntraAuthConfig(
             tenant_id=settings.tenant_id,
             issuer=settings.issuer,
@@ -140,14 +265,22 @@ def get_auth_service(
     )
 
 
-def get_user_moderation_service() -> UserModerationService:
+def get_user_moderation_service(
+    session: DbSession = None,
+) -> UserModerationService:
     """Повертає User Moderation Service для ін'єкції в роутери (FR-013)."""
-    return user_moderation_service
+    return UserModerationService(
+        get_user_repository(session),
+        get_moderation_repository(session),
+        auth_session_store,
+    )
 
 
-def get_profile_service() -> ProfileService:
+def get_profile_service(
+    session: DbSession = None,
+) -> ProfileService:
     """Повертає Profile Service для ін'єкції в роутери (FR-014)."""
-    return ProfileService(user_repository, image_storage)
+    return ProfileService(get_user_repository(session), image_storage)
 
 
 def get_entra_oidc_client(

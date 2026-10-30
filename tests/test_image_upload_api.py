@@ -6,7 +6,7 @@ from pathlib import Path
 from PIL import Image
 from fastapi.testclient import TestClient
 
-from src.api.deps import category_service, get_image_storage, get_listing_service
+from src.api.deps import get_category_service, get_image_storage, get_listing_service
 from src.api.main import app
 from src.domain.listings import SEED_CATEGORY_ID
 from src.repositories.image_storage import LocalImageStorage, MAX_IMAGE_FILE_SIZE_BYTES
@@ -227,7 +227,7 @@ def test_full_listing_lifecycle_with_local_image_storage(
         listing_repository,
         image_storage=local_storage,
         favorites=favorite_repository,
-        category_validator=category_service.is_valid_category_id,
+        category_validator=get_category_service().is_valid_category_id,
     )
     app.dependency_overrides[get_image_storage] = lambda: local_storage
     app.dependency_overrides[get_listing_service] = lambda: custom_service
