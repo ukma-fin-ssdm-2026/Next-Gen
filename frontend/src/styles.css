@@ -668,8 +668,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .dialog-card textarea { padding: 12px 13px; resize: vertical; line-height: 1.55; }
 .report-button { color: var(--muted); font-size: 13px; }
 .admin-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
-.admin-tabs button { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 9px 15px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
-.admin-tabs button.is-active { background: var(--green); border-color: var(--green); color: #fff; }
+.admin-tabs a { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 9px 15px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: none; }
+.admin-tabs a.is-active { background: var(--green); border-color: var(--green); color: #fff; }
 .admin-log a { font-size: 13px; }
 .log-details { margin: 0; color: #4f5a54; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
 .status-chip { padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; background: #e7ece8; color: var(--muted); white-space: nowrap; }

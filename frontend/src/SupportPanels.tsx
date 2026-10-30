@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   ApiError,
   getActivityLog,
@@ -356,14 +356,22 @@ function groupOf(action: string): LogGroup | null {
 export function ActivityLogPanel({ kind, onError }: { kind: "users" | "admins"; onError: (m: string) => void }) {
   const loader = useCallback(() => getActivityLog(kind, 0, 500), [kind]);
   const { items, reload } = useList<LogEntry>(loader, onError);
-  const [group, setGroup] = useState<LogGroup | "all">("all");
-  const [query, setQuery] = useState("");
+  // Пошук і категорія зберігаються в адресі (?q=…&category=…), щоб ділитися посиланням.
+  const [params, setParams] = useSearchParams();
+  const rawGroup = params.get("category");
+  const group: LogGroup | "all" = LOG_GROUPS.some((item) => item.id === rawGroup) ? (rawGroup as LogGroup) : "all";
+  const query = params.get("q") ?? "";
+  const updateParam = (key: string, value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value); else next.delete(key);
+    setParams(next, { replace: true });
+  };
   const title = kind === "users" ? "Журнал дій користувачів" : "Журнал дій адміністраторів";
 
   const visibleGroups = useMemo(() => {
     const present = new Set((items ?? []).map((entry) => groupOf(entry.action_type)));
-    return LOG_GROUPS.filter((item) => present.has(item.id));
-  }, [items]);
+    return LOG_GROUPS.filter((item) => present.has(item.id) || item.id === group);
+  }, [items, group]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("uk");
@@ -385,8 +393,8 @@ export function ActivityLogPanel({ kind, onError }: { kind: "users" | "admins"; 
         <button className="button button-light" type="button" onClick={() => void reload()}>Оновити</button>
       </div>
       <div className="log-toolbar">
-        <input type="search" className="log-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Пошук за email, дією або описом" aria-label="Пошук у журналі" />
-        <select className="log-filter" value={group} onChange={(event) => setGroup(event.target.value as LogGroup | "all")} aria-label="Категорія записів">
+        <input type="search" className="log-search" value={query} onChange={(event) => updateParam("q", event.target.value)} placeholder="Пошук за email, дією або описом" aria-label="Пошук у журналі" />
+        <select className="log-filter" value={group} onChange={(event) => updateParam("category", event.target.value === "all" ? "" : event.target.value)} aria-label="Категорія записів">
           <option value="all">Усі категорії</option>
           {visibleGroups.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
         </select>

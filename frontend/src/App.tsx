@@ -360,7 +360,7 @@ function App() {
         />
         <Route path="/feedback" element={<FeedbackPage user={user} authChecked={authChecked} loginHref={currentLoginUrl} onError={setError} onNotice={setNotice} />} />
         <Route path="/profile" element={<ProfilePage user={user} authChecked={authChecked} onUserChange={setUser} onError={setError} onNotice={setNotice} />} />
-        <Route path="/admin" element={<AdminPage user={user} authChecked={authChecked} onError={setError} onNotice={setNotice} onCategoriesChanged={reloadCategories} />} />
+        <Route path="/admin/*" element={<AdminPage user={user} authChecked={authChecked} onError={setError} onNotice={setNotice} onCategoriesChanged={reloadCategories} />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       <Footer />
@@ -1923,14 +1923,20 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const UKMA_EMAIL_PATTERN = /^[^@\s]+@ukma\.edu\.ua$/i;
 
 type AdminTab = "moderation" | "complaints" | "feedback" | "blocked" | "user-log" | "admin-log";
-const ADMIN_TABS: { id: AdminTab; label: string }[] = [
-  { id: "moderation", label: "Модерація" },
-  { id: "complaints", label: "Скарги" },
-  { id: "feedback", label: "Звернення" },
-  { id: "blocked", label: "Заблоковані" },
-  { id: "user-log", label: "Журнал користувачів" },
-  { id: "admin-log", label: "Журнал адмінів" },
+/** Кожна вкладка має власну адресу, щоб на неї можна було посилатися. */
+const ADMIN_TABS: { id: AdminTab; label: string; path: string }[] = [
+  { id: "moderation", label: "Модерація", path: "/admin" },
+  { id: "complaints", label: "Скарги", path: "/admin/complaints" },
+  { id: "feedback", label: "Звернення", path: "/admin/feedback" },
+  { id: "blocked", label: "Заблоковані", path: "/admin/blocked" },
+  { id: "user-log", label: "Журнал користувачів", path: "/admin/logs/users" },
+  { id: "admin-log", label: "Журнал адмінів", path: "/admin/logs/admins" },
 ];
+
+function adminTabFromPath(pathname: string): AdminTab | null {
+  const clean = pathname.replace(/\/+$/, "") || "/";
+  return ADMIN_TABS.find((item) => item.path === clean)?.id ?? null;
+}
 
 function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }: {
   user: CurrentUser | null;
@@ -1944,7 +1950,8 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
   const [working, setWorking] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [history, setHistory] = useState<ModerationAction[]>([]);
-  const [tab, setTab] = useState<AdminTab>("moderation");
+  const adminLocation = useLocation();
+  const tab = adminTabFromPath(adminLocation.pathname);
 
   if (!authChecked) return <PageLoading />;
   if (!user) return <SignInRequired title="Адмін-панель доступна після входу" />;
@@ -1982,9 +1989,10 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
       <PageHeading eyebrow="Модерація" title="Адмін-панель" />
       <div className="admin-tabs" role="tablist" aria-label="Розділи адмін-панелі">
         {ADMIN_TABS.map((item) => (
-          <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? "is-active" : ""} onClick={() => setTab(item.id)}>{item.label}</button>
+          <Link key={item.id} role="tab" aria-selected={tab === item.id} className={tab === item.id ? "is-active" : ""} to={item.path}>{item.label}</Link>
         ))}
       </div>
+      {tab === null && <NotFoundPage />}
       {tab === "complaints" && <ComplaintsPanel onError={onError} onNotice={onNotice} />}
       {tab === "feedback" && <FeedbackAdminPanel onError={onError} onNotice={onNotice} />}
       {tab === "blocked" && <BlockedUsersPanel onError={onError} onNotice={onNotice} />}
