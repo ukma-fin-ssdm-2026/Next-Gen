@@ -30,7 +30,7 @@ from src.domain.listings import (
 from src.repositories.favorites import InMemoryFavoriteRepository
 from src.repositories.listings import InMemoryListingRepository
 from src.services.listings import ListingService
-import src.api.deps as deps
+from src.api.deps import get_listing_service
 
 CONCURRENT_USERS = 50
 
@@ -68,13 +68,12 @@ def performance_dataset() -> None:
     fav_repo = InMemoryFavoriteRepository()
     svc = ListingService(repo, favorites=fav_repo)
 
-    original_svc = deps.listing_service
-    deps.listing_service = svc
+    app.dependency_overrides[get_listing_service] = lambda: svc
 
     try:
         yield
     finally:
-        deps.listing_service = original_svc
+        app.dependency_overrides.pop(get_listing_service, None)
 
 
 @pytest.mark.anyio

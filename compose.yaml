@@ -1,4 +1,41 @@
 services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-baraholka}
+      POSTGRES_USER: ${POSTGRES_USER:-baraholka}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Порт PostgreSQL НЕ публікується на зовнішньому інтерфейсі (вимога безпеки)
+    expose:
+      - "5432"
+    networks:
+      - internal
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-baraholka} -d ${POSTGRES_DB:-baraholka}
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    env_file:
+      - ${ENV_FILE:-.env}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+    restart: on-failure
+
   api:
     build:
       context: .
@@ -16,6 +53,11 @@ services:
       - uploads_data:/var/lib/baraholka/uploads
     security_opt:
       - no-new-privileges:true
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test:
         - CMD
@@ -41,11 +83,15 @@ services:
       - traefik.http.services.baraholka.loadbalancer.server.port=8000
     networks:
       - proxy
+      - internal
 
 networks:
   proxy:
     external: true
     name: ${TRAEFIK_NETWORK:?Set TRAEFIK_NETWORK in .env}
+  internal:
+    internal: true
 
 volumes:
+  postgres_data:
   uploads_data:
