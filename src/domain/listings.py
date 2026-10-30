@@ -25,11 +25,16 @@ class ListingCondition(str, Enum):
     USED = "USED"
 
 
+MAX_LISTING_PRICE = 100_000_000.0
+
+
 class ListingSortOrder(str, Enum):
-    """Порядок сортування каталогу за датою публікації (FR-008)."""
+    """Порядок сортування каталогу: за датою публікації або за ціною (FR-008)."""
 
     NEWEST = "newest"
     OLDEST = "oldest"
+    PRICE_ASC = "price_asc"
+    PRICE_DESC = "price_desc"
 
 
 def utc_now() -> datetime:

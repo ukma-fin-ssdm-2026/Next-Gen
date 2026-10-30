@@ -125,6 +125,7 @@ paths:
         schema:
           anyOf:
           - type: number
+            maximum: 100000000.0
             minimum: 0
           - type: 'null'
           description: Мінімальна ціна
@@ -136,6 +137,7 @@ paths:
         schema:
           anyOf:
           - type: number
+            maximum: 100000000.0
             minimum: 0
           - type: 'null'
           description: Максимальна ціна
@@ -146,9 +148,11 @@ paths:
         required: false
         schema:
           $ref: '#/components/schemas/ListingSortOrder'
-          description: 'Порядок за датою публікації: newest або oldest'
+          description: 'Порядок: newest, oldest (за датою публікації), price_asc або
+            price_desc (за ціною)'
           default: newest
-        description: 'Порядок за датою публікації: newest або oldest'
+        description: 'Порядок: newest, oldest (за датою публікації), price_asc або
+          price_desc (за ціною)'
       responses:
         '200':
           description: Successful Response
@@ -1228,6 +1232,43 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/auth/blocked-status:
+    get:
+      tags:
+      - Authentication
+      summary: Факт і причина блокування поточного користувача
+      description: 'Доступний без валідної сесії: розпізнає користувача за сесією
+        або за коротким квитком, який видає /auth/callback для заблокованого входу.
+        Повертає лише дані про блокування самого користувача (FR-013).'
+      operationId: blocked_status_api_v1_auth_blocked_status_get
+      parameters:
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      - name: baraholka_blocked_notice
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Короткий квиток для показу причини блокування
+          title: Baraholka Blocked Notice
+        description: Короткий квиток для показу причини блокування
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockedStatusResponse'
   /api/v1/auth/logout:
     post:
       tags:
@@ -1671,6 +1712,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/admin/users/blocked:
+    get:
+      tags:
+      - Moderation
+      summary: Список заблокованих користувачів (адміністратор)
+      description: Усі заблоковані користувачі з причиною та часом блокування; дані
+        зберігаються в БД і переживають перезапуск (FR-013).
+      operationId: list_blocked_users_api_v1_admin_users_blocked_get
+      parameters:
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BlockedUserResponse'
+                title: Response List Blocked Users Api V1 Admin Users Blocked Get
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає ролі ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/users/{user_id}:
     get:
       tags:
@@ -1728,6 +1810,525 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/listings/{listing_id}/complaints:
+    post:
+      tags:
+      - Complaints
+      summary: Поскаржитися на оголошення
+      description: Автентифікований користувач скаржиться на активне чуже оголошення
+        (FR-016). Одна скарга від користувача на оголошення; скарги бачить адміністратор.
+      operationId: submit_complaint_api_v1_listings__listing_id__complaints_post
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Listing Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplaintCreateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplaintResponse'
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає прав
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Конфлікт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/complaints:
+    get:
+      tags:
+      - Complaints
+      summary: Список скарг на оголошення (адміністратор)
+      description: Нові скарги першими; необов'язковий фільтр `status`.
+      operationId: list_complaints_api_v1_admin_complaints_get
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/ComplaintStatus'
+          - type: 'null'
+          title: Status
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ComplaintResponse'
+                title: Response List Complaints Api V1 Admin Complaints Get
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає прав
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Конфлікт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/complaints/{complaint_id}/resolve:
+    post:
+      tags:
+      - Complaints
+      summary: Розглянути скаргу (адміністратор)
+      description: Позначає скаргу RESOLVED або DISMISSED із необов'язковою приміткою.
+      operationId: resolve_complaint_api_v1_admin_complaints__complaint_id__resolve_post
+      parameters:
+      - name: complaint_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Complaint Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplaintResolveRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplaintResponse'
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає прав
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Конфлікт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/feedback:
+    post:
+      tags:
+      - Feedback
+      summary: Написати адміністрації
+      description: Автентифікований користувач надсилає звернення з темою і текстом.
+      operationId: submit_feedback_api_v1_feedback_post
+      parameters:
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackCreateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackResponse'
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає прав
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Конфлікт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/feedback:
+    get:
+      tags:
+      - Feedback
+      summary: Звернення до адміністрації (адміністратор)
+      description: Нові звернення першими; необов'язковий фільтр `status`.
+      operationId: list_feedback_api_v1_admin_feedback_get
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/FeedbackStatus'
+          - type: 'null'
+          title: Status
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FeedbackResponse'
+                title: Response List Feedback Api V1 Admin Feedback Get
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає прав
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Конфлікт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/feedback/{feedback_id}/resolve:
+    post:
+      tags:
+      - Feedback
+      summary: Позначити звернення опрацьованим (адміністратор)
+      description: Переводить звернення зі стану NEW у RESOLVED.
+      operationId: resolve_feedback_api_v1_admin_feedback__feedback_id__resolve_post
+      parameters:
+      - name: feedback_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Feedback Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackResponse'
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає прав
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Конфлікт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/logs/users:
+    get:
+      tags:
+      - Activity log
+      summary: Журнал дій користувачів (адміністратор)
+      description: Створення, зміна і зняття оголошень, обране, скарги, звернення.
+      operationId: user_log_api_v1_admin_logs_users_get
+      parameters:
+      - name: skip
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Skip
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          minimum: 1
+          default: 100
+          title: Limit
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LogEntryResponse'
+                title: Response User Log Api V1 Admin Logs Users Get
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає ролі ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/logs/admins:
+    get:
+      tags:
+      - Activity log
+      summary: Журнал дій адміністраторів (адміністратор)
+      description: Блокування, розблокування, зняття оголошень, розгляд категорій,
+        скарг і звернень.
+      operationId: admin_log_api_v1_admin_logs_admins_get
+      parameters:
+      - name: skip
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Skip
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          minimum: 1
+          default: 100
+          title: Limit
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LogEntryResponse'
+                title: Response Admin Log Api V1 Admin Logs Admins Get
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає ролі ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /health:
     get:
       tags:
@@ -1758,6 +2359,57 @@ components:
       - detail
       title: ApiValidationErrorResponse
       description: Узгоджений формат 422 для доменних і Pydantic-помилок API.
+    BlockedStatusResponse:
+      properties:
+        is_blocked:
+          type: boolean
+          title: Is Blocked
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        blocked_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Blocked At
+      type: object
+      required:
+      - is_blocked
+      title: BlockedStatusResponse
+      description: 'Інформація для заблокованого користувача: факт і причина блокування.'
+    BlockedUserResponse:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        email:
+          type: string
+          title: Email
+        display_name:
+          type: string
+          title: Display Name
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        blocked_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Blocked At
+      type: object
+      required:
+      - user_id
+      - email
+      - display_name
+      title: BlockedUserResponse
+      description: Заблокований користувач із причиною для адмін-панелі.
     Body_put_avatar_api_v1_auth_me_avatar_put:
       properties:
         file:
@@ -1992,6 +2644,121 @@ components:
       type: object
       title: CategoryUpdateRequest
       description: Схема часткового оновлення категорії (адміністративна дія, FR-012).
+    ComplaintCreateRequest:
+      properties:
+        reason:
+          $ref: '#/components/schemas/ComplaintReason'
+          description: Причина скарги
+        details:
+          type: string
+          maxLength: 500
+          title: Details
+          description: Опис проблеми; обов'язковий для причини OTHER
+          default: ''
+          examples:
+          - Фото не відповідають товару
+      type: object
+      required:
+      - reason
+      title: ComplaintCreateRequest
+      description: 'Тіло скарги: причина і необов''язковий опис; автор береться із
+        сесії.'
+    ComplaintReason:
+      type: string
+      enum:
+      - SPAM
+      - FRAUD
+      - PROHIBITED
+      - INAPPROPRIATE
+      - WRONG_CATEGORY
+      - OTHER
+      title: ComplaintReason
+      description: Причини скарги, які може обрати користувач.
+    ComplaintResolveRequest:
+      properties:
+        status:
+          $ref: '#/components/schemas/ComplaintStatus'
+          description: RESOLVED або DISMISSED
+        note:
+          type: string
+          maxLength: 500
+          title: Note
+          description: Необов'язкова примітка адміністратора
+          default: ''
+      type: object
+      required:
+      - status
+      title: ComplaintResolveRequest
+      description: Розгляд скарги адміністратором.
+    ComplaintResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        listing_id:
+          type: string
+          format: uuid
+          title: Listing Id
+        listing_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Listing Title
+        listing_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Listing Status
+        reporter_id:
+          type: string
+          format: uuid
+          title: Reporter Id
+        reporter_email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reporter Email
+        reason:
+          $ref: '#/components/schemas/ComplaintReason'
+        details:
+          type: string
+          title: Details
+        status:
+          $ref: '#/components/schemas/ComplaintStatus'
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        resolved_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Resolved At
+        resolution_note:
+          type: string
+          title: Resolution Note
+          default: ''
+      type: object
+      required:
+      - id
+      - listing_id
+      - reporter_id
+      - reason
+      - details
+      - status
+      - created_at
+      title: ComplaintResponse
+      description: Скарга для адмін-панелі.
+    ComplaintStatus:
+      type: string
+      enum:
+      - OPEN
+      - RESOLVED
+      - DISMISSED
+      title: ComplaintStatus
+      description: 'Життєвий цикл скарги: нова, опрацьована або відхилена.'
     CurrentUserResponse:
       properties:
         user_id:
@@ -2058,6 +2825,78 @@ components:
       - listing_id
       - created_at
       title: FavoriteResponse
+    FeedbackCreateRequest:
+      properties:
+        subject:
+          type: string
+          maxLength: 120
+          minLength: 3
+          title: Subject
+          description: Тема звернення
+          examples:
+          - Пропозиція щодо категорій
+        message:
+          type: string
+          maxLength: 2000
+          minLength: 10
+          title: Message
+          description: Текст звернення
+      type: object
+      required:
+      - subject
+      - message
+      title: FeedbackCreateRequest
+      description: Тіло звернення до адміністрації; автор береться із сесії.
+    FeedbackResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        user_email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Email
+        subject:
+          type: string
+          title: Subject
+        message:
+          type: string
+          title: Message
+        status:
+          $ref: '#/components/schemas/FeedbackStatus'
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        resolved_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Resolved At
+      type: object
+      required:
+      - id
+      - user_id
+      - subject
+      - message
+      - status
+      - created_at
+      title: FeedbackResponse
+      description: Звернення для користувача та адмін-панелі.
+    FeedbackStatus:
+      type: string
+      enum:
+      - NEW
+      - RESOLVED
+      title: FeedbackStatus
+      description: 'Стан звернення: нове чи опрацьоване адміністратором.'
     HTTPValidationError:
       properties:
         detail:
@@ -2128,9 +2967,10 @@ components:
           - Худі в ідеальному стані, розмір M.
         price:
           type: number
+          maximum: 100000000.0
           minimum: 0.0
           title: Price
-          description: Ціна в гривнях
+          description: Ціна в гривнях (від 0 до 100 000 000)
           examples:
           - 150.0
         category_id:
@@ -2260,9 +3100,10 @@ components:
           - Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
         price:
           type: number
+          maximum: 100000000.0
           minimum: 0.0
           title: Price
-          description: Ціна в гривнях
+          description: Ціна в гривнях (від 0 до 100 000 000)
           examples:
           - 150.0
         category_id:
@@ -2341,9 +3182,10 @@ components:
           - Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
         price:
           type: number
+          maximum: 100000000.0
           minimum: 0.0
           title: Price
-          description: Ціна в гривнях
+          description: Ціна в гривнях (від 0 до 100 000 000)
           examples:
           - 150.0
         category_id:
@@ -2419,8 +3261,11 @@ components:
       enum:
       - newest
       - oldest
+      - price_asc
+      - price_desc
       title: ListingSortOrder
-      description: Порядок сортування каталогу за датою публікації (FR-008).
+      description: 'Порядок сортування каталогу: за датою публікації або за ціною
+        (FR-008).'
     ListingUpdate:
       properties:
         title:
@@ -2439,6 +3284,7 @@ components:
         price:
           anyOf:
           - type: number
+            maximum: 100000000.0
             minimum: 0.0
           - type: 'null'
           title: Price
@@ -2464,6 +3310,57 @@ components:
           title: Image Urls
       type: object
       title: ListingUpdate
+    LogEntryResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        actor_id:
+          type: string
+          format: uuid
+          title: Actor Id
+        actor_email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Actor Email
+        action_type:
+          type: string
+          title: Action Type
+        listing_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Listing Id
+        target_user_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Target User Id
+        target_email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Target Email
+        details:
+          type: string
+          title: Details
+          default: ''
+      type: object
+      required:
+      - id
+      - created_at
+      - actor_id
+      - action_type
+      title: LogEntryResponse
+      description: Рядок журналу дій користувачів або адміністраторів.
     ModerationActionResponse:
       properties:
         id:

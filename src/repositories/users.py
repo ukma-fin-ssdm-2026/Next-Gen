@@ -23,6 +23,9 @@ class UserRepository(Protocol):
         """Шукає користувача за нормалізованою (casefold) адресою email."""
         ...
 
+    def list_blocked(self) -> list[User]:
+        """Повертає заблокованих користувачів від найновішого блокування."""
+
     def save(self, user: User) -> User:
         """Створює або оновлює локальний профіль."""
         ...
@@ -53,6 +56,11 @@ class InMemoryUserRepository:
             if user.email.casefold() == wanted:
                 return user
         return None
+
+    def list_blocked(self) -> list[User]:
+        blocked = [user for user in self._users_by_id.values() if user.is_blocked]
+        blocked.sort(key=lambda user: user.blocked_at or user.created_at, reverse=True)
+        return blocked
 
     def save(self, user: User) -> User:
         self._users_by_identity[(user.tenant_id, user.entra_object_id)] = user

@@ -103,7 +103,7 @@ export interface ListingFilters {
   categoryId: string;
   minPrice: string;
   maxPrice: string;
-  sort: "newest" | "oldest";
+  sort: "newest" | "oldest" | "price_asc" | "price_desc";
 }
 
 export interface ModerationAction {
@@ -114,4 +114,61 @@ export interface ModerationAction {
   action_type: "WITHDRAW_LISTING" | "BLOCK_USER" | "UNBLOCK_USER";
   reason: string;
   created_at: string;
+}
+
+export type ComplaintReason = "SPAM" | "FRAUD" | "PROHIBITED" | "INAPPROPRIATE" | "WRONG_CATEGORY" | "OTHER";
+export type ComplaintStatus = "OPEN" | "RESOLVED" | "DISMISSED";
+
+export interface Complaint {
+  id: string;
+  listing_id: string;
+  listing_title: string | null;
+  listing_status: string | null;
+  reporter_id: string;
+  reporter_email: string | null;
+  reason: ComplaintReason;
+  details: string;
+  status: ComplaintStatus;
+  created_at: string;
+  resolved_at: string | null;
+  resolution_note: string;
+}
+
+export type FeedbackStatus = "NEW" | "RESOLVED";
+
+export interface FeedbackMessage {
+  id: string;
+  user_id: string;
+  user_email: string | null;
+  subject: string;
+  message: string;
+  status: FeedbackStatus;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface LogEntry {
+  id: string;
+  created_at: string;
+  actor_id: string;
+  actor_email: string | null;
+  action_type: string;
+  listing_id: string | null;
+  target_user_id: string | null;
+  target_email: string | null;
+  details: string;
+}
+
+export interface BlockedUser {
+  user_id: string;
+  email: string;
+  display_name: string;
+  reason: string | null;
+  blocked_at: string | null;
+}
+
+export interface BlockedStatus {
+  is_blocked: boolean;
+  reason: string | null;
+  blocked_at: string | null;
 }

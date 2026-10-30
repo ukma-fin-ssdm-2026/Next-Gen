@@ -1,9 +1,12 @@
 """Конвертори між ORM-рядками (Row) та доменними dataclass-об'єктами."""
 
 from src.db.models import (
+    ActivityEventRow,
     CategoryRow,
     CategorySuggestionRow,
+    ComplaintRow,
     FavoriteRow,
+    FeedbackRow,
     ListingImageRow,
     ListingRow,
     ModerationActionRow,
@@ -12,6 +15,9 @@ from src.db.models import (
 from src.domain.categories import Category
 from src.domain.category_suggestions import CategorySuggestion, CategorySuggestionStatus
 from src.domain.favorites import Favorite
+from src.domain.activity import ActivityEvent, ActivityType
+from src.domain.complaints import Complaint, ComplaintReason, ComplaintStatus
+from src.domain.feedback import Feedback, FeedbackStatus
 from src.domain.listings import (
     Listing,
     ListingCondition,
@@ -39,6 +45,8 @@ def user_row_to_domain(row: UserRow) -> User:
         avatar_url=row.avatar_url,
         contact=row.contact,
         created_at=row.created_at,
+        block_reason=row.block_reason,
+        blocked_at=row.blocked_at,
     )
 
 
@@ -55,6 +63,8 @@ def user_domain_to_row(user: User, existing: UserRow | None = None) -> UserRow:
     row.avatar_url = user.avatar_url
     row.contact = user.contact
     row.created_at = user.created_at
+    row.block_reason = user.block_reason
+    row.blocked_at = user.blocked_at
     return row
 
 
@@ -256,3 +266,92 @@ def moderation_domain_to_row(
     row.suggestion_id = action.suggestion_id
     row.created_at = action.created_at
     return row
+
+
+# ---------------------------------------------------------------------------
+# Complaint / Feedback / ActivityEvent
+# ---------------------------------------------------------------------------
+
+
+def complaint_row_to_domain(row: ComplaintRow) -> Complaint:
+    return Complaint(
+        id=row.complaint_id,
+        listing_id=row.listing_id,
+        reporter_id=row.reporter_id,
+        reason=ComplaintReason(row.reason),
+        details=row.details,
+        status=ComplaintStatus(row.status),
+        created_at=row.created_at,
+        resolved_by=row.resolved_by,
+        resolved_at=row.resolved_at,
+        resolution_note=row.resolution_note,
+    )
+
+
+def complaint_domain_to_row(
+    c: Complaint, existing: ComplaintRow | None = None
+) -> ComplaintRow:
+    row = existing or ComplaintRow()
+    row.complaint_id = c.id
+    row.listing_id = c.listing_id
+    row.reporter_id = c.reporter_id
+    row.reason = c.reason.value
+    row.details = c.details
+    row.status = c.status.value
+    row.created_at = c.created_at
+    row.resolved_by = c.resolved_by
+    row.resolved_at = c.resolved_at
+    row.resolution_note = c.resolution_note
+    return row
+
+
+def feedback_row_to_domain(row: FeedbackRow) -> Feedback:
+    return Feedback(
+        id=row.feedback_id,
+        user_id=row.user_id,
+        subject=row.subject,
+        message=row.message,
+        status=FeedbackStatus(row.status),
+        created_at=row.created_at,
+        resolved_by=row.resolved_by,
+        resolved_at=row.resolved_at,
+    )
+
+
+def feedback_domain_to_row(
+    f: Feedback, existing: FeedbackRow | None = None
+) -> FeedbackRow:
+    row = existing or FeedbackRow()
+    row.feedback_id = f.id
+    row.user_id = f.user_id
+    row.subject = f.subject
+    row.message = f.message
+    row.status = f.status.value
+    row.created_at = f.created_at
+    row.resolved_by = f.resolved_by
+    row.resolved_at = f.resolved_at
+    return row
+
+
+def activity_row_to_domain(row: ActivityEventRow) -> ActivityEvent:
+    return ActivityEvent(
+        id=row.event_id,
+        actor_id=row.actor_id,
+        actor_role=UserRole(row.actor_role),
+        action_type=ActivityType(row.action_type),
+        listing_id=row.listing_id,
+        details=row.details,
+        created_at=row.created_at,
+    )
+
+
+def activity_domain_to_row(e: ActivityEvent) -> ActivityEventRow:
+    return ActivityEventRow(
+        event_id=e.id,
+        actor_id=e.actor_id,
+        actor_role=e.actor_role.value,
+        action_type=e.action_type.value,
+        listing_id=e.listing_id,
+        details=e.details,
+        created_at=e.created_at,
+    )

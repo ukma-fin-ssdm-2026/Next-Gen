@@ -367,7 +367,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .filters-toggle { display: inline-flex; grid-row: 1; grid-column: 2; align-self: end; height: 43px; }
   .filters-extra { display: none; grid-row: 2; grid-column: 1 / -1; grid-template-columns: 1fr 1fr; }
   .filters.is-open .filters-extra { display: grid; }
-  .filters.is-open .filters-extra label:first-child, .filters.is-open .filters-extra label:last-child { grid-column: span 2; }
+  .filters.is-open .filters-extra > :first-child, .filters.is-open .filters-extra > :last-child { grid-column: span 2; }
   .filter-submit { grid-row: 3; grid-column: 1 / -1; }
   .filter-clear { display: none; }
   .filters.is-open .filter-clear { display: inline-flex; grid-row: 4; grid-column: 1 / -1; }
@@ -422,6 +422,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .form-block input:focus, .form-block select:focus, .form-block textarea:focus { background: #fff; }
 .form-block select { appearance: none; -webkit-appearance: none; padding-right: 36px; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none' stroke='%230f5b45' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m1 1.5 5 5 5-5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 13px center; }
 .form-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.form-row-category { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.form-row-category > .field { grid-column: 1 / -1; }
 .photo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .photo-tile, .photo-add { position: relative; aspect-ratio: 1; border-radius: 13px; overflow: hidden; }
 .photo-tile:first-child { grid-column: 1 / -1; aspect-ratio: 16 / 10; }
@@ -450,7 +452,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .create-page .page-heading h1 { font-size: 32px; }
   .create-form { margin-top: 24px; }
   .form-block { padding: 17px; }
-  .form-row, .contact-block { grid-template-columns: minmax(0, 1fr); }
+  .form-row, .form-row-category, .contact-block { grid-template-columns: minmax(0, 1fr); }
   .contact-block .form-block-head { padding: 0 0 14px; border: 0; border-bottom: 1px solid var(--line); }
   .photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .photo-tile:first-child { grid-column: 1 / -1; aspect-ratio: 16 / 10; }
@@ -649,3 +651,38 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .category-select-popover li.is-active { background: #eef3ee; }
 .category-select-popover li[aria-selected="true"] { font-weight: 800; }
 .category-select-empty { color: var(--muted); cursor: default; }
+
+.steps article { display: flex; flex-direction: column; align-items: flex-start; }
+.steps article > .step-button { margin-top: auto; align-self: flex-start; }
+.steps article > p { margin-bottom: 18px; }
+.step-done { margin-top: auto; padding: 10px 14px; border-radius: 10px; background: #eef3ee; color: var(--green); font-size: 13px; font-weight: 800; }
+
+/* Скарги, звернення, журнали, вікно блокування (FR-013, FR-016..018) */
+.dialog-card { position: relative; width: min(480px, 100%); display: grid; gap: 14px; padding: 28px; background: var(--surface); border-radius: 18px; box-shadow: var(--shadow); max-height: calc(100vh - 48px); overflow-y: auto; }
+.dialog-card h2 { margin: 0; font-size: 20px; }
+.dialog-card label { display: grid; gap: 7px; min-width: 0; }
+.dialog-card label > span { color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+.dialog-card label > span small { margin-left: 5px; font-size: 9px; letter-spacing: 0; text-transform: none; }
+.dialog-card select, .dialog-card textarea { width: 100%; border: 1px solid #d8ddd7; border-radius: 11px; background: #fcfcfa; font: inherit; color: var(--ink); padding: 0 13px; }
+.dialog-card select { height: 46px; }
+.dialog-card textarea { padding: 12px 13px; resize: vertical; line-height: 1.55; }
+.report-button { color: var(--muted); font-size: 13px; }
+.admin-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
+.admin-tabs button { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 9px 15px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.admin-tabs button.is-active { background: var(--green); border-color: var(--green); color: #fff; }
+.admin-log a { font-size: 13px; }
+.log-details { margin: 0; color: #4f5a54; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
+.status-chip { padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; background: #e7ece8; color: var(--muted); white-space: nowrap; }
+.status-chip.status-open { background: #f9e9c8; color: #7a5300; }
+.status-chip.status-resolved { background: #e4f1df; color: var(--green-dark); }
+.status-chip.status-dismissed { background: #ececec; color: #555; }
+.form-success { margin: 0; padding: 12px 14px; border-radius: 12px; background: #e4f1df; color: var(--green-dark); font-weight: 700; font-size: 14px; }
+.blocked-backdrop { z-index: 200; }
+.blocked-card { text-align: center; justify-items: center; }
+.blocked-icon { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 50%; background: #f5dfdc; color: var(--danger); font-size: 28px; font-weight: 900; }
+.blocked-details { margin: 0; width: 100%; display: grid; gap: 10px; text-align: left; }
+.blocked-details > div { padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
+.blocked-details dt { color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+.blocked-details dd { margin: 4px 0 0; overflow-wrap: anywhere; line-height: 1.5; }
+footer a { color: inherit; text-decoration: underline; }
+.form-block-head > .button { margin-left: auto; flex: none; }

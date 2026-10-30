@@ -39,6 +39,15 @@ class PostgresUserRepository:
         row = self._session.execute(stmt).scalar_one_or_none()
         return user_row_to_domain(row) if row else None
 
+    def list_blocked(self) -> list[User]:
+        """Повертає заблокованих користувачів від найновішого блокування."""
+        stmt = (
+            select(UserRow)
+            .where(UserRow.is_blocked.is_(True))
+            .order_by(UserRow.blocked_at.desc().nulls_last())
+        )
+        return [user_row_to_domain(r) for r in self._session.execute(stmt).scalars()]
+
     def save(self, user: User) -> User:
         """Створює або оновлює локальний профіль.
 

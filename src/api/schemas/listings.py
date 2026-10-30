@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from src.domain.listings import ListingCondition
+from src.domain.listings import MAX_LISTING_PRICE, ListingCondition
 
 
 class UploadedImageResponse(BaseModel):
@@ -84,7 +84,13 @@ class ListingBase(BaseModel):
         description="Необов'язковий опис товару; може бути порожнім",
         examples=["Худі в ідеальному стані, розмір M. Продаю, бо не ношу."],
     )
-    price: float = Field(..., ge=0, description="Ціна в гривнях", examples=[150.0])
+    price: float = Field(
+        ...,
+        ge=0,
+        le=MAX_LISTING_PRICE,
+        description="Ціна в гривнях (від 0 до 100 000 000)",
+        examples=[150.0],
+    )
     category_id: UUID = Field(
         ...,
         description="ID категорії",
@@ -145,7 +151,7 @@ class ListingCreate(ListingBase):
 class ListingUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=3, max_length=100)
     description: Optional[str] = Field(None, max_length=2000)
-    price: Optional[float] = Field(None, ge=0)
+    price: Optional[float] = Field(None, ge=0, le=MAX_LISTING_PRICE)
     contact: Optional[str] = Field(None, min_length=3, max_length=200)
     condition: Optional[ListingCondition] = Field(None)
     image_urls: Optional[list[str]] = Field(None, min_length=1, max_length=10)
