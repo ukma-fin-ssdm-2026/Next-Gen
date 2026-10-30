@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { Pagination, usePaged } from "./Pagination";
 import {
   ApiError,
   getActivityLog,
@@ -33,6 +34,8 @@ export function formatDateTime(iso: string | null): string {
 }
 
 /** Контакт адміністрації «Барахолки» для заблокованих користувачів. */
+const PANEL_PAGE_SIZE = 10;
+const LOG_PAGE_SIZE = 25;
 const ADMIN_CONTACT_URL = "https://t.me/sol_artem";
 
 export const COMPLAINT_REASON_LABELS: Record<ComplaintReason, string> = {
@@ -211,6 +214,7 @@ function useList<T>(loader: () => Promise<T[]>, onError: (message: string) => vo
 export function ComplaintsPanel({ onError, onNotice }: { onError: (m: string) => void; onNotice: (m: string) => void }) {
   const loader = useCallback(() => getComplaints(), []);
   const { items, reload } = useList<Complaint>(loader, onError);
+  const paged = usePaged(items ?? [], PANEL_PAGE_SIZE);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -233,7 +237,7 @@ export function ComplaintsPanel({ onError, onNotice }: { onError: (m: string) =>
       {items === null && <p className="form-hint">Завантажуємо…</p>}
       {items?.length === 0 && <p className="form-hint">Скарг поки немає.</p>}
       <ul className="suggestion-list">
-        {items?.map((item) => (
+        {paged.slice.map((item) => (
           <li key={item.id}>
             <div className="suggestion-head">
               <strong><Link to={`/listings/${item.listing_id}`}>{item.listing_title ?? "Оголошення"}</Link></strong>
@@ -253,6 +257,7 @@ export function ComplaintsPanel({ onError, onNotice }: { onError: (m: string) =>
           </li>
         ))}
       </ul>
+      <Pagination page={paged.page} totalPages={paged.totalPages} onChange={paged.setPage} />
     </section>
   );
 }
@@ -260,6 +265,7 @@ export function ComplaintsPanel({ onError, onNotice }: { onError: (m: string) =>
 export function FeedbackAdminPanel({ onError, onNotice }: { onError: (m: string) => void; onNotice: (m: string) => void }) {
   const loader = useCallback(() => getFeedback(), []);
   const { items, reload } = useList<FeedbackMessage>(loader, onError);
+  const paged = usePaged(items ?? [], PANEL_PAGE_SIZE);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function resolve(item: FeedbackMessage) {
@@ -281,7 +287,7 @@ export function FeedbackAdminPanel({ onError, onNotice }: { onError: (m: string)
       {items === null && <p className="form-hint">Завантажуємо…</p>}
       {items?.length === 0 && <p className="form-hint">Звернень поки немає.</p>}
       <ul className="suggestion-list">
-        {items?.map((item) => (
+        {paged.slice.map((item) => (
           <li key={item.id}>
             <div className="suggestion-head">
               <strong>{item.subject}</strong>
@@ -295,6 +301,7 @@ export function FeedbackAdminPanel({ onError, onNotice }: { onError: (m: string)
           </li>
         ))}
       </ul>
+      <Pagination page={paged.page} totalPages={paged.totalPages} onChange={paged.setPage} />
     </section>
   );
 }
@@ -302,6 +309,7 @@ export function FeedbackAdminPanel({ onError, onNotice }: { onError: (m: string)
 export function BlockedUsersPanel({ onError, onNotice }: { onError: (m: string) => void; onNotice: (m: string) => void }) {
   const loader = useCallback(() => getBlockedUsers(), []);
   const { items, reload } = useList<BlockedUser>(loader, onError);
+  const paged = usePaged(items ?? [], PANEL_PAGE_SIZE);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -326,7 +334,7 @@ export function BlockedUsersPanel({ onError, onNotice }: { onError: (m: string) 
       {items === null && <p className="form-hint">Завантажуємо…</p>}
       {items?.length === 0 && <p className="form-hint">Заблокованих користувачів немає.</p>}
       <ul className="suggestion-list">
-        {items?.map((item) => (
+        {paged.slice.map((item) => (
           <li key={item.user_id}>
             <div className="suggestion-head"><strong>{item.display_name}</strong><span className="form-hint">{formatDateTime(item.blocked_at)}</span></div>
             <p className="form-hint">{item.email}</p>
@@ -336,6 +344,7 @@ export function BlockedUsersPanel({ onError, onNotice }: { onError: (m: string) 
           </li>
         ))}
       </ul>
+      <Pagination page={paged.page} totalPages={paged.totalPages} onChange={paged.setPage} />
     </section>
   );
 }
@@ -391,6 +400,8 @@ export function ActivityLogPanel({ kind, onError }: { kind: "users" | "admins"; 
     });
   }, [items, group, query]);
 
+  const paged = usePaged(filtered, LOG_PAGE_SIZE, `${kind}|${group}|${query}`);
+
   return (
     <section className="form-block">
       <div className="form-block-head">
@@ -409,7 +420,7 @@ export function ActivityLogPanel({ kind, onError }: { kind: "users" | "admins"; 
       {items !== null && items.length > 0 && filtered.length === 0 && <p className="form-hint">За цим пошуком і фільтром нічого не знайдено.</p>}
       {items !== null && items.length > 0 && <p className="form-hint">Показано {filtered.length} із {items.length}</p>}
       <ul className="admin-log">
-        {filtered.map((entry) => (
+        {paged.slice.map((entry) => (
           <li key={entry.id}>
             <strong>{ACTION_LABELS[entry.action_type] ?? entry.action_type}<span className="log-group-chip">{LOG_GROUPS.find((item) => item.id === groupOf(entry.action_type))?.label ?? "Інше"}</span></strong>
             <span>{entry.actor_email ?? entry.actor_id}{entry.target_email ? ` → ${entry.target_email}` : ""}</span>
@@ -419,6 +430,7 @@ export function ActivityLogPanel({ kind, onError }: { kind: "users" | "admins"; 
           </li>
         ))}
       </ul>
+      <Pagination page={paged.page} totalPages={paged.totalPages} onChange={paged.setPage} />
     </section>
   );
 }

@@ -51,6 +51,7 @@ import {
   FeedbackAdminPanel,
   FeedbackPage,
 } from "./SupportPanels";
+import { Pagination, usePaged } from "./Pagination";
 import type {
   BlockedStatus,
   Category,
@@ -72,6 +73,7 @@ const INITIAL_FILTERS: ListingFilters = {
 };
 
 const CATALOG_PAGE_SIZE = 24;
+const LOCAL_PAGE_SIZE = 12;
 const STATS_SAMPLE_SIZE = 100;
 const MAX_PHOTOS = 10;
 
@@ -1125,14 +1127,15 @@ function MyListingsPage({ user, authChecked, categoryNames, onError, onNotice }:
     }
   }
 
-  if (!authChecked) return <PageLoading />;
-  if (!user) return <SignInRequired title="Ваші оголошення доступні після входу" />;
-
   const isLive = (item: Listing) => item.status === "ACTIVE" || item.status === "RESERVED";
   const sorted = [...items].sort((a, b) => b.created_at.localeCompare(a.created_at));
   const live = sorted.filter(isLive);
   const archive = sorted.filter((item) => !isLive(item));
-  const shown = tab === "active" ? live : archive;
+  const pagedMine = usePaged(tab === "active" ? live : archive, LOCAL_PAGE_SIZE, tab);
+  const shown = pagedMine.slice;
+
+  if (!authChecked) return <PageLoading />;
+  if (!user) return <SignInRequired title="Ваші оголошення доступні після входу" />;
 
   return (
     <main className="page-main">
@@ -1152,6 +1155,7 @@ function MyListingsPage({ user, authChecked, categoryNames, onError, onNotice }:
           {tab === "active" && <Link className="button button-primary" to="/listings/new">Створити оголошення</Link>}
         </div>
       ) : (
+        <>
         <div className="listing-grid">
           {shown.map((listing) => (
             <article className="listing-card my-card" key={listing.id}>
@@ -1184,6 +1188,8 @@ function MyListingsPage({ user, authChecked, categoryNames, onError, onNotice }:
             </article>
           ))}
         </div>
+        <Pagination page={pagedMine.page} totalPages={pagedMine.totalPages} onChange={pagedMine.setPage} />
+        </>
       )}
     </main>
   );
@@ -1268,9 +1274,9 @@ function HomePage({ categories, categoryNames, user, favorites, busy, onFavorite
 
   useEffect(() => {
     getListings(INITIAL_FILTERS, STATS_SAMPLE_SIZE)
-      .then((items) => {
+      .then(({ items, total }) => {
         setRecentListings(items.slice(0, 4));
-        setTotalListings(items.length);
+        setTotalListings(total);
         const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
         const fresh = items.filter((item) => Date.parse(item.created_at) >= dayAgo).length;
         if (fresh > 0) setFreshStat({ value: String(fresh), label: freshLabel(fresh) });
@@ -1378,9 +1384,10 @@ function CatalogPage({ categories, categoryNames, favorites, busy, onFavorite, o
   const [draftFilters, setDraftFilters] = useState<ListingFilters>(filters);
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState(0);
   const requestGeneration = useRef(0);
+  const page = Math.max(1, Math.floor(Number(searchParams.get("page"))) || 1);
+  const totalPages = Math.max(1, Math.ceil(total / CATALOG_PAGE_SIZE));
 
   useEffect(() => setDraftFilters(filters), [filters]);
   useEffect(() => {
@@ -1396,12 +1403,11 @@ function CatalogPage({ categories, categoryNames, favorites, busy, onFavorite, o
     requestGeneration.current = generation;
     let cancelled = false;
     setLoading(true);
-    setLoadingMore(false);
-    getListings(filters, CATALOG_PAGE_SIZE)
-      .then((items) => {
+    getListings(filters, CATALOG_PAGE_SIZE, (page - 1) * CATALOG_PAGE_SIZE)
+      .then(({ items, total: found }) => {
         if (cancelled || generation !== requestGeneration.current) return;
         setListings(items);
-        setHasMore(items.length === CATALOG_PAGE_SIZE);
+        setTotal(found);
       })
       .catch((requestError) => {
         if (!cancelled && generation === requestGeneration.current) {
@@ -1419,29 +1425,13 @@ function CatalogPage({ categories, categoryNames, favorites, busy, onFavorite, o
         requestGeneration.current += 1;
       }
     };
-  }, [filters, onError]);
+  }, [filters, page, onError]);
 
-  async function loadMore() {
-    const generation = requestGeneration.current;
-    setLoadingMore(true);
-    try {
-      const items = await getListings(
-        filters,
-        CATALOG_PAGE_SIZE,
-        listings.length,
-      );
-      if (generation !== requestGeneration.current) return;
-      setListings((current) => [...current, ...items]);
-      setHasMore(items.length === CATALOG_PAGE_SIZE);
-    } catch (requestError) {
-      if (generation === requestGeneration.current) {
-        onError(errorText(requestError));
-      }
-    } finally {
-      if (generation === requestGeneration.current) {
-        setLoadingMore(false);
-      }
-    }
+  function goToPage(next: number) {
+    const params = new URLSearchParams(searchParams);
+    if (next <= 1) params.delete("page"); else params.set("page", String(next));
+    setSearchParams(params);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function applyFilters(event: FormEvent) {
@@ -1460,24 +1450,13 @@ function CatalogPage({ categories, categoryNames, favorites, busy, onFavorite, o
         <h1 className="sr-only">Оголошення</h1>
         <FilterForm filters={draftFilters} categories={categories} onChange={setDraftFilters} onSubmit={applyFilters} onClear={clearFilters} />
         <div className="results-bar">
-          <span className="result-count">{loading ? "Завантаження…" : `Показано: ${listings.length}`}</span>
-          {searchParams.toString() !== "" && <button className="link-button" type="button" onClick={clearFilters}>Скинути фільтри</button>}
+          <span className="result-count">{loading ? "Завантаження…" : `Знайдено: ${total}`}</span>
+          {[...searchParams.keys()].some((key) => key !== "page") && <button className="link-button" type="button" onClick={clearFilters}>Скинути фільтри</button>}
         </div>
         {loading ? <ListingSkeleton /> : listings.length ? (
           <ListingGrid listings={listings} categoryNames={categoryNames} favorites={favorites} busy={busy} onFavorite={onFavorite} />
         ) : <EmptyState onClear={clearFilters} />}
-        {hasMore && !loading && (
-          <div className="load-more-row">
-            <button
-              className="button button-light"
-              type="button"
-              disabled={loadingMore}
-              onClick={() => void loadMore()}
-            >
-              {loadingMore ? "Завантажуємо…" : "Показати ще"}
-            </button>
-          </div>
-        )}
+        {!loading && <Pagination page={page} totalPages={totalPages} onChange={goToPage} />}
       </section>
     </main>
   );
@@ -1752,6 +1731,7 @@ function FavoritesPage({ user, authChecked, categoryNames, favorites, busy, onFa
   onError: (message: string) => void;
 }) {
   const [items, setItems] = useState<Listing[]>([]);
+  const pagedFavorites = usePaged(items, LOCAL_PAGE_SIZE);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     if (!user) { setItems([]); setLoading(false); return; }
@@ -1764,7 +1744,10 @@ function FavoritesPage({ user, authChecked, categoryNames, favorites, busy, onFa
     <main className="page-main">
       <PageHeading eyebrow="Ваш особистий список" title="Обране" />
       {loading ? <ListingSkeleton /> : items.length ? (
-        <ListingGrid listings={items} categoryNames={categoryNames} favorites={favorites} busy={busy} onFavorite={onFavorite} />
+        <>
+          <ListingGrid listings={pagedFavorites.slice} categoryNames={categoryNames} favorites={favorites} busy={busy} onFavorite={onFavorite} />
+          <Pagination page={pagedFavorites.page} totalPages={pagedFavorites.totalPages} onChange={pagedFavorites.setPage} />
+        </>
       ) : (
         <div className="empty-state"><span>♡</span><h3>Тут поки порожньо</h3><p>Зберігайте цікаві оголошення, щоб не загубити їх.</p><Link className="button button-primary" to="/listings">Перейти до каталогу</Link></div>
       )}

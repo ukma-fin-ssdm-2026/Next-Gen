@@ -704,3 +704,9 @@ footer a { color: inherit; text-decoration: underline; }
   .form-actions.sticky-actions .button { flex: 1; justify-content: center; }
 }
 .blocked-card .form-actions { flex-wrap: wrap; justify-content: center; }
+.pagination { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; padding-top: 26px; }
+.page-btn { min-width: 38px; height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
+.page-btn:hover:not(:disabled) { border-color: currentColor; }
+.page-btn.is-active { background: var(--ink, #111); color: #fff; border-color: transparent; }
+.page-btn:disabled { opacity: 0.4; cursor: default; }
+.page-gap { padding: 0 4px; color: var(--muted); }

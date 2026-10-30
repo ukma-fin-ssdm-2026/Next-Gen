@@ -508,3 +508,20 @@ def test_listing_accepts_for_parts_condition(
         "/api/v1/listings", json={**listing_payload, "condition": "BROKEN"}
     )
     assert bad.status_code == 422
+
+
+def test_catalog_returns_total_count_header(
+    client: TestClient, login_as, listing_payload
+) -> None:
+    """[TP-003] [FR-006] Каталог повертає X-Total-Count для нумерованих сторінок."""
+    login_as()
+    for index in range(3):
+        client.post(
+            "/api/v1/listings", json={**listing_payload, "title": f"Річ {index}"}
+        )
+    total = len(client.get("/api/v1/listings?limit=100").json())
+    page = client.get("/api/v1/listings?limit=2&skip=2")
+    assert page.status_code == 200
+    assert len(page.json()) == min(2, total - 2)
+    assert page.headers["X-Total-Count"] == str(total)
+    assert total >= 3
