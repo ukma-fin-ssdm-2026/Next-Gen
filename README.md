@@ -5,7 +5,7 @@
 Студентський маркетплейс оголошень НаУКМА. Командний проєкт з курсу SSDM 2026.
 
 - **Розгорнута версія:** <https://baraholka-naukma.duckdns.org>
-- **Документація API (Swagger UI):** <https://ukma-fin-ssdm-2026.github.io/Next-Gen/docs/api/>
+- **Документація API (Swagger UI):** <https://ukma-fin-ssdm-2026.github.io/Next-Gen>
 
 ## Про проєкт
 
