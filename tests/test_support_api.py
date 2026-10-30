@@ -177,6 +177,26 @@ def test_activity_logs_separate_users_and_admins(
     assert admins[0]["listing_id"] == listing_id
 
 
+def test_admin_resolutions_go_to_admin_log_only(
+    client: TestClient, login_as, listing_payload
+) -> None:
+    """[TP-033] [FR-018] Розгляд скарги — в журналі адмінів, а не користувачів."""
+    login_as()
+    listing_id = _create_listing(client, listing_payload)
+    login_as()
+    complaint_id = _complain(client, listing_id).json()["id"]
+    login_as(role=UserRole.ADMIN)
+    client.post(
+        f"/api/v1/admin/complaints/{complaint_id}/resolve",
+        json={"status": "RESOLVED"},
+    )
+    users = {e["action_type"] for e in client.get("/api/v1/admin/logs/users").json()}
+    admins = {e["action_type"] for e in client.get("/api/v1/admin/logs/admins").json()}
+    assert "COMPLAINT_RESOLVED" in admins
+    assert "COMPLAINT_RESOLVED" not in users
+    assert "COMPLAINT_SUBMITTED" in users
+
+
 def test_activity_log_records_listing_withdraw_and_pagination(
     client: TestClient, login_as, listing_payload
 ) -> None:

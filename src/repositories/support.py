@@ -3,10 +3,9 @@
 from typing import Protocol
 from uuid import UUID
 
-from src.domain.activity import ActivityEvent
+from src.domain.activity import ADMIN_ONLY_ACTIVITY_TYPES, ActivityEvent
 from src.domain.complaints import Complaint, ComplaintStatus
 from src.domain.feedback import Feedback, FeedbackStatus
-from src.domain.users import UserRole
 
 
 class ComplaintRepository(Protocol):
@@ -40,8 +39,8 @@ class ActivityRepository(Protocol):
 
     def add(self, event: ActivityEvent) -> ActivityEvent: ...
 
-    def list_by_role(
-        self, role: UserRole, skip: int = 0, limit: int = 100
+    def list_events(
+        self, admin_only: bool, skip: int = 0, limit: int = 100
     ) -> list[ActivityEvent]: ...
 
 
@@ -105,9 +104,13 @@ class InMemoryActivityRepository:
         self._items.append(event)
         return event
 
-    def list_by_role(
-        self, role: UserRole, skip: int = 0, limit: int = 100
+    def list_events(
+        self, admin_only: bool, skip: int = 0, limit: int = 100
     ) -> list[ActivityEvent]:
-        items = [item for item in self._items if item.actor_role == role]
+        items = [
+            item
+            for item in self._items
+            if (item.action_type in ADMIN_ONLY_ACTIVITY_TYPES) == admin_only
+        ]
         items.sort(key=lambda item: item.created_at, reverse=True)
         return items[skip : skip + limit]

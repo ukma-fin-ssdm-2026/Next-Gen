@@ -62,6 +62,21 @@ class ListingService:
         sort_order: ListingSortOrder = ListingSortOrder.NEWEST,
     ) -> list[Listing]:
         """Каталог активних оголошень (FR-006, FR-007, FR-008)."""
+        return self.search_public(
+            skip, limit, category_id, query, min_price, max_price, sort_order
+        )[0]
+
+    def search_public(
+        self,
+        skip: int = 0,
+        limit: int = 10,
+        category_id: UUID | None = None,
+        query: str | None = None,
+        min_price: float | None = None,
+        max_price: float | None = None,
+        sort_order: ListingSortOrder = ListingSortOrder.NEWEST,
+    ) -> tuple[list[Listing], int]:
+        """Сторінка каталогу та загальна кількість знайдених оголошень."""
         self._validate_price_range(min_price, max_price)
         items = [item for item in self._repository.list_all() if item.is_public()]
         if category_id is not None:
@@ -89,7 +104,7 @@ class ListingService:
                 key=lambda item: item.created_at,
                 reverse=sort_order != ListingSortOrder.OLDEST,
             )
-        return items[skip : skip + limit]
+        return items[skip : skip + limit], len(items)
 
     def list_owner_listings(
         self, actor_id: UUID | CurrentUser | User | None

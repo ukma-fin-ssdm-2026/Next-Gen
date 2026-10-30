@@ -27,6 +27,17 @@ class ActivityType(str, Enum):
     PROFILE_UPDATED = "PROFILE_UPDATED"
 
 
+# Дії, які можуть виконувати лише адміністратори: вони потрапляють у журнал
+# адміністраторів, усе інше (доступне кожному користувачу) — у журнал користувачів.
+ADMIN_ONLY_ACTIVITY_TYPES = frozenset(
+    {
+        ActivityType.COMPLAINT_RESOLVED,
+        ActivityType.COMPLAINT_DISMISSED,
+        ActivityType.FEEDBACK_RESOLVED,
+    }
+)
+
+
 @dataclass(frozen=True)
 class ActivityEvent:
     """Незмінний запис: хто, з якою роллю, що зробив і над яким оголошенням."""

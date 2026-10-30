@@ -14,10 +14,9 @@ from src.db.converters import (
     feedback_row_to_domain,
 )
 from src.db.models import ActivityEventRow, ComplaintRow, FeedbackRow
-from src.domain.activity import ActivityEvent
+from src.domain.activity import ADMIN_ONLY_ACTIVITY_TYPES, ActivityEvent
 from src.domain.complaints import Complaint, ComplaintStatus
 from src.domain.feedback import Feedback, FeedbackStatus
-from src.domain.users import UserRole
 
 
 class PostgresComplaintRepository:
@@ -106,12 +105,14 @@ class PostgresActivityRepository:
         self._session.flush()
         return activity_row_to_domain(row)
 
-    def list_by_role(
-        self, role: UserRole, skip: int = 0, limit: int = 100
+    def list_events(
+        self, admin_only: bool, skip: int = 0, limit: int = 100
     ) -> list[ActivityEvent]:
+        admin_types = [t.value for t in ADMIN_ONLY_ACTIVITY_TYPES]
+        in_admin = ActivityEventRow.action_type.in_(admin_types)
         stmt = (
             select(ActivityEventRow)
-            .where(ActivityEventRow.actor_role == role.value)
+            .where(in_admin if admin_only else ~in_admin)
             .order_by(ActivityEventRow.created_at.desc())
             .offset(skip)
             .limit(limit)

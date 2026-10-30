@@ -10,6 +10,7 @@ from fastapi import (
     File,
     HTTPException,
     Query,
+    Response,
     UploadFile,
     status,
 )
@@ -271,7 +272,8 @@ def upload_listing_images(
     description=(
         "Повертає активні оголошення з пагінацією, фільтром категорії, діапазоном "
         "ціни та текстовим пошуком (FR-006, FR-007, FR-008). "
-        "Контакт продавця не включається."
+        "Контакт продавця не включається. Загальна кількість знайдених "
+        "оголошень повертається в заголовку X-Total-Count."
     ),
     responses={
         422: {
@@ -281,6 +283,7 @@ def upload_listing_images(
     },
 )
 def get_listings(
+    response: Response,
     skip: int = Query(0, ge=0, description="Кількість пропущених записів"),
     limit: int = Query(10, ge=1, le=100, description="Розмір сторінки"),
     category_id: Optional[UUID] = Query(None, description="Фільтр за категорією"),
@@ -307,7 +310,7 @@ def get_listings(
     service: ListingService = Depends(get_listing_service),
 ) -> list[ListingPublicResponse]:
     try:
-        items = service.list_public(
+        items, total = service.search_public(
             skip=skip,
             limit=limit,
             category_id=category_id,
@@ -318,6 +321,7 @@ def get_listings(
         )
     except InvalidPriceRangeError as exc:
         _raise_domain(exc)
+    response.headers["X-Total-Count"] = str(total)
     return [_to_public(item) for item in items]
 
 

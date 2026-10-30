@@ -64,6 +64,10 @@ function assertApiPath(path: string): void {
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  return (await apiFetchWithHeaders<T>(path, init)).data;
+}
+
+async function apiFetchWithHeaders<T>(path: string, init?: RequestInit): Promise<{ data: T; headers: Headers }> {
   assertApiPath(path);
   const response = await fetch(`${API_ROOT}${path}`, {
     credentials: "include",
@@ -87,8 +91,8 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
 
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+  if (response.status === 204) return { data: undefined as T, headers: response.headers };
+  return { data: (await response.json()) as T, headers: response.headers };
 }
 
 export function loginUrl(returnTo?: string): string {
@@ -109,11 +113,16 @@ export function getCategories(): Promise<Category[]> {
   return apiFetch<Category[]>("/categories");
 }
 
-export function getListings(
+export interface ListingPage {
+  items: Listing[];
+  total: number;
+}
+
+export async function getListings(
   filters: ListingFilters,
   limit = 100,
   skip = 0,
-): Promise<Listing[]> {
+): Promise<ListingPage> {
   // Кожне значення екрануємо encodeURIComponent: фільтри походять з відповідей
   // сервера (id категорій) і введення користувача (q, ціна).
   const pairs: Array<[string, string]> = [
@@ -126,7 +135,9 @@ export function getListings(
   if (filters.minPrice) pairs.push(["min_price", filters.minPrice]);
   if (filters.maxPrice) pairs.push(["max_price", filters.maxPrice]);
   const query = pairs.map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join("&");
-  return apiFetch<Listing[]>(`/listings?${query}`);
+  const response = await apiFetchWithHeaders<Listing[]>(`/listings?${query}`);
+  const total = Number(response.headers.get("X-Total-Count"));
+  return { items: response.data, total: Number.isFinite(total) && total >= 0 ? total : response.data.length };
 }
 
 export function getListing(listingId: string): Promise<Listing> {

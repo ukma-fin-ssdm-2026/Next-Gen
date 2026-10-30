@@ -61,19 +61,19 @@ class ActivityLogService:
     def user_log(
         self, admin: CurrentUser | None, skip: int = 0, limit: int = 100
     ) -> list[LogEntry]:
-        """Дії звичайних користувачів від найновіших."""
+        """Дії, доступні всім користувачам (без суто адміністративних)."""
         self._require_admin(admin)
-        events = self._events.list_by_role(UserRole.USER, skip, limit)
+        events = self._events.list_events(False, skip, limit)
         return [self._event_entry(event) for event in events]
 
     def admin_log(
         self, admin: CurrentUser | None, skip: int = 0, limit: int = 100
     ) -> list[LogEntry]:
-        """Дії адміністраторів: журнал модерації разом із подіями адмінів."""
+        """Дії, доступні лише адміністраторам: модерація, скарги, звернення."""
         self._require_admin(admin)
         entries = [
             self._event_entry(event)
-            for event in self._events.list_by_role(UserRole.ADMIN, 0, skip + limit)
+            for event in self._events.list_events(True, 0, skip + limit)
         ]
         for action in self._moderation.list_all():
             entries.append(
