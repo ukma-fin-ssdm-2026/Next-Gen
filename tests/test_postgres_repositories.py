@@ -141,7 +141,7 @@ class TestPostgresUserRepository:
     """CRUD-операції адаптера UserRepository (ADR-002, FR-001)."""
 
     def test_save_and_get_by_id(self, user_repo):
-        """[FR-001] [TP-AUTH-01] Зберігає та знаходить користувача за ID."""
+        """[FR-001] [TP-029] [TP-AUTH-01] Зберігає та знаходить користувача за ID."""
         user = make_user()
         saved = user_repo.save(user)
         found = user_repo.get_by_id(saved.user_id)
@@ -719,7 +719,7 @@ def test_all_tables_created(engine):
 
 
 def test_alembic_migration_round_trip():
-    """[FR-001] [FR-002] Alembic round-trip: upgrade → downgrade → upgrade.
+    """[FR-001] [FR-002] [TP-030] Alembic round-trip: upgrade → downgrade → upgrade.
 
     Перевіряє, що міграція може бути застосована до порожньої бази,
     повністю відкочена та повторно застосована без помилок.
