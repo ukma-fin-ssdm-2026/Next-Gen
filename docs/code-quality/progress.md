@@ -108,7 +108,16 @@ src/
 
 Зауваження щодо підтримуваності враховано в коді. Перевірку власника, яка на
 Лаб 5 існувала лише на рівні прототипу, станом на 31.10.2026 закрито серверною
-сесією Entra ID. Відкритим лишається лише контракт пагінації з `total`.
+сесією Entra ID. Відкритими лишаються контракт пагінації з `total` і інтерфейс адміністратора для керування категоріями (FR-012), див. розділ 7.
+
+---
+
+## 6. План розширення до Лабораторної роботи 6 — виконано
+
+Кроки, заплановані після Лаб 5, станом на 31.10.2026 виконано:
+1. **Персистентність даних (ADR-002):** реалізовано PostgreSQL-адаптери репозиторіїв на SQLAlchemy 2.x (`src/repositories/postgres_*.py`) і міграції Alembic (`alembic/`); у CI окремий job перевіряє `upgrade → downgrade → upgrade`.
+2. **Інтеграція автентифікації (ADR-003):** реалізовано OIDC Authorization Code Flow через MSAL, callback, перевірки tenant/domain і серверні сесії; вхід через реальний tenant перевірено на розгорнутому стенді. Усі захищені маршрути використовують `CurrentUser`, `X-Actor-Id` прибрано.
+3. **Модуль користувачів:** локальний `User` з `tenant_id`, `entra_object_id`, перевіреним `@ukma.edu.ua`, роллю (`ADMIN_EMAILS`) і блокуванням; без локального `password_hash`.
 
 ---
 
@@ -128,18 +137,9 @@ src/
 | Скарги, звернення до адміністрації, журнали дій користувачів і адміністраторів (FR-016–FR-018) | Реалізовано | `src/api/routers/complaints.py`, `feedback.py`, `activity.py` |
 | React-інтерфейс; FastAPI віддає зібраний `frontend/dist` | Реалізовано | `frontend/`, `docs/frontend/frontend.md` |
 | Розгортання: Docker Compose + Traefik (HTTPS) | Розгорнуто: <https://baraholka-naukma.duckdns.org> | `Dockerfile`, `compose.yaml` |
-| CI: Black, Flake8, Bandit, pip-audit, фронтенд (test + build), pytest з порогом покриття 85% (зараз ~92%), OpenAPI, PostgreSQL job з Alembic round-trip | Працює на кожен push і PR | `.github/workflows/ci.yml` |
+| CI: Black, Flake8, Bandit, pip-audit, фронтенд (test + build), pytest з порогом покриття 85% (зараз ~92%), OpenAPI, PostgreSQL job з Alembic round-trip | Запускається на push у `main` і на PR у `main` | `.github/workflows/ci.yml` |
 
 Відомі обмеження: серверні сесії зберігаються в пам'яті процесу, тож після перезапуску API потрібен повторний вхід; `GET /api/v1/listings` повертає список без поля `total`.
-
----
-
-## 6. План розширення до Лабораторної роботи 6 (Мінімальний робочий прототип) — виконано
-
-До наступної лабораторної роботи заплановано наступні інженерні кроки:
-1. **Персистентність даних (ADR-002):** Реалізація класу `PostgresListingRepository` на базі SQLAlchemy 2.0 / asyncpg та налаштування міграцій структури бази даних через Alembic.
-2. **Інтеграція автентифікації (ADR-003):** OIDC Authorization Code Flow, backend callback, перевірки MSAL, tenant/domain і server-side session реалізовані. Залишається додати exact redirect URI в Entra ID, вручну перевірити реальний tenant login і замінити `X-Actor-Id` у listing endpoints на `CurrentUser`.
-3. **Модуль користувачів (`UserService`):** Додавання `User` з `tenant_id`, `entra_object_id`, перевіреним `@ukma.edu.ua`, локальною роллю та статусом блокування; без локального `password_hash`.
 
 ---
 
