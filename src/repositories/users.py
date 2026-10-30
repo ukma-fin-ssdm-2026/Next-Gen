@@ -19,6 +19,10 @@ class UserRepository(Protocol):
         """Шукає локального користувача для перевірки сесії."""
         ...
 
+    def get_by_email(self, email: str) -> User | None:
+        """Шукає користувача за нормалізованою (casefold) адресою email."""
+        ...
+
     def save(self, user: User) -> User:
         """Створює або оновлює локальний профіль."""
         ...
@@ -42,6 +46,13 @@ class InMemoryUserRepository:
 
     def get_by_id(self, user_id: UUID) -> User | None:
         return self._users_by_id.get(user_id)
+
+    def get_by_email(self, email: str) -> User | None:
+        wanted = email.strip().casefold()
+        for user in self._users_by_id.values():
+            if user.email.casefold() == wanted:
+                return user
+        return None
 
     def save(self, user: User) -> User:
         self._users_by_identity[(user.tenant_id, user.entra_object_id)] = user

@@ -50,6 +50,24 @@ class UserModerationRequest(BaseModel):
     )
 
 
+class UserEmailModerationRequest(UserModerationRequest):
+    """Блокування за email: адреса передається в тілі, а не в URL (PII)."""
+
+    email: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            to_lower=True,
+            max_length=254,
+            pattern=r"(?i)^[^@\s]+@ukma\.edu\.ua$",
+        ),
+    ] = Field(
+        ...,
+        description="Адреса користувача @ukma.edu.ua, який уже входив на сайт",
+        examples=["student@ukma.edu.ua"],
+    )
+
+
 class ModerationActionResponse(BaseModel):
     id: UUID = Field(..., description="Ідентифікатор запису модерації")
     listing_id: UUID | None = Field(None, description="Зняте оголошення")

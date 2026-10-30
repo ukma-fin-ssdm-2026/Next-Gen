@@ -48,6 +48,38 @@ class UserModerationService:
         """Розблоковує користувача й фіксує дію в журналі."""
         return self._set_blocked(moderator, user_id, reason, blocked=False)
 
+    def block_user_by_email(
+        self, moderator: CurrentUser | None, email: str, reason: str
+    ) -> ModerationAction:
+        """Блокує користувача за email (лише для тих, хто вже входив на сайт)."""
+        user_id = self._resolve_email(moderator, email)
+        return self._set_blocked(moderator, user_id, reason, blocked=True)
+
+    def unblock_user_by_email(
+        self, moderator: CurrentUser | None, email: str, reason: str
+    ) -> ModerationAction:
+        """Розблоковує користувача за email."""
+        user_id = self._resolve_email(moderator, email)
+        return self._set_blocked(moderator, user_id, reason, blocked=False)
+
+    def _resolve_email(self, moderator: CurrentUser | None, email: str) -> UUID:
+        """Спершу перевіряє права, щоб не-адміністратор не міг перебирати адреси."""
+        self._require_admin(moderator)
+        user = self._users.get_by_email(email)
+        if user is None:
+            raise UserNotFoundError(
+                "Користувача з такою адресою не знайдено: він ще не входив на сайт"
+            )
+        return user.user_id
+
+    @staticmethod
+    def _require_admin(moderator: CurrentUser | None) -> CurrentUser:
+        if moderator is None:
+            raise ListingUnauthorizedError("Потрібна ідентифікація користувача")
+        if moderator.role != UserRole.ADMIN:
+            raise ModerationForbiddenError("Дія дозволена лише адміністраторам")
+        return moderator
+
     def _set_blocked(
         self,
         moderator: CurrentUser | None,
@@ -56,10 +88,7 @@ class UserModerationService:
         *,
         blocked: bool,
     ) -> ModerationAction:
-        if moderator is None:
-            raise ListingUnauthorizedError("Потрібна ідентифікація користувача")
-        if moderator.role != UserRole.ADMIN:
-            raise ModerationForbiddenError("Дія дозволена лише адміністраторам")
+        moderator = self._require_admin(moderator)
         action = ModerationAction(
             moderator_id=moderator.user_id,
             action_type=(

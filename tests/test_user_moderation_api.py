@@ -114,3 +114,56 @@ def test_block_error_codes(client: TestClient, login_as) -> None:
     assert (
         client.post(block_url("not-a-uuid"), json={"reason": REASON}).status_code == 422
     )
+
+
+BY_EMAIL_BLOCK = "/api/v1/admin/users/block-by-email"
+BY_EMAIL_UNBLOCK = "/api/v1/admin/users/unblock-by-email"
+
+
+def test_admin_blocks_and_unblocks_by_email(
+    client: TestClient, login_as, moderation_actions
+) -> None:
+    """[TP-027] [FR-013] ADMIN блокує й розблоковує за email із тіла запиту."""
+    target = login_as()
+    login_as(role=UserRole.ADMIN)
+    blocked = client.post(
+        BY_EMAIL_BLOCK, json={"email": f" {target.email.upper()} ", "reason": REASON}
+    )
+    assert blocked.status_code == 201
+    assert blocked.json()["target_user_id"] == str(target.user_id)
+    assert blocked.json()["action_type"] == "BLOCK_USER"
+    unblocked = client.post(
+        BY_EMAIL_UNBLOCK, json={"email": target.email, "reason": REASON}
+    )
+    assert unblocked.status_code == 201
+    assert unblocked.json()["action_type"] == "UNBLOCK_USER"
+    assert len(moderation_actions.list_by_user(target.user_id)) == 2
+
+
+def test_by_email_errors_and_access(client: TestClient, login_as) -> None:
+    """[TP-027] [FR-013] [SEC-001]
+    401/403 за правами, 404 невідома адреса, 409 повтор, 422 стороння адреса,
+    адреса не потрапляє в URL чи тіло помилки.
+    """
+    target = login_as()
+    client.cookies.clear()
+    body = {"email": target.email, "reason": REASON}
+    assert client.post(BY_EMAIL_BLOCK, json=body).status_code == 401
+    login_as()
+    assert client.post(BY_EMAIL_BLOCK, json=body).status_code == 403
+    login_as(role=UserRole.ADMIN)
+    unknown = client.post(
+        BY_EMAIL_BLOCK, json={"email": "nobody@ukma.edu.ua", "reason": REASON}
+    )
+    assert unknown.status_code == 404
+    assert "nobody@ukma.edu.ua" not in unknown.text
+    assert client.post(BY_EMAIL_BLOCK, json=body).status_code == 201
+    assert client.post(BY_EMAIL_BLOCK, json=body).status_code == 409
+    for bad in ("x@gmail.com", "not-an-email", "", "a b@ukma.edu.ua"):
+        assert (
+            client.post(
+                BY_EMAIL_BLOCK, json={"email": bad, "reason": REASON}
+            ).status_code
+            == 422
+        )
+    assert client.post(BY_EMAIL_BLOCK, json={"reason": REASON}).status_code == 422

@@ -1545,6 +1545,132 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/admin/users/block-by-email:
+    post:
+      tags:
+      - Moderation
+      summary: Заблокувати користувача за email (модерація)
+      description: Те саме, що блокування за ID (FR-013), але користувач знаходиться
+        за адресою @ukma.edu.ua з тіла запиту. Працює лише для тих, хто вже входив
+        на сайт; для невідомої адреси повертається 404. Адреса не потрапляє в URL.
+      operationId: block_user_by_email_api_v1_admin_users_block_by_email_post
+      parameters:
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserEmailModerationRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModerationActionResponse'
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає ролі ADMIN або обліковий запис заблоковано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Користувача не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 'Дія неможлива: самоблокування, адміністратор або вже в такому
+            стані'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+  /api/v1/admin/users/unblock-by-email:
+    post:
+      tags:
+      - Moderation
+      summary: Розблокувати користувача за email (модерація)
+      description: Знімає блокування за адресою @ukma.edu.ua з тіла запиту (FR-013).
+      operationId: unblock_user_by_email_api_v1_admin_users_unblock_by_email_post
+      parameters:
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserEmailModerationRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModerationActionResponse'
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає ролі ADMIN або обліковий запис заблоковано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Користувача не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 'Дія неможлива: самоблокування, адміністратор або вже в такому
+            стані'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
   /api/v1/users/{user_id}:
     get:
       tags:
@@ -2541,6 +2667,30 @@ components:
       - thumbnail_url
       - display_order
       title: UploadedImageResponse
+    UserEmailModerationRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 5
+          title: Reason
+          description: Причина дії, від 5 до 500 символів після обрізання пробілів
+          examples:
+          - Систематичне розміщення заборонених товарів
+        email:
+          type: string
+          maxLength: 254
+          pattern: (?i)^[^@\s]+@ukma\.edu\.ua$
+          title: Email
+          description: Адреса користувача @ukma.edu.ua, який уже входив на сайт
+          examples:
+          - student@ukma.edu.ua
+      type: object
+      required:
+      - reason
+      - email
+      title: UserEmailModerationRequest
+      description: 'Блокування за email: адреса передається в тілі, а не в URL (PII).'
     UserModerationRequest:
       properties:
         reason:
