@@ -42,6 +42,17 @@ class PostgresListingRepository:
         row = self._session.get(ListingRow, listing_id)
         return listing_row_to_domain(row) if row else None
 
+    def get_for_update(self, listing_id: UUID) -> Listing | None:
+        """SELECT ... FOR UPDATE: рядок заблоковано до commit/rollback сесії.
+
+        Паралельна транзакція, що теж читає цей рядок через get_for_update,
+        чекає завершення першої і бачить уже змінений статус (FR-011).
+        """
+        row = self._session.get(
+            ListingRow, listing_id, with_for_update=True, populate_existing=True
+        )
+        return listing_row_to_domain(row) if row else None
+
     def add(self, listing: Listing) -> Listing:
         """Зберігає оголошення і його зображення в одній транзакції."""
         row = listing_domain_to_row(listing)

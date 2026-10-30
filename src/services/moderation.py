@@ -1,5 +1,6 @@
 """Moderation Service: адміністративне зняття оголошення (FR-011)."""
 
+from contextlib import suppress
 from dataclasses import replace
 from datetime import timedelta
 from uuid import UUID
@@ -34,9 +35,9 @@ class ModerationService:
         self._listings = listings
         self._favorites = favorites
         self._actions = actions
-        # Серіалізує перевірку статусу і зміну стану: два одночасні запити
-        # не можуть обидва побачити ACTIVE і створити два записи аудиту.
-        # З PostgreSQL це замінюється транзакцією з SELECT ... FOR UPDATE.
+        # Серіалізує перевірку статусу і зміну стану в межах процесу (in-memory).
+        # У PostgreSQL репозиторій створюється на кожен запит, тому між запитами
+        # серіалізацію дає рядкове блокування get_for_update (SELECT ... FOR UPDATE).
         self._lock = get_listing_mutation_lock(listings)
 
     def withdraw_listing(
@@ -45,8 +46,10 @@ class ModerationService:
         """Знімає активне оголошення з причиною і фіксує дію в журналі.
 
         Зміна статусу, очищення обраного та запис аудиту виконуються як одна
-        операція: якщо будь-який крок падає, попередній стан відновлюється.
-        Оголошення фізично не видаляється (FR-011).
+        операція. У PostgreSQL усі кроки йдуть в одній транзакції сесії запиту
+        (`get_db_session`: commit наприкінці, rollback при винятку), а рядок
+        оголошення заблоковано через get_for_update. In-memory сховище
+        додатково відкочується компенсацією. Фізичного видалення немає (FR-011).
         """
         if moderator is None:
             raise ListingUnauthorizedError("Потрібна ідентифікація користувача")
@@ -66,7 +69,7 @@ class ModerationService:
         self, action: ModerationAction, listing_id: UUID
     ) -> ModerationAction:
         """Перевірка статусу і всі зміни стану під одним замком."""
-        original = self._listings.get(listing_id)
+        original = self._listings.get_for_update(listing_id)
         if original is None or not original.is_public():
             raise ListingNotFoundError("Оголошення не знайдено або вже зняте")
 
@@ -81,7 +84,11 @@ class ModerationService:
             self._favorites.delete_by_listing(listing_id)
             self._actions.add(action)
         except Exception:
-            self._rollback(original, saved_favorites)
+            # Компенсація потрібна in-memory сховищу. У PostgreSQL сесія після
+            # помилки flush може бути вже непридатна — тоді стан відкотить
+            # rollback транзакції, а назовні має піти саме початковий виняток.
+            with suppress(Exception):
+                self._rollback(original, saved_favorites)
             raise
         return action
 
