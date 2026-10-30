@@ -1929,8 +1929,8 @@ const ADMIN_TABS: { id: AdminTab; label: string; path: string }[] = [
   { id: "complaints", label: "Скарги", path: "/admin/complaints" },
   { id: "feedback", label: "Звернення", path: "/admin/feedback" },
   { id: "blocked", label: "Заблоковані", path: "/admin/blocked" },
-  { id: "user-log", label: "Журнал користувачів", path: "/admin/logs/users" },
-  { id: "admin-log", label: "Журнал адмінів", path: "/admin/logs/admins" },
+  { id: "user-log", label: "Журнал", path: "/admin/logs/users" },
+  { id: "admin-log", label: "Адмін-дії", path: "/admin/logs/admins" },
 ];
 
 function adminTabFromPath(pathname: string): AdminTab | null {
@@ -2013,7 +2013,7 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
         </section>
         {history.length > 0 && (
           <section className="form-block">
-            <div className="form-block-head"><div><h2>Дії в цій сесії</h2><p className="form-hint">Повний журнал — у вкладці «Журнал адмінів».</p></div></div>
+            <div className="form-block-head"><div><h2>Дії в цій сесії</h2><p className="form-hint">Повний журнал — у вкладці «Адмін-дії».</p></div></div>
             <ul className="admin-log">
               {history.map((item) => (
                 <li key={item.id}>

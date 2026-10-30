@@ -1312,10 +1312,10 @@ class TestPostgresSupportRepositories:
         assert feedback.list_all(FeedbackStatus.NEW) == []
         assert len(feedback.list_all(FeedbackStatus.RESOLVED)) == 1
 
-    def test_activity_events_are_split_by_role(
+    def test_activity_events_are_split_by_action_kind(
         self, session, user_repo, category_repo, listing_repo
     ):
-        """[FR-018] [TP-034] Події фільтруються за роллю виконавця, нові першими."""
+        """[FR-018] [TP-034] Події діляться на адміністративні й загальні."""
         from src.domain.activity import ActivityEvent, ActivityType
 
         seller, reporter, listing, _, _, activity = self._setup(
@@ -1337,12 +1337,12 @@ class TestPostgresSupportRepositories:
                 action_type=ActivityType.COMPLAINT_RESOLVED,
             )
         )
-        users = activity.list_by_role(UserRole.USER)
-        admins = activity.list_by_role(UserRole.ADMIN)
+        users = activity.list_events(False)
+        admins = activity.list_events(True)
         assert [e.action_type for e in users] == [ActivityType.LISTING_CREATED]
         assert users[0].details == "Назва"
         assert [e.action_type for e in admins] == [ActivityType.COMPLAINT_RESOLVED]
-        assert activity.list_by_role(UserRole.USER, skip=1) == []
+        assert activity.list_events(False, skip=1) == []
 
     def test_blocked_users_keep_reason(self, user_repo):
         """[FR-013] [TP-034] Причина й час блокування зберігаються у БД."""

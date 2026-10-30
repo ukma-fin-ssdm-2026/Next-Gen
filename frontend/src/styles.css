@@ -703,3 +703,4 @@ footer a { color: inherit; text-decoration: underline; }
   }
   .form-actions.sticky-actions .button { flex: 1; justify-content: center; }
 }
+.blocked-card .form-actions { flex-wrap: wrap; justify-content: center; }

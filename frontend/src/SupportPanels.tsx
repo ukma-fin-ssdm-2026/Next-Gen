@@ -32,6 +32,9 @@ export function formatDateTime(iso: string | null): string {
   return new Date(iso).toLocaleString("uk-UA", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+/** Контакт адміністрації «Барахолки» для заблокованих користувачів. */
+const ADMIN_CONTACT_URL = "https://t.me/sol_artem";
+
 export const COMPLAINT_REASON_LABELS: Record<ComplaintReason, string> = {
   SPAM: "Спам або реклама",
   FRAUD: "Підозра на шахрайство",
@@ -182,8 +185,10 @@ export function BlockedNotice({ status, busy, onLogout }: { status: BlockedStatu
           <div><dt>Причина</dt><dd id="blocked-reason">{status.reason?.trim() || "Причину не вказано"}</dd></div>
           <div><dt>Дата блокування</dt><dd>{formatDateTime(status.blocked_at)}</dd></div>
         </dl>
-        <p className="form-hint">Якщо вважаєте, що це помилка, зверніться до адміністрації НаУКМА.</p>
-        <div className="form-actions"><button className="button button-primary" type="button" disabled={busy} onClick={onLogout}>Зрозуміло, вийти</button></div>
+        <p className="form-hint">Якщо вважаєте, що це помилка, зверніться до адміністрації «Барахолки».</p>
+        <div className="form-actions">
+          <a className="button button-light" href={ADMIN_CONTACT_URL} target="_blank" rel="noopener noreferrer">Написати адміністрації в Telegram</a>
+          <button className="button button-primary" type="button" disabled={busy} onClick={onLogout}>Зрозуміло, вийти</button></div>
       </div>
     </div>
   );
@@ -366,7 +371,7 @@ export function ActivityLogPanel({ kind, onError }: { kind: "users" | "admins"; 
     if (value) next.set(key, value); else next.delete(key);
     setParams(next, { replace: true });
   };
-  const title = kind === "users" ? "Журнал дій користувачів" : "Журнал дій адміністраторів";
+  const title = kind === "users" ? "Журнал дій" : "Журнал адмін-дій";
 
   const visibleGroups = useMemo(() => {
     const present = new Set((items ?? []).map((entry) => groupOf(entry.action_type)));
@@ -389,7 +394,7 @@ export function ActivityLogPanel({ kind, onError }: { kind: "users" | "admins"; 
   return (
     <section className="form-block">
       <div className="form-block-head">
-        <div><h2>{title}</h2><p className="form-hint">Останні 500 записів, нові першими. Записи незмінні.</p></div>
+        <div><h2>{title}</h2><p className="form-hint">{kind === "users" ? "Дії, доступні всім користувачам: оголошення, обране, скарги, звернення. " : "Дії, доступні лише адміністраторам: блокування, модерація, розгляд скарг і звернень. "}Останні 500 записів, нові першими. Записи незмінні.</p></div>
         <button className="button button-light" type="button" onClick={() => void reload()}>Оновити</button>
       </div>
       <div className="log-toolbar">
