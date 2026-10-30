@@ -22,10 +22,13 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    """Пріоритет: DATABASE_URL зі змінних середовища → alembic.ini."""
-    url = os.getenv("DATABASE_URL", "").strip()
+    """Пріоритет: явний sqlalchemy.url у Config → DATABASE_URL → alembic.ini."""
+    # Якщо sqlalchemy.url явно передано програмно (наприклад, у тестах з SQLite):
+    url = config.get_main_option("sqlalchemy.url", "").strip()
+    if not url or "driver://user:pass@localhost/dbname" in url:
+        url = os.getenv("DATABASE_URL", "").strip()
     if not url:
-        url = config.get_main_option("sqlalchemy.url", "")
+        url = config.get_main_option("sqlalchemy.url", "").strip()
     if not url:
         raise RuntimeError(
             "DATABASE_URL не задано. Виставте змінну середовища або "

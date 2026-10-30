@@ -718,7 +718,7 @@ def test_all_tables_created(engine):
     assert not missing, f"Відсутні таблиці: {missing}"
 
 
-def test_alembic_migration_round_trip():
+def test_alembic_migration_round_trip(monkeypatch):
     """[FR-001] [FR-002] [TP-030] Alembic round-trip: upgrade → downgrade → upgrade.
 
     Перевіряє, що міграція може бути застосована до порожньої бази,
@@ -731,6 +731,8 @@ def test_alembic_migration_round_trip():
     from alembic import command
     from alembic.config import Config
     from sqlalchemy import create_engine, inspect
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
 
     # Ізольована тимчасова SQLite-база для кожного запуску тесту
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
