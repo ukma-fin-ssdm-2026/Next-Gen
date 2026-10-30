@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ApiError,
@@ -335,23 +335,70 @@ export function BlockedUsersPanel({ onError, onNotice }: { onError: (m: string) 
   );
 }
 
+type LogGroup = "listings" | "favorites" | "profile" | "complaints" | "feedback" | "users" | "categories";
+
+/** Логічні категорії записів журналу: до якої групи належить тип дії. */
+const LOG_GROUPS: { id: LogGroup; label: string; actions: string[] }[] = [
+  { id: "listings", label: "Оголошення", actions: ["LISTING_CREATED", "LISTING_UPDATED", "LISTING_WITHDRAWN", "WITHDRAW_LISTING"] },
+  { id: "favorites", label: "Обране", actions: ["FAVORITE_ADDED", "FAVORITE_REMOVED"] },
+  { id: "profile", label: "Профіль", actions: ["PROFILE_UPDATED"] },
+  { id: "complaints", label: "Скарги", actions: ["COMPLAINT_SUBMITTED", "COMPLAINT_RESOLVED", "COMPLAINT_DISMISSED"] },
+  { id: "feedback", label: "Звернення", actions: ["FEEDBACK_SUBMITTED", "FEEDBACK_RESOLVED"] },
+  { id: "users", label: "Користувачі (блокування)", actions: ["BLOCK_USER", "UNBLOCK_USER"] },
+  { id: "categories", label: "Категорії", actions: ["APPROVE_CATEGORY", "REJECT_CATEGORY"] },
+];
+
+function groupOf(action: string): LogGroup | null {
+  return LOG_GROUPS.find((group) => group.actions.includes(action))?.id ?? null;
+}
+
 /** Журнал дій: окремо для користувачів і для адміністраторів (FR-018). */
 export function ActivityLogPanel({ kind, onError }: { kind: "users" | "admins"; onError: (m: string) => void }) {
-  const loader = useCallback(() => getActivityLog(kind), [kind]);
+  const loader = useCallback(() => getActivityLog(kind, 0, 500), [kind]);
   const { items, reload } = useList<LogEntry>(loader, onError);
+  const [group, setGroup] = useState<LogGroup | "all">("all");
+  const [query, setQuery] = useState("");
   const title = kind === "users" ? "Журнал дій користувачів" : "Журнал дій адміністраторів";
+
+  const visibleGroups = useMemo(() => {
+    const present = new Set((items ?? []).map((entry) => groupOf(entry.action_type)));
+    return LOG_GROUPS.filter((item) => present.has(item.id));
+  }, [items]);
+
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase("uk");
+    return (items ?? []).filter((entry) => {
+      if (group !== "all" && groupOf(entry.action_type) !== group) return false;
+      if (!needle) return true;
+      const haystack = [ACTION_LABELS[entry.action_type] ?? entry.action_type, entry.actor_email, entry.target_email, entry.details]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase("uk");
+      return haystack.includes(needle);
+    });
+  }, [items, group, query]);
+
   return (
     <section className="form-block">
       <div className="form-block-head">
-        <div><h2>{title}</h2><p className="form-hint">Останні 100 записів, нові першими. Записи незмінні.</p></div>
+        <div><h2>{title}</h2><p className="form-hint">Останні 500 записів, нові першими. Записи незмінні.</p></div>
         <button className="button button-light" type="button" onClick={() => void reload()}>Оновити</button>
       </div>
+      <div className="log-toolbar">
+        <input type="search" className="log-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Пошук за email, дією або описом" aria-label="Пошук у журналі" />
+        <select className="log-filter" value={group} onChange={(event) => setGroup(event.target.value as LogGroup | "all")} aria-label="Категорія записів">
+          <option value="all">Усі категорії</option>
+          {visibleGroups.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+        </select>
+      </div>
       {items === null && <p className="form-hint">Завантажуємо…</p>}
-      {items?.length === 0 && <p className="form-hint">Записів поки немає.</p>}
+      {items !== null && items.length === 0 && <p className="form-hint">Записів поки немає.</p>}
+      {items !== null && items.length > 0 && filtered.length === 0 && <p className="form-hint">За цим пошуком і фільтром нічого не знайдено.</p>}
+      {items !== null && items.length > 0 && <p className="form-hint">Показано {filtered.length} із {items.length}</p>}
       <ul className="admin-log">
-        {items?.map((entry) => (
+        {filtered.map((entry) => (
           <li key={entry.id}>
-            <strong>{ACTION_LABELS[entry.action_type] ?? entry.action_type}</strong>
+            <strong>{ACTION_LABELS[entry.action_type] ?? entry.action_type}<span className="log-group-chip">{LOG_GROUPS.find((item) => item.id === groupOf(entry.action_type))?.label ?? "Інше"}</span></strong>
             <span>{entry.actor_email ?? entry.actor_id}{entry.target_email ? ` → ${entry.target_email}` : ""}</span>
             {entry.listing_id && <Link to={`/listings/${entry.listing_id}`}>оголошення</Link>}
             {entry.details && <span className="log-details">{entry.details}</span>}

@@ -991,7 +991,7 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
               <div className="form-block-head"><span className="form-step">02</span><div><h2>Про товар</h2><p className="form-hint">Основна інформація для покупців.</p></div></div>
               <label><span>Назва</span><input value={title} onChange={(event) => setTitle(event.target.value)} minLength={3} maxLength={100} required placeholder="Наприклад, худі з логотипом НаУКМА" /></label>
               <div className="form-row form-row-category">
-                <div className="field"><span>Категорія</span><CategorySelect categories={categories} value={categoryId} onChange={setCategoryId} placeholder="Оберіть категорію" required disabled={editing} /></div>
+                <div className="field"><span>Категорія</span><CategorySelect categories={categories} value={categoryId} onChange={setCategoryId} placeholder="Оберіть категорію" otherHint required disabled={editing} /></div>
                 <label><span>Стан</span><select value={condition} onChange={(event) => setCondition(event.target.value as ListingCondition)}>
                   {(Object.keys(CONDITION_LABELS) as ListingCondition[]).map((key) => <option value={key} key={key}>{CONDITION_LABELS[key]}</option>)}
                 </select></label>
@@ -2029,12 +2029,14 @@ function sortCategories(items: Category[]): Category[] {
   return [...items].sort((a, b) => Number(a.id === OTHER_CATEGORY_ID) - Number(b.id === OTHER_CATEGORY_ID));
 }
 
-function CategorySelect({ categories, value, onChange, placeholder, allLabel, required = false, disabled = false }: {
+function CategorySelect({ categories, value, onChange, placeholder, allLabel, otherHint = false, required = false, disabled = false }: {
   categories: Category[];
   value: string;
   onChange: (id: string) => void;
   placeholder: string;
   allLabel?: string;
+  /** У формі оголошення біля «Інше» підказує, що можна запропонувати власну категорію. */
+  otherHint?: boolean;
   required?: boolean;
   disabled?: boolean;
 }) {
@@ -2086,7 +2088,7 @@ function CategorySelect({ categories, value, onChange, placeholder, allLabel, re
           <input ref={searchRef} className="category-select-search" type="search" value={query} onChange={(event) => { setQuery(event.target.value); setActive(0); }} onKeyDown={onSearchKeyDown} placeholder="Пошук категорії" aria-label="Пошук категорії" />
           <ul role="listbox">
             {options.map((option, index) => (
-              <li key={option.id || "all"} role="option" aria-selected={option.id === value} className={index === active ? "is-active" : ""} onMouseEnter={() => setActive(index)} onMouseDown={(event) => { event.preventDefault(); choose(option.id); }}>{option.name}</li>
+              <li key={option.id || "all"} role="option" aria-selected={option.id === value} className={index === active ? "is-active" : ""} onMouseEnter={() => setActive(index)} onMouseDown={(event) => { event.preventDefault(); choose(option.id); }}>{option.name}{otherHint && option.id === OTHER_CATEGORY_ID && <small className="category-option-hint"> (або запропонуйте свою)</small>}</li>
             ))}
             {options.length === 0 && <li className="category-select-empty">Нічого не знайдено</li>}
           </ul>
