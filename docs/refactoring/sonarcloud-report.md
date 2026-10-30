@@ -94,6 +94,14 @@ Python-залежностей у GitHub Actions. Три Low issues стосую�
   виключено `htmlcov/**` і `docs/api/openapi-generated.yaml`.
 - **Лишилось зробити вручну:** `git rm -r --cached htmlcov`, щоб прибрати вже
   закомічені файли з індексу.
+- **Звіт покриття в CI/CD:** `htmlcov/` не зберігається в репозиторії, а
+  створюється кроком «Tests with coverage gate (85%)» у `.github/workflows/ci.yml`
+  і завантажується як артефакт `htmlcov` кроком «Upload coverage report». Крок
+  «Coverage summary» додатково виводить таблицю покриття в підсумок прогону
+  (`GITHUB_STEP_SUMMARY`), тож відсоток видно на сторінці Actions без
+  завантаження артефакту.
+- **Підтвердження:** TODO: додати скриншот успішного прогону CI з підсумком
+  покриття та артефактом `htmlcov` у розділі Artifacts.
 
 ### 4.4. Відкладені кандидати
 
