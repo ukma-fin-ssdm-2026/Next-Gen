@@ -5,6 +5,7 @@ SQLAlchemy, щоб не вимагати запущеного контейнер
 Усі критерії прийняття перевіряються на рівні репозиторіїв.
 """
 
+import os
 import uuid
 from datetime import datetime, timezone
 
@@ -14,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 
 from src.db.models import Base
 from src.domain.categories import Category
+from src.domain.category_suggestions import CategorySuggestion, CategorySuggestionStatus
 from src.domain.favorites import Favorite
 from src.domain.listings import Listing, ListingCondition, ListingImage, ListingStatus
 from src.domain.moderation import ModerationAction, ModerationActionType
@@ -22,6 +24,9 @@ from src.repositories.postgres_categories import PostgresCategoryRepository
 from src.repositories.postgres_favorites_moderation import (
     PostgresFavoriteRepository,
     PostgresModerationActionRepository,
+)
+from src.repositories.postgres_category_suggestions import (
+    PostgresCategorySuggestionRepository,
 )
 from src.repositories.postgres_listings import PostgresListingRepository
 from src.repositories.postgres_users import PostgresUserRepository
@@ -64,6 +69,11 @@ def user_repo(session):
 @pytest.fixture()
 def category_repo(session):
     return PostgresCategoryRepository(session)
+
+
+@pytest.fixture()
+def suggestion_repo(session):
+    return PostgresCategorySuggestionRepository(session)
 
 
 @pytest.fixture()
@@ -885,3 +895,213 @@ def test_api_categories_returns_seeded_categories_on_fresh_db(monkeypatch):
         app.dependency_overrides.clear()
         if os.path.exists(db_path):
             os.remove(db_path)
+
+
+class TestPostgresCategorySuggestionRepository:
+    """[FR-015] [TP-028] Збереження всіх полів пропозиції категорії."""
+
+    def _proposer(self, user_repo) -> User:
+        return user_repo.save(make_user())
+
+    def test_add_and_get_pending_roundtrip(self, user_repo, suggestion_repo):
+        """[FR-015] [TP-028] Нова пропозиція зберігається і читається без втрат."""
+        proposer = self._proposer(user_repo)
+        suggestion = CategorySuggestion.create(
+            name="Музичні інструменти", proposer_id=proposer.user_id
+        )
+        suggestion_repo.add(suggestion)
+
+        loaded = suggestion_repo.get(suggestion.suggestion_id)
+        assert loaded is not None
+        assert loaded.name == "Музичні інструменти"
+        assert loaded.proposer_id == proposer.user_id
+        assert loaded.status is CategorySuggestionStatus.PENDING
+        assert loaded.reason is None
+        assert loaded.category_id is None
+        assert loaded.reviewed_by is None
+        assert loaded.reviewed_at is None
+
+    def test_approved_fields_are_persisted(
+        self, user_repo, category_repo, suggestion_repo
+    ):
+        """[FR-015] [TP-028] Схвалення зберігає категорію, модератора і час."""
+        proposer = self._proposer(user_repo)
+        moderator = user_repo.save(make_user(role=UserRole.ADMIN))
+        category = category_repo.add(make_category())
+        suggestion = suggestion_repo.add(
+            CategorySuggestion.create(name="Хобі", proposer_id=proposer.user_id)
+        )
+        suggestion.status = CategorySuggestionStatus.APPROVED
+        suggestion.category_id = category.id
+        suggestion.reviewed_by = moderator.user_id
+        suggestion.reviewed_at = datetime.now(timezone.utc)
+        suggestion_repo.save(suggestion)
+
+        loaded = suggestion_repo.get(suggestion.suggestion_id)
+        assert loaded is not None
+        assert loaded.status is CategorySuggestionStatus.APPROVED
+        assert loaded.category_id == category.id
+        assert loaded.reviewed_by == moderator.user_id
+        assert loaded.reviewed_at is not None
+
+    def test_rejected_reason_is_persisted(self, user_repo, suggestion_repo):
+        """[FR-015] [TP-028] Відхилення зберігає причину та модератора."""
+        proposer = self._proposer(user_repo)
+        moderator = user_repo.save(make_user(role=UserRole.ADMIN))
+        suggestion = suggestion_repo.add(
+            CategorySuggestion.create(name="Різне", proposer_id=proposer.user_id)
+        )
+        suggestion.status = CategorySuggestionStatus.REJECTED
+        suggestion.reason = "Занадто загальна назва"
+        suggestion.reviewed_by = moderator.user_id
+        suggestion.reviewed_at = datetime.now(timezone.utc)
+        suggestion_repo.save(suggestion)
+
+        loaded = suggestion_repo.get(suggestion.suggestion_id)
+        assert loaded is not None
+        assert loaded.status is CategorySuggestionStatus.REJECTED
+        assert loaded.reason == "Занадто загальна назва"
+        assert loaded.reviewed_by == moderator.user_id
+
+    def test_list_and_find_pending(self, user_repo, suggestion_repo):
+        """[FR-015] [TP-028] Фільтри за статусом, автором і назвою працюють."""
+        proposer = self._proposer(user_repo)
+        pending = suggestion_repo.add(
+            CategorySuggestion.create(name="Ігри", proposer_id=proposer.user_id)
+        )
+        done = suggestion_repo.add(
+            CategorySuggestion.create(name="Книги", proposer_id=proposer.user_id)
+        )
+        done.status = CategorySuggestionStatus.REJECTED
+        done.reason = "Дублікат"
+        suggestion_repo.save(done)
+
+        assert [
+            s.suggestion_id
+            for s in suggestion_repo.list_by_status(CategorySuggestionStatus.PENDING)
+        ] == [pending.suggestion_id]
+        assert len(suggestion_repo.list_by_proposer(proposer.user_id)) == 2
+        found = suggestion_repo.find_pending_by_name("  ІГРИ ")
+        assert found is not None and found.suggestion_id == pending.suggestion_id
+        assert suggestion_repo.find_pending_by_name("Книги") is None
+
+
+@pytest.mark.skipif(
+    not os.getenv("DATABASE_URL", "").startswith("postgresql"),
+    reason="Потрібен реальний PostgreSQL (DATABASE_URL); SQLite не зберігає "
+    "UUID з усіх цифр (seed-категорії).",
+)
+def test_api_category_suggestion_flow_on_postgres(monkeypatch):
+    """[FR-015] [TP-028] Нова категорія в оголошенні: схвалення і відхилення.
+
+    Прогін через API на PostgreSQL після `alembic upgrade head` з реальними
+    Postgres-репозиторіями: раніше збереження пропозиції падало з 500.
+    """
+    import io
+    import os
+    import tempfile
+
+    from alembic import command
+    from alembic.config import Config
+    from fastapi.testclient import TestClient
+    from PIL import Image
+    from sqlalchemy.orm import Session
+
+    from src.api import deps
+    from src.api.main import app
+    from src.domain.listings import OTHER_CATEGORY_ID
+    from src.domain.users import CurrentUser
+
+    url = os.environ["DATABASE_URL"]
+    storage_dir = tempfile.mkdtemp()
+    monkeypatch.setenv("IMAGE_STORAGE_DIR", storage_dir)
+    try:
+        cfg = Config()
+        cfg.set_main_option("script_location", "alembic")
+        cfg.set_main_option("sqlalchemy.url", url)
+        command.upgrade(cfg, "head")
+        eng = create_engine(url)
+
+        with Session(eng) as s:
+            repo = PostgresUserRepository(s)
+            seller = repo.save(make_user())
+            admin = repo.save(make_user(role=UserRole.ADMIN))
+            s.commit()
+
+        def as_current(u: User) -> CurrentUser:
+            return CurrentUser(
+                user_id=u.user_id,
+                tenant_id=u.tenant_id,
+                entra_object_id=u.entra_object_id,
+                email=u.email,
+                display_name=u.display_name,
+                role=u.role,
+            )
+
+        def override_db_session():
+            with Session(eng) as s:
+                yield s
+                s.commit()
+
+        app.dependency_overrides[deps.get_db_session] = override_db_session
+        actor = {"user": seller}
+        app.dependency_overrides[deps.require_current_user] = lambda: as_current(
+            actor["user"]
+        )
+
+        def new_listing(client, name: str) -> dict:
+            buf = io.BytesIO()
+            Image.new("RGB", (400, 300), (200, 50, 50)).save(buf, "JPEG")
+            up = client.post(
+                "/api/v1/listings/images",
+                files=[("files", ("a.jpg", buf.getvalue(), "image/jpeg"))],
+            )
+            assert up.status_code == 201, up.text
+            resp = client.post(
+                "/api/v1/listings",
+                json={
+                    "title": "Гітара акустична",
+                    "description": "Майже нова, з чохлом.",
+                    "price": 1500,
+                    "category_id": str(OTHER_CATEGORY_ID),
+                    "contact": "@seller",
+                    "image_urls": [i["image_url"] for i in up.json()],
+                    "suggested_category_name": name,
+                },
+            )
+            assert resp.status_code == 201, resp.text
+            return resp.json()
+
+        with TestClient(app) as client:
+            tag = uuid.uuid4().hex[:6]
+            music, misc = f"Музика {tag}", f"Різне {tag}"
+            new_listing(client, music)
+            new_listing(client, misc)
+
+            actor["user"] = admin
+            pending = client.get("/api/v1/category-suggestions?status=PENDING")
+            assert pending.status_code == 200, pending.text
+            items = {i["name"]: i for i in pending.json()}
+            assert {music, misc} <= set(items)
+
+            ok = client.post(
+                f"/api/v1/category-suggestions/{items[music]['suggestion_id']}"
+                "/approve",
+                json={},
+            )
+            assert ok.status_code == 200, ok.text
+            assert ok.json()["status"] == "APPROVED"
+            assert ok.json()["category_id"] is not None
+
+            no = client.post(
+                f"/api/v1/category-suggestions/{items[misc]['suggestion_id']}/reject",
+                json={"reason": "Занадто загальна назва"},
+            )
+            assert no.status_code == 200, no.text
+            assert no.json()["status"] == "REJECTED"
+            assert no.json()["reason"] == "Занадто загальна назва"
+
+            cats = [c["name"] for c in client.get("/api/v1/categories").json()]
+            assert music in cats
+    finally:
+        app.dependency_overrides.clear()
