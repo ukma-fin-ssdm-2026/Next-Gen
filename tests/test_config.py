@@ -12,6 +12,7 @@ from src.config import (
     get_image_storage_dir,
 )
 from src.repositories.image_storage import LocalImageStorage
+from src.repositories.users import InMemoryUserRepository
 
 VALID_ENV = {
     "MICROSOFT_TENANT_ID": "11111111-1111-1111-1111-111111111111",
@@ -135,3 +136,24 @@ def test_invalid_admin_emails_make_auth_service_unavailable(
     with pytest.raises(deps.HTTPException) as caught:
         deps.get_auth_service(EntraSettings.from_env())
     assert caught.value.status_code == 503
+
+
+def test_auth_service_uses_request_scoped_user_repository(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """[FR-001] [SEC-001] Entra user uses the configured DB repository."""
+    _set_valid_env(monkeypatch)
+    repository = InMemoryUserRepository()
+    session_marker = object()
+    captured: dict[str, object] = {}
+
+    def select_repository(session: object) -> InMemoryUserRepository:
+        captured["session"] = session
+        return repository
+
+    monkeypatch.setattr(deps, "get_user_repository", select_repository)
+
+    service = deps.get_auth_service(EntraSettings.from_env(), session_marker)
+
+    assert isinstance(service, deps.AuthService)
+    assert captured["session"] is session_marker

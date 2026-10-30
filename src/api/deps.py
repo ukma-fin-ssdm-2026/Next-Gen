@@ -246,6 +246,7 @@ def get_entra_settings() -> EntraSettings:
 
 def get_auth_service(
     settings: EntraSettings = Depends(get_entra_settings),
+    session: DbSession = None,
 ) -> AuthService:
     try:
         admin_emails = get_admin_emails()
@@ -255,7 +256,7 @@ def get_auth_service(
             detail="Список адміністраторів налаштовано некоректно",
         ) from exc
     return AuthService(
-        _inmem_user_repository,
+        get_user_repository(session),
         EntraAuthConfig(
             tenant_id=settings.tenant_id,
             issuer=settings.issuer,
@@ -303,16 +304,18 @@ SessionCookie = Annotated[
 ]
 
 
-def _resolve_auth_service(request: Request) -> AuthService:
+def _resolve_auth_service(request: Request, session: Session | None) -> AuthService:
+    """Build auth lazily so missing cookies still return 401 before Entra config."""
     if get_auth_service in request.app.dependency_overrides:
         return request.app.dependency_overrides[get_auth_service]()
-    return get_auth_service(get_entra_settings())
+    return get_auth_service(get_entra_settings(), session)
 
 
 def require_current_user(
     request: Request,
     session_token: SessionCookie = None,
     sessions: InMemoryAuthSessionStore = Depends(get_auth_session_store),
+    session: DbSession = None,
 ) -> CurrentUser:
     if session_token is None:
         raise HTTPException(
@@ -325,7 +328,7 @@ def require_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Сесія недійсна або завершилася",
         )
-    service = _resolve_auth_service(request)
+    service = _resolve_auth_service(request, session)
     try:
         return service.get_current_user(user_id)
     except InvalidSessionError as exc:
