@@ -112,4 +112,4 @@ jobs:
         run: python -m alembic upgrade head
 
       - name: Run integration tests against PostgreSQL
-        run: pytest tests/test_postgres_repositories.py -v --tb=short
+        run: pytest tests/test_postgres_repositories.py tests/test_postgres_moderation.py -v --tb=short
