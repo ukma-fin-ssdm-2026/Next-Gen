@@ -458,3 +458,53 @@ def test_create_listing_with_deactivated_category_returns_400(
             f"/api/v1/categories/{cat_id}",
             json={"is_active": True},
         )
+
+
+def test_price_upper_limit_is_enforced(
+    client: TestClient,
+    listing_payload: dict[str, object],
+    login_as,
+) -> None:
+    """[TP-001] [FR-002] Ціна не може перевищувати 100 000 000 грн."""
+    login_as(user_id=SEED_OWNER_ID)
+
+    too_much = client.post(
+        "/api/v1/listings", json={**listing_payload, "price": 100_000_000.01}
+    )
+    at_limit = client.post(
+        "/api/v1/listings", json={**listing_payload, "price": 100_000_000}
+    )
+    filter_too_high = client.get("/api/v1/listings", params={"max_price": 1e12})
+
+    assert too_much.status_code == 422
+    assert at_limit.status_code == 201
+    assert filter_too_high.status_code == 422
+    patched = client.patch(
+        f"/api/v1/listings/{at_limit.json()['id']}", json={"price": 100_000_001}
+    )
+    assert patched.status_code == 422
+
+
+def test_catalog_accepts_price_sort_orders(client: TestClient) -> None:
+    """[TP-004] [FR-008] API приймає сортування за ціною і відхиляє невідоме."""
+    for order in ("price_asc", "price_desc", "newest", "oldest"):
+        assert client.get("/api/v1/listings", params={"sort": order}).status_code == 200
+    assert (
+        client.get("/api/v1/listings", params={"sort": "cheapest"}).status_code == 422
+    )
+
+
+def test_listing_accepts_for_parts_condition(
+    client: TestClient, login_as, listing_payload
+) -> None:
+    """[TP-001] [FR-002] Стан FOR_PARTS приймається, невідомий стан — 422."""
+    login_as()
+    created = client.post(
+        "/api/v1/listings", json={**listing_payload, "condition": "FOR_PARTS"}
+    )
+    assert created.status_code == 201
+    assert created.json()["condition"] == "FOR_PARTS"
+    bad = client.post(
+        "/api/v1/listings", json={**listing_payload, "condition": "BROKEN"}
+    )
+    assert bad.status_code == 422

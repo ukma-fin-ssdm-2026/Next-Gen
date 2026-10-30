@@ -15,6 +15,7 @@ from src.api.deps import (
     require_current_user,
 )
 from src.api.schemas.listings import ApiValidationErrorResponse, ErrorResponse
+from src.api.schemas.support import BlockedUserResponse
 from src.api.schemas.moderation import (
     ModerationActionResponse,
     ModerationWithdrawRequest,
@@ -234,3 +235,36 @@ def unblock_user_by_email(
         request.email,
         request,
     )
+
+
+@router.get(
+    "/users/blocked",
+    response_model=list[BlockedUserResponse],
+    summary="Список заблокованих користувачів (адміністратор)",
+    description=(
+        "Усі заблоковані користувачі з причиною та часом блокування; дані "
+        "зберігаються в БД і переживають перезапуск (FR-013)."
+    ),
+    responses={
+        401: {"model": ErrorResponse, "description": "Немає валідної сесії"},
+        403: {"model": ErrorResponse, "description": "Немає ролі ADMIN"},
+    },
+)
+def list_blocked_users(
+    moderator: CurrentUser = Depends(require_moderator),
+    service: UserModerationService = Depends(get_user_moderation_service),
+) -> list[BlockedUserResponse]:
+    try:
+        users = service.list_blocked(moderator)
+    except ModerationForbiddenError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    return [
+        BlockedUserResponse(
+            user_id=user.user_id,
+            email=user.email,
+            display_name=user.display_name,
+            reason=user.block_reason,
+            blocked_at=user.blocked_at,
+        )
+        for user in users
+    ]

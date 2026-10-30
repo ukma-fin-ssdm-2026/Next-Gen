@@ -34,11 +34,19 @@ from src.services.auth import (
     EntraAuthConfig,
     InvalidSessionError,
 )
+from src.repositories.support import (
+    InMemoryActivityRepository,
+    InMemoryComplaintRepository,
+    InMemoryFeedbackRepository,
+)
+from src.services.activity import ActivityLogService
 from src.services.auth_sessions import InMemoryAuthSessionStore, InMemoryOidcFlowStore
 from src.services.categories import CategoryService
 from src.services.category_suggestions import CategorySuggestionService
+from src.services.complaints import ComplaintService
 from src.services.contacts import SellerContactService
 from src.services.favorites import FavoriteService
+from src.services.feedback import FeedbackService
 from src.services.listings import ListingService
 from src.services.moderation import ModerationService
 from src.services.profile import ProfileService
@@ -57,6 +65,9 @@ _USE_POSTGRES = bool(os.getenv("DATABASE_URL", "").strip())
 image_storage: ImageStorage = LocalImageStorage(get_image_storage_dir())
 oidc_flow_store = InMemoryOidcFlowStore()
 auth_session_store = InMemoryAuthSessionStore()
+# Короткоживучі «квитки» для показу заблокованому користувачеві причини (FR-013).
+BLOCKED_NOTICE_COOKIE_NAME = "baraholka_blocked_notice"
+blocked_notice_store = InMemoryAuthSessionStore(ttl_seconds=10 * 60)
 
 # In-memory singletons (використовуються якщо немає DATABASE_URL)
 _inmem_category_repository = InMemoryCategoryRepository.with_seed()
@@ -65,6 +76,9 @@ _inmem_listing_repository = InMemoryListingRepository.with_seed()
 _inmem_favorite_repository = InMemoryFavoriteRepository()
 _inmem_moderation_action_repository = InMemoryModerationActionRepository()
 _inmem_user_repository = InMemoryUserRepository()
+_inmem_complaint_repository = InMemoryComplaintRepository()
+_inmem_feedback_repository = InMemoryFeedbackRepository()
+_inmem_activity_repository = InMemoryActivityRepository()
 
 SESSION_COOKIE_NAME = "baraholka_session"
 OIDC_STATE_COOKIE_NAME = "baraholka_oidc_state"
@@ -277,6 +291,61 @@ def get_user_moderation_service(
     )
 
 
+def get_complaint_repository(session: DbSession = None):
+    """Повертає PostgreSQL або in-memory репозиторій скарг."""
+    if session is not None:
+        from src.repositories.postgres_support import PostgresComplaintRepository
+
+        return PostgresComplaintRepository(session)
+    return _inmem_complaint_repository
+
+
+def get_feedback_repository(session: DbSession = None):
+    """Повертає PostgreSQL або in-memory репозиторій звернень."""
+    if session is not None:
+        from src.repositories.postgres_support import PostgresFeedbackRepository
+
+        return PostgresFeedbackRepository(session)
+    return _inmem_feedback_repository
+
+
+def get_activity_repository(session: DbSession = None):
+    """Повертає PostgreSQL або in-memory журнал дій."""
+    if session is not None:
+        from src.repositories.postgres_support import PostgresActivityRepository
+
+        return PostgresActivityRepository(session)
+    return _inmem_activity_repository
+
+
+def get_activity_service(session: DbSession = None) -> ActivityLogService:
+    """Повертає сервіс журналу дій для ін'єкції в роутери (FR-018)."""
+    return ActivityLogService(
+        get_activity_repository(session),
+        get_user_repository(session),
+        get_moderation_repository(session),
+    )
+
+
+def get_complaint_service(session: DbSession = None) -> ComplaintService:
+    """Повертає сервіс скарг на оголошення (FR-016)."""
+    return ComplaintService(
+        get_complaint_repository(session),
+        get_listing_repository(session),
+        get_user_repository(session),
+        get_activity_service(session),
+    )
+
+
+def get_feedback_service(session: DbSession = None) -> FeedbackService:
+    """Повертає сервіс звернень до адміністрації (FR-017)."""
+    return FeedbackService(
+        get_feedback_repository(session),
+        get_user_repository(session),
+        get_activity_service(session),
+    )
+
+
 def get_profile_service(
     session: DbSession = None,
 ) -> ProfileService:
@@ -296,6 +365,10 @@ def get_oidc_flow_store() -> InMemoryOidcFlowStore:
 
 def get_auth_session_store() -> InMemoryAuthSessionStore:
     return auth_session_store
+
+
+def get_blocked_notice_store() -> InMemoryAuthSessionStore:
+    return blocked_notice_store
 
 
 SessionCookie = Annotated[

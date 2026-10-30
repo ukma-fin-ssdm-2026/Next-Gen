@@ -11,11 +11,14 @@ from pydantic import BaseModel, Field
 
 from src.api.deps import get_image_storage
 from src.api.routers import (
+    activity,
     auth,
     categories,
     category_suggestions,
+    complaints,
     contacts,
     favorites,
+    feedback,
     listings,
     moderation,
     users,
@@ -41,6 +44,9 @@ app.include_router(category_suggestions.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(moderation.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
+app.include_router(complaints.router, prefix="/api/v1")
+app.include_router(feedback.router, prefix="/api/v1")
+app.include_router(activity.router, prefix="/api/v1")
 
 
 def _custom_openapi() -> dict:

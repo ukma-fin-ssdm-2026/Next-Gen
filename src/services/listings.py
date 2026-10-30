@@ -78,10 +78,17 @@ class ListingService:
             items = [item for item in items if item.price >= min_price]
         if max_price is not None:
             items = [item for item in items if item.price <= max_price]
-        items.sort(
-            key=lambda item: item.created_at,
-            reverse=sort_order != ListingSortOrder.OLDEST,
-        )
+        if sort_order in (ListingSortOrder.PRICE_ASC, ListingSortOrder.PRICE_DESC):
+            items.sort(key=lambda item: item.created_at, reverse=True)
+            items.sort(
+                key=lambda item: item.price,
+                reverse=sort_order == ListingSortOrder.PRICE_DESC,
+            )
+        else:
+            items.sort(
+                key=lambda item: item.created_at,
+                reverse=sort_order != ListingSortOrder.OLDEST,
+            )
         return items[skip : skip + limit]
 
     def list_owner_listings(

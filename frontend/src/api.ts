@@ -1,4 +1,12 @@
 import type {
+  BlockedStatus,
+  BlockedUser,
+  Complaint,
+  ComplaintReason,
+  ComplaintStatus,
+  FeedbackMessage,
+  FeedbackStatus,
+  LogEntry,
   CategorySuggestion,
   CategorySuggestionStatus,
   Category,
@@ -226,4 +234,40 @@ export function unblockUserByEmail(email: string, reason: string): Promise<Moder
 
 export function unblockUser(userId: string, reason: string): Promise<ModerationAction> {
   return apiFetch<ModerationAction>(`/admin/users/${segment(userId)}/unblock`, { method: "POST", body: JSON.stringify({ reason }) });
+}
+
+export function getBlockedStatus(): Promise<BlockedStatus> {
+  return apiFetch<BlockedStatus>("/auth/blocked-status");
+}
+
+export function getBlockedUsers(): Promise<BlockedUser[]> {
+  return apiFetch<BlockedUser[]>("/admin/users/blocked");
+}
+
+export function submitComplaint(listingId: string, reason: ComplaintReason, details: string): Promise<Complaint> {
+  return apiFetch<Complaint>(`/listings/${segment(listingId)}/complaints`, { method: "POST", body: JSON.stringify({ reason, details }) });
+}
+
+export function getComplaints(status?: ComplaintStatus): Promise<Complaint[]> {
+  return apiFetch<Complaint[]>(`/admin/complaints${status ? `?status=${encodeURIComponent(status)}` : ""}`);
+}
+
+export function resolveComplaint(complaintId: string, status: Exclude<ComplaintStatus, "OPEN">, note: string): Promise<Complaint> {
+  return apiFetch<Complaint>(`/admin/complaints/${segment(complaintId)}/resolve`, { method: "POST", body: JSON.stringify({ status, note }) });
+}
+
+export function submitFeedback(subject: string, message: string): Promise<FeedbackMessage> {
+  return apiFetch<FeedbackMessage>("/feedback", { method: "POST", body: JSON.stringify({ subject, message }) });
+}
+
+export function getFeedback(status?: FeedbackStatus): Promise<FeedbackMessage[]> {
+  return apiFetch<FeedbackMessage[]>(`/admin/feedback${status ? `?status=${encodeURIComponent(status)}` : ""}`);
+}
+
+export function resolveFeedback(feedbackId: string): Promise<FeedbackMessage> {
+  return apiFetch<FeedbackMessage>(`/admin/feedback/${segment(feedbackId)}/resolve`, { method: "POST" });
+}
+
+export function getActivityLog(kind: "users" | "admins", skip = 0, limit = 100): Promise<LogEntry[]> {
+  return apiFetch<LogEntry[]>(`/admin/logs/${kind}?skip=${skip}&limit=${limit}`);
 }

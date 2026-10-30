@@ -13,10 +13,10 @@
 | `id` | `UUID` | Auto UUID v4 | Унікальний ідентифікатор оголошення | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
 | `title` | `string` | min: 3, max: 100 | Назва оголошення | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `description` | `string` | min: 0, max: 2000; у `ListingCreate` поле можна не передавати, порожнє значення дозволене | Необов’язковий опис товару | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
-| `price` | `number` (float) | ge: 0 (негативні значення заборонені) | Ціна в гривнях | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
+| `price` | `number` (float) | 0 ≤ price ≤ 100 000 000 (поза межами — `422`) | Ціна в гривнях | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `category_id` | `UUID` | Valid UUID (необов'язковий у `ListingCreate`, якщо передано `suggested_category_name`) | Унікальний ідентифікатор категорії | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `suggested_category_name` | `string` | Optional, min: 2, max: 40 після `strip`, без керівних символів | Пропозиція нової категорії (`FR-015`). Оголошення публікується в категорії «Інше» до рішення адміністратора | **Приватне поле:** `ListingCreate`, `ListingResponse`. **Відсутнє в `ListingPublicResponse`** |
-| `condition` | `string` | Enum: `NEW`, `LIKE_NEW`, `GOOD`, `USED` | Стан товару в оголошенні (`FR-002`) | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
+| `condition` | `string` | Enum: `NEW`, `LIKE_NEW`, `GOOD`, `USED`, `FOR_PARTS` | Стан товару в оголошенні (`FR-002`) | Всі схеми (`ListingBase`, `Create`, `Update`, `Response`) |
 | `image_urls` / `images` | `array` | min: 1, max: 10, валідні серверні ключі або `/uploads/` | Фотографії оголошення з thumbnail та порядком відображення (`FR-002`, `TM-03`). Довільні зовнішні URL відхиляються | `image_urls` у `ListingCreate`/`ListingUpdate`; `images` (`ListingImageResponse`) у відповідях |
 | `contact` | `string` | Required on create | Контактні дані продавця (Telegram / Email). Це один рядок до 200 символів: веб-клієнт за домовленістю додає в нього необов'язкові рядки `Тел.: ...` і `Локація: ...` (див. [frontend.md](../frontend/frontend.md#контакт-телефон-і-локація)); окремих полів телефону й локації в API немає | **Приватне поле:** `ListingCreate`, `ListingUpdate`, `ListingResponse`. **Відсутнє в `ListingPublicResponse`** |
 | `user_id` | `UUID` | Auto UUID v4 | Унікальний ідентифікатор автора | Всі відповіді (`ListingPublicResponse`, `ListingResponse`) |
@@ -44,7 +44,7 @@
   - `category_id` (Optional[UUID]) — точкова фільтрація за категорією товару.
   - `q` (Optional[str]) — текстовий пошук за назвою та описом (FR-007).
   - `min_price` і `max_price` (Optional[float], ge=0) — межі ціни.
-  - `sort` (`newest` або `oldest`, default `newest`) — порядок за датою публікації (FR-008).
+  - `sort` (`newest`, `oldest`, `price_asc` або `price_desc`, default `newest`) — порядок за датою публікації або за ціною; за однакової ціни спершу новіші (FR-008).
 
 ### 2.4 Microsoft Entra ID та ідентифікація автора змін (SEC-001, TM-02)
 - **Рішення:** `user_id` завжди призначається на сервері із `CurrentUser` (`require_current_user`). Роутер `/api/v1/auth` реалізує Microsoft Entra ID Authorization Code Flow через MSAL, створює непрозору server-side сесію та повторно читає локального `User` для кожного захищеного запиту (`POST /api/v1/listings`, `PATCH /api/v1/listings/{id}`, `DELETE /api/v1/listings/{id}`, `GET /api/v1/listings/my`, `POST /api/v1/listings/images`, `POST /api/v1/category-suggestions`). Клієнтські заголовки (`X-Actor-Id`) або поля `user_id`/`proposer_id` ніколи не довіряються.
@@ -66,6 +66,12 @@
   - Діє квота не більше 3 пропозицій у статусі `PENDING` на одного користувача; перевищення повертає `429 Too Many Requests`.
   - Схвалення (`POST /api/v1/category-suggestions/{id}/approve`, опційне тіло `{"name": "..."}`) атомарно створює активну категорію, переносить усі активні оголошення цієї пропозиції з категорії «Інше» до нової категорії (не чіпаючи `WITHDRAWN` і змінені вручну), переводить пропозицію в `APPROVED` і записує `ModerationAction` (`APPROVE_CATEGORY`).
   - Відхилення (`POST /api/v1/category-suggestions/{id}/reject`, обов'язкова причина 5–500 символів) залишає оголошення в «Інше», очищує `suggested_category_id`, переводить пропозицію в `REJECTED` і записує `ModerationAction` (`REJECT_CATEGORY`). Повторний розгляд вже обробленої пропозиції повертає `409 Conflict`.
+
+### 2.7a Скарги, звернення, журнали дій і блокування (FR-013, FR-016, FR-017, FR-018)
+- **Скарги:** `POST /api/v1/listings/{id}/complaints` (`{reason, details}`; автор — із сесії; 404 для неактивного, 422 для власного оголошення чи `OTHER` без опису, 409 для повтору). Адміністратор: `GET /api/v1/admin/complaints?status=`, `POST /api/v1/admin/complaints/{id}/resolve` (`{status: RESOLVED|DISMISSED, note}`; повторний розгляд — 409).
+- **Звернення:** `POST /api/v1/feedback` (`{subject, message}`); адміністратор: `GET /api/v1/admin/feedback?status=`, `POST /api/v1/admin/feedback/{id}/resolve`.
+- **Журнали (лише `ADMIN`):** `GET /api/v1/admin/logs/users` і `GET /api/v1/admin/logs/admins` (`skip`, `limit` ≤ 500). Розділення — за роллю виконавця на момент дії; журнал адміністраторів містить і записи модерації. Записи незмінні.
+- **Блокування:** `GET /api/v1/admin/users/blocked` повертає заблокованих із причиною та часом (зберігаються в БД). `GET /api/v1/auth/blocked-status` повертає `{is_blocked, reason, blocked_at}` для користувача з сесією або з коротким (10 хв) HttpOnly-квитком `baraholka_blocked_notice`, який `/auth/callback` видає заблокованому замість сесії та перенаправляє на `/?blocked=1`. Квиток не дає доступу до інших ендпоінтів.
 
 ### 2.8 Контакт продавця (FR-010, SEC-002)
 - **Рішення:** Контакт продавця віддається лише окремим ресурсом `GET /api/v1/listings/{listing_id}/contact` і лише для `CurrentUser` із серверної сесії (`require_current_user`). Публічні схеми каталогу, деталей і обраного (`ListingPublicResponse`) поля `contact` не мають. Відповідь має `Cache-Control: no-store`.

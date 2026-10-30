@@ -10,17 +10,22 @@ import pytest
 
 from src.api.deps import (
     SESSION_COOKIE_NAME,
+    get_activity_service,
     get_auth_service,
     get_auth_session_store,
+    get_blocked_notice_store,
     get_category_service,
     get_category_suggestion_service,
+    get_complaint_service,
     get_contact_service,
     get_favorite_service,
+    get_feedback_service,
     get_image_storage,
     get_listing_service,
     get_moderation_service,
     get_profile_service,
     get_user_moderation_service,
+    get_user_repository,
 )
 from src.api.main import app
 from src.domain.listings import SEED_CATEGORY_ID, SEED_IMAGE_URL
@@ -33,10 +38,18 @@ from src.repositories.favorites import InMemoryFavoriteRepository
 from src.repositories.image_storage import InMemoryImageStorage
 from src.repositories.listings import InMemoryListingRepository
 from src.repositories.moderation import InMemoryModerationActionRepository
+from src.repositories.support import (
+    InMemoryActivityRepository,
+    InMemoryComplaintRepository,
+    InMemoryFeedbackRepository,
+)
 from src.repositories.users import InMemoryUserRepository
+from src.services.activity import ActivityLogService
 from src.services.auth import AuthService, EntraAuthConfig
 from src.services.auth_sessions import InMemoryAuthSessionStore
 from src.services.categories import CategoryService
+from src.services.complaints import ComplaintService
+from src.services.feedback import FeedbackService
 from src.services.category_suggestions import CategorySuggestionService
 from src.services.contacts import SellerContactService
 from src.services.favorites import FavoriteService
@@ -165,6 +178,42 @@ def moderation_service(
 
 
 @pytest.fixture
+def activity_repository() -> InMemoryActivityRepository:
+    return InMemoryActivityRepository()
+
+
+@pytest.fixture
+def complaint_repository() -> InMemoryComplaintRepository:
+    return InMemoryComplaintRepository()
+
+
+@pytest.fixture
+def feedback_repository() -> InMemoryFeedbackRepository:
+    return InMemoryFeedbackRepository()
+
+
+def wire_support_services(
+    users: InMemoryUserRepository,
+    activity_repository: InMemoryActivityRepository,
+    complaint_repository: InMemoryComplaintRepository,
+    feedback_repository: InMemoryFeedbackRepository,
+    listing_repository: InMemoryListingRepository,
+    moderation_actions: InMemoryModerationActionRepository,
+) -> ActivityLogService:
+    """Підміняє сервіси скарг/звернень/журналу на ізольовані для тесту."""
+    activity = ActivityLogService(activity_repository, users, moderation_actions)
+    complaints = ComplaintService(
+        complaint_repository, listing_repository, users, activity
+    )
+    feedback = FeedbackService(feedback_repository, users, activity)
+    app.dependency_overrides[get_activity_service] = lambda: activity
+    app.dependency_overrides[get_complaint_service] = lambda: complaints
+    app.dependency_overrides[get_feedback_service] = lambda: feedback
+    app.dependency_overrides[get_user_repository] = lambda: users
+    return activity
+
+
+@pytest.fixture
 def client(
     listing_service: ListingService,
     favorite_service: FavoriteService,
@@ -173,7 +222,20 @@ def client(
     category_service: CategoryService,
     category_suggestion_service: CategorySuggestionService,
     image_storage: InMemoryImageStorage,
+    activity_repository: InMemoryActivityRepository,
+    complaint_repository: InMemoryComplaintRepository,
+    feedback_repository: InMemoryFeedbackRepository,
+    listing_repository: InMemoryListingRepository,
+    moderation_actions: InMemoryModerationActionRepository,
 ):
+    wire_support_services(
+        InMemoryUserRepository(),
+        activity_repository,
+        complaint_repository,
+        feedback_repository,
+        listing_repository,
+        moderation_actions,
+    )
     app.dependency_overrides[get_listing_service] = lambda: listing_service
     app.dependency_overrides[get_favorite_service] = lambda: favorite_service
     app.dependency_overrides[get_contact_service] = lambda: contact_service
@@ -209,6 +271,10 @@ def login_as(
     client: TestClient,
     image_storage: InMemoryImageStorage,
     moderation_actions: InMemoryModerationActionRepository,
+    activity_repository: InMemoryActivityRepository,
+    complaint_repository: InMemoryComplaintRepository,
+    feedback_repository: InMemoryFeedbackRepository,
+    listing_repository: InMemoryListingRepository,
 ) -> LoginAs:
     """Створює локального користувача і справжню серверну сесію в cookie клієнта.
 
@@ -217,6 +283,7 @@ def login_as(
     """
     users = InMemoryUserRepository()
     sessions = InMemoryAuthSessionStore()
+    notices = InMemoryAuthSessionStore()
     service = AuthService(
         users,
         EntraAuthConfig(
@@ -231,6 +298,15 @@ def login_as(
     app.dependency_overrides[get_profile_service] = lambda: profiles
     user_moderation = UserModerationService(users, moderation_actions, sessions)
     app.dependency_overrides[get_user_moderation_service] = lambda: user_moderation
+    wire_support_services(
+        users,
+        activity_repository,
+        complaint_repository,
+        feedback_repository,
+        listing_repository,
+        moderation_actions,
+    )
+    app.dependency_overrides[get_blocked_notice_store] = lambda: notices
 
     def _login(
         role: UserRole = UserRole.USER,
