@@ -98,8 +98,11 @@ def suggestion_row_to_domain(row: CategorySuggestionRow) -> CategorySuggestion:
         name=row.name,
         proposer_id=row.proposer_id,
         status=CategorySuggestionStatus(row.status),
+        reason=row.reason,
+        category_id=row.category_id,
+        reviewed_by=row.reviewed_by,
         created_at=row.created_at,
-        resolved_at=row.resolved_at,
+        reviewed_at=row.reviewed_at,
     )
 
 
@@ -111,8 +114,11 @@ def suggestion_domain_to_row(
     row.name = s.name
     row.proposer_id = s.proposer_id
     row.status = s.status.value
+    row.reason = s.reason
+    row.category_id = s.category_id
+    row.reviewed_by = s.reviewed_by
     row.created_at = s.created_at
-    row.resolved_at = s.resolved_at
+    row.reviewed_at = s.reviewed_at
     return row
 
 

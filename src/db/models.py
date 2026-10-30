@@ -153,7 +153,26 @@ class CategorySuggestionRow(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
-    resolved_at: Mapped[datetime | None] = mapped_column(
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    category_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "categories.category_id",
+            ondelete="SET NULL",
+            name="fk_category_suggestions_category_id",
+        ),
+        nullable=True,
+    )
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "users.user_id",
+            ondelete="SET NULL",
+            name="fk_category_suggestions_reviewed_by",
+        ),
+        nullable=True,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
