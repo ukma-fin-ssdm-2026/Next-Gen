@@ -106,16 +106,19 @@ export function getListings(
   limit = 100,
   skip = 0,
 ): Promise<Listing[]> {
-  const params = new URLSearchParams({
-    limit: String(limit),
-    skip: String(skip),
-    sort: filters.sort,
-  });
-  if (filters.q.trim()) params.set("q", filters.q.trim());
-  if (filters.categoryId) params.set("category_id", filters.categoryId);
-  if (filters.minPrice) params.set("min_price", filters.minPrice);
-  if (filters.maxPrice) params.set("max_price", filters.maxPrice);
-  return apiFetch<Listing[]>(`/listings?${params.toString()}`);
+  // Кожне значення екрануємо encodeURIComponent: фільтри походять з відповідей
+  // сервера (id категорій) і введення користувача (q, ціна).
+  const pairs: Array<[string, string]> = [
+    ["limit", String(limit)],
+    ["skip", String(skip)],
+    ["sort", filters.sort],
+  ];
+  if (filters.q.trim()) pairs.push(["q", filters.q.trim()]);
+  if (filters.categoryId) pairs.push(["category_id", filters.categoryId]);
+  if (filters.minPrice) pairs.push(["min_price", filters.minPrice]);
+  if (filters.maxPrice) pairs.push(["max_price", filters.maxPrice]);
+  const query = pairs.map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join("&");
+  return apiFetch<Listing[]>(`/listings?${query}`);
 }
 
 export function getListing(listingId: string): Promise<Listing> {
@@ -196,7 +199,7 @@ export function blockUser(userId: string, reason: string): Promise<ModerationAct
 }
 
 export function getCategorySuggestions(status: CategorySuggestionStatus = "PENDING"): Promise<CategorySuggestion[]> {
-  return apiFetch<CategorySuggestion[]>(`/category-suggestions?${new URLSearchParams({ status }).toString()}`);
+  return apiFetch<CategorySuggestion[]>(`/category-suggestions?status=${encodeURIComponent(status)}`);
 }
 
 export function approveCategorySuggestion(suggestionId: string, name?: string): Promise<CategorySuggestion> {

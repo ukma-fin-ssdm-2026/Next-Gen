@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Link,
   NavLink,
@@ -153,7 +153,7 @@ function App() {
   const [authChecked, setAuthChecked] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const reloadCategories = useCallback(() => {
-    getCategories().then(setCategories).catch(() => undefined);
+    getCategories().then((items) => setCategories(sortCategories(items))).catch(() => undefined);
   }, []);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -183,7 +183,7 @@ function App() {
         .then(setUser)
         .catch(() => setUser(null))
         .finally(() => setAuthChecked(true)),
-      getCategories().then(setCategories).catch(() => setCategories([])),
+      getCategories().then((items) => setCategories(sortCategories(items))).catch(() => setCategories([])),
     ]);
   }, []);
 
@@ -943,10 +943,7 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
               <div className="form-block-head"><span className="form-step">02</span><div><h2>Про товар</h2><p className="form-hint">Основна інформація для покупців.</p></div></div>
               <label><span>Назва</span><input value={title} onChange={(event) => setTitle(event.target.value)} minLength={3} maxLength={100} required placeholder="Наприклад, худі з логотипом НаУКМА" /></label>
               <div className="form-row">
-                <label><span>Категорія</span><select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} required disabled={editing}>
-                  <option value="" disabled>Оберіть категорію</option>
-                  {categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}
-                </select></label>
+                <div className="field"><span>Категорія</span><CategorySelect categories={categories} value={categoryId} onChange={setCategoryId} placeholder="Оберіть категорію" required disabled={editing} /></div>
                 <label><span>Стан</span><select value={condition} onChange={(event) => setCondition(event.target.value as ListingCondition)}>
                   {(Object.keys(CONDITION_LABELS) as ListingCondition[]).map((key) => <option value={key} key={key}>{CONDITION_LABELS[key]}</option>)}
                 </select></label>
@@ -1446,9 +1443,7 @@ function FilterForm({ filters, categories, onChange, onSubmit, onClear }: {
         {open ? "Сховати" : "Фільтри"}
       </button>
       <div className="filters-extra">
-        <label><span>Категорія</span><select value={filters.categoryId} onChange={(event) => onChange({ ...filters, categoryId: event.target.value })}>
-          <option value="">Усі категорії</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-        </select></label>
+        <div className="field"><span>Категорія</span><CategorySelect categories={categories} value={filters.categoryId} onChange={(id) => onChange({ ...filters, categoryId: id })} placeholder="Усі категорії" allLabel="Усі категорії" /></div>
         <label><span>Ціна від</span><input type="number" min="0" inputMode="numeric" value={filters.minPrice} onChange={(event) => onChange({ ...filters, minPrice: event.target.value })} placeholder="0" /></label>
         <label><span>Ціна до</span><input type="number" min="0" inputMode="numeric" value={filters.maxPrice} onChange={(event) => onChange({ ...filters, maxPrice: event.target.value })} placeholder="Будь-яка" /></label>
         <label><span>Сортування</span><select value={filters.sort} onChange={(event) => onChange({ ...filters, sort: event.target.value as ListingFilters["sort"] })}>
@@ -1937,6 +1932,78 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
 }
 
 const OTHER_CATEGORY_ID = "55555555-5555-5555-5555-555555555555";
+
+/** Категорія «Інше» завжди остання; решта лишається в порядку сервера. */
+function sortCategories(items: Category[]): Category[] {
+  return [...items].sort((a, b) => Number(a.id === OTHER_CATEGORY_ID) - Number(b.id === OTHER_CATEGORY_ID));
+}
+
+function CategorySelect({ categories, value, onChange, placeholder, allLabel, required = false, disabled = false }: {
+  categories: Category[];
+  value: string;
+  onChange: (id: string) => void;
+  placeholder: string;
+  allLabel?: string;
+  required?: boolean;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const options = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase("uk");
+    const matched = categories.filter((category) => category.name.toLocaleLowerCase("uk").includes(needle));
+    return allLabel && !needle ? [{ id: "", name: allLabel }, ...matched] : matched;
+  }, [categories, query, allLabel]);
+
+  useEffect(() => {
+    if (!open) return;
+    searchRef.current?.focus();
+    const onPointerDown = (event: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [open]);
+
+  const selectedName = categories.find((category) => category.id === value)?.name ?? (value === "" ? "" : value);
+
+  function choose(id: string) {
+    onChange(id);
+    setOpen(false);
+    setQuery("");
+  }
+
+  function onSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key === "ArrowDown") { event.preventDefault(); setActive((index) => Math.min(index + 1, options.length - 1)); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); setActive((index) => Math.max(index - 1, 0)); }
+    else if (event.key === "Enter") { event.preventDefault(); if (options[active]) choose(options[active].id); }
+    else if (event.key === "Escape") { event.preventDefault(); setOpen(false); }
+  }
+
+  return (
+    <div className="category-select" ref={rootRef}>
+      <button className="category-select-button" type="button" disabled={disabled} aria-haspopup="listbox" aria-expanded={open} onClick={() => { setOpen((current) => !current); setActive(0); }}>
+        <span className={selectedName ? "" : "category-select-placeholder"}>{selectedName || placeholder}</span>
+      </button>
+      {required && <input className="category-select-required" tabIndex={-1} aria-hidden="true" required value={value} onChange={() => undefined} />}
+      {open && (
+        <div className="category-select-popover">
+          <input ref={searchRef} className="category-select-search" type="search" value={query} onChange={(event) => { setQuery(event.target.value); setActive(0); }} onKeyDown={onSearchKeyDown} placeholder="Пошук категорії" aria-label="Пошук категорії" />
+          <ul role="listbox">
+            {options.map((option, index) => (
+              <li key={option.id || "all"} role="option" aria-selected={option.id === value} className={index === active ? "is-active" : ""} onMouseEnter={() => setActive(index)} onMouseDown={(event) => { event.preventDefault(); choose(option.id); }}>{option.name}</li>
+            ))}
+            {options.length === 0 && <li className="category-select-empty">Нічого не знайдено</li>}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
 const SUGGESTION_MIN = 2;
 const SUGGESTION_MAX = 40;
 
