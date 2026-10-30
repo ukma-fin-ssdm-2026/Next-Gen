@@ -30,7 +30,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install fastapi pyyaml
+        run: pip install -r requirements.txt pyyaml
 
       - name: Generate OpenAPI spec
         run: python scripts/generate_openapi.py
