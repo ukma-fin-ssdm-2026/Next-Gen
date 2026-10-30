@@ -150,7 +150,23 @@ Baraholka NaUKMA — вебзастосунок для обміну речами
 
 ## Швидкий запуск та перевірки якості коду
 
-### 1. Встановлення залежностей розробки та тестування
+### 1. Віртуальне середовище та залежності
+
+Потрібні Python 3.12+ і Node.js 24 (для клієнта). Створіть і активуйте віртуальне середовище в корені репозиторію:
+
+```bash
+# Linux / macOS
+python -m venv .venv
+source .venv/bin/activate
+```
+
+```powershell
+# Windows PowerShell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+Далі встановіть залежності розробки та тестування (усі наступні команди виконуються в активованому середовищі):
 
 ```bash
 python -m pip install -r requirements.txt -r requirements-dev.txt
@@ -179,9 +195,34 @@ python -m pytest -q --cov=src --cov-report=term-missing --cov-fail-under=85
 ### 5. Локальний запуск API сервера
 
 ```bash
+# Linux / macOS
 set -a; source .env.development; set +a
-.venv/bin/python -m uvicorn src.api.main:app --reload --port 8000
+python -m uvicorn src.api.main:app --reload --port 8000
 ```
+
+```powershell
+# Windows PowerShell
+Get-Content .env.development | Where-Object { $_ -match '^\s*[^#].*=' } | ForEach-Object {
+    $name, $value = $_ -split '=', 2
+    Set-Item "env:$($name.Trim())" $value.Trim()
+}
+python -m uvicorn src.api.main:app --reload --port 8000
+```
+
+Без `DATABASE_URL` дані зберігаються в пам'яті процесу й зникають після перезапуску.
+
+#### Локальний запуск із PostgreSQL (Docker)
+
+```bash
+docker run -d --name baraholka-db -p 5432:5432 \
+  -e POSTGRES_DB=baraholka -e POSTGRES_USER=baraholka -e POSTGRES_PASSWORD=devpassword \
+  postgres:16-alpine
+export DATABASE_URL=postgresql://baraholka:devpassword@localhost:5432/baraholka
+python -m alembic upgrade head        # створює схему і початкові категорії
+python -m uvicorn src.api.main:app --reload --port 8000
+```
+
+У PowerShell замість `export` використовуйте `$env:DATABASE_URL = "postgresql://baraholka:devpassword@localhost:5432/baraholka"`. Пароль `devpassword` — лише для локальної бази.
 
 Файл `.env.development` містить лише несекретні локальні значення. Кнопка входу створює
 тестову серверну сесію без звернення до Microsoft. Production `.env`
