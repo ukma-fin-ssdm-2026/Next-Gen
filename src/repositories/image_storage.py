@@ -606,10 +606,12 @@ class BaseImageStorage:
                 )
 
             for item in results:
-                assert item.storage_key is not None
-                self._meta_cache[item.storage_key] = item
-                self._staged_records[item.storage_key] = StagedUploadRecord(
-                    storage_key=item.storage_key,
+                storage_key = item.storage_key
+                if storage_key is None:
+                    raise RuntimeError("Processed image is missing its storage key")
+                self._meta_cache[storage_key] = item
+                self._staged_records[storage_key] = StagedUploadRecord(
+                    storage_key=storage_key,
                     uploader_id=actor_id,
                     staged_at=now,
                 )

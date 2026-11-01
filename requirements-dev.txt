@@ -1,3 +1,5 @@
+# Повний набір інструментів для локальної розробки; CI використовує мінімальний
+# хешований набір із requirements-ci.txt / requirements-ci.lock.
 -r requirements.txt
 pytest==8.4.2
 pytest-cov==7.1.0

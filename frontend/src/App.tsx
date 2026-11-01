@@ -1209,6 +1209,10 @@ function ListingGallery({ listing }: { listing: Listing }) {
   const current = images[Math.min(index, count - 1)];
   const go = (step: number) => setIndex((value) => (value + step + count) % count);
   const markBroken = (id: string) => setBroken((value) => new Set(value).add(id));
+  const handleGalleryKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === "ArrowLeft") { event.preventDefault(); go(-1); }
+    if (event.key === "ArrowRight") { event.preventDefault(); go(1); }
+  };
 
   return (
     <div
@@ -1223,8 +1227,8 @@ function ListingGallery({ listing }: { listing: Listing }) {
           : <img key={current.image_id} src={current.image_url} alt={`Фото ${index + 1} з ${count}`} onError={() => markBroken(current.image_id)} />}
         {count > 1 && (
           <>
-            <button className="gallery-nav prev" type="button" onClick={() => go(-1)} aria-label="Попереднє фото">‹</button>
-            <button className="gallery-nav next" type="button" onClick={() => go(1)} aria-label="Наступне фото">›</button>
+            <button className="gallery-nav prev" type="button" onClick={() => go(-1)} onKeyDown={handleGalleryKeyDown} aria-label="Попереднє фото">‹</button>
+            <button className="gallery-nav next" type="button" onClick={() => go(1)} onKeyDown={handleGalleryKeyDown} aria-label="Наступне фото">›</button>
             <span className="gallery-count">{index + 1} / {count}</span>
           </>
         )}
@@ -1237,6 +1241,7 @@ function ListingGallery({ listing }: { listing: Listing }) {
               type="button"
               key={image.image_id}
               onClick={() => setIndex(position)}
+              onKeyDown={handleGalleryKeyDown}
               aria-label={`Показати фото ${position + 1}`}
               aria-current={position === index}
             >
