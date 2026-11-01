@@ -26,4 +26,4 @@ jobs:
           pip install --require-hashes --only-binary :all: -r requirements.lock -r requirements-test.lock
 
       - name: Run TP-N02 without coverage instrumentation
-        run: pytest -q -m performance -s
+        run: pytest -q tests/test_nfr_performance.py -s

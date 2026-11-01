@@ -175,7 +175,7 @@ python -m pytest tests/test_traceability.py -v
 
 #### Команда запуску
 ```bash
-python -m pytest -m performance -s -v
+python -m pytest tests/test_nfr_performance.py -s -v
 ```
 
 У GitHub Actions цей часово чутливий бенчмарк автоматично запускається для pull request у `main` після кожного оновлення його гілки; за потреби доступний і ручний запуск через **Actions → Performance benchmark → Run workflow**. Він навмисно не входить до coverage-gate: інструментація покриття та змінне навантаження runner можуть спотворювати вимірювання часу, але не впливають на перевірку функціональної коректності.
