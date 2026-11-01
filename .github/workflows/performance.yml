@@ -1,0 +1,26 @@
+name: Performance benchmark
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: TP-N02 catalog benchmark
+    runs-on: [self-hosted, linux]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install --require-hashes --only-binary :all: -r requirements.lock -r requirements-test.lock
+
+      - name: Run TP-N02 without coverage instrumentation
+        run: pytest -q -m performance -s

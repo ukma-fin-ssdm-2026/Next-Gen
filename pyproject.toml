@@ -18,6 +18,9 @@ extend-exclude = '''
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "performance: timing-sensitive benchmarks run separately from the coverage gate",
+]
 
 [tool.bandit]
 exclude_dirs = ["tests", "venv", ".venv"]
