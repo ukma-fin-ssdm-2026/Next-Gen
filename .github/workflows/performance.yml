@@ -1,6 +1,8 @@
 name: Performance benchmark
 
 on:
+  pull_request:
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
@@ -20,7 +22,8 @@ jobs:
           python-version: "3.12"
 
       - name: Install test dependencies
-        run: pip install --require-hashes --only-binary :all: -r requirements.lock -r requirements-test.lock
+        run: |
+          pip install --require-hashes --only-binary :all: -r requirements.lock -r requirements-test.lock
 
       - name: Run TP-N02 without coverage instrumentation
         run: pytest -q -m performance -s

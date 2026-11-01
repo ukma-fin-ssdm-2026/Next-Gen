@@ -36,7 +36,7 @@ export function formatDateTime(iso: string | null): string {
 /** Контакт адміністрації «Барахолки» для заблокованих користувачів. */
 const PANEL_PAGE_SIZE = 10;
 const LOG_PAGE_SIZE = 25;
-const ADMIN_CONTACT_URL = "https://t.me/sol_artem";
+export const ADMIN_CONTACT_URL = "https://t.me/sol_artem";
 
 export const COMPLAINT_REASON_LABELS: Record<ComplaintReason, string> = {
   SPAM: "Спам або реклама",
@@ -135,7 +135,7 @@ export function FeedbackPage({ user, authChecked, loginHref, onError, onNotice }
 
   if (!authChecked) return <main className="page-main narrow-page" />;
   if (!user) {
-    return <main className="page-main auth-required"><span className="brand-mark large-mark">Б</span><h1>Звернення доступне після входу</h1><p>Увійдіть через корпоративний Microsoft-акаунт НаУКМА.</p><a className="button button-primary" href={loginHref}>Увійти через Microsoft</a></main>;
+    return <main className="page-main auth-required"><span className="brand-mark large-mark">Б</span><h1>Звернення доступне після входу</h1><p>Увійдіть через корпоративний Microsoft-акаунт НаУКМА.</p><a className="button button-primary" href={loginHref}>Увійти через Microsoft</a><a className="button button-light" href={ADMIN_CONTACT_URL} target="_blank" rel="noopener noreferrer">Зв'язатись через Telegram</a></main>;
   }
 
   async function submit(event: FormEvent) {
@@ -169,7 +169,7 @@ export function FeedbackPage({ user, authChecked, loginHref, onError, onNotice }
           <label><span>Тема <small>3–120 символів</small></span><input value={subject} maxLength={120} onChange={(event) => setSubject(event.target.value)} /></label>
           <label><span>Повідомлення <small>10–2000 символів</small></span><textarea value={message} maxLength={2000} rows={7} onChange={(event) => setMessage(event.target.value)} /></label>
           {formError && <p className="form-error" role="alert">{formError}</p>}
-          <div className="form-actions"><button className="button button-primary" type="submit" disabled={sending}>Надіслати</button></div>
+          <div className="form-actions"><button className="button button-primary" type="submit" disabled={sending}>Надіслати</button><a className="button button-light" href={ADMIN_CONTACT_URL} target="_blank" rel="noopener noreferrer">Зв'язатись через Telegram</a></div>
         </section>
       </form>
     </main>
