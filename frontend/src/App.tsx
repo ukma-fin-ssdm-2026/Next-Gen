@@ -736,6 +736,8 @@ function PhotoCropper({ src, name, queued, aspect = CROP_ASPECT, outputWidth = C
           className={`crop-frame${aspect === 1 ? " crop-frame-square" : ""}`}
           style={{ aspectRatio: String(aspect) }}
           ref={frameRef}
+          role="application"
+          aria-label="Область кадрування фото. Перетягуйте фото вказівником або використовуйте клавіші зі стрілками."
           tabIndex={0}
           onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); dragRef.current = { x: event.clientX, y: event.clientY, ox: offset.x, oy: offset.y }; }}
           onPointerMove={(event) => { const drag = dragRef.current; if (drag) setOffset(clamp(drag.ox + event.clientX - drag.x, drag.oy + event.clientY - drag.y, scale)); }}
@@ -1211,12 +1213,9 @@ function ListingGallery({ listing }: { listing: Listing }) {
   return (
     <div
       className="gallery"
-      tabIndex={0}
+      role="region"
+      aria-roledescription="карусель"
       aria-label="Фотографії оголошення"
-      onKeyDown={(event) => {
-        if (event.key === "ArrowLeft") { event.preventDefault(); go(-1); }
-        if (event.key === "ArrowRight") { event.preventDefault(); go(1); }
-      }}
     >
       <div className="gallery-stage">
         {broken.has(current.image_id)
@@ -1917,7 +1916,9 @@ const ADMIN_TABS: { id: AdminTab; label: string; path: string }[] = [
 ];
 
 function adminTabFromPath(pathname: string): AdminTab | null {
-  const clean = pathname.replace(/\/+$/, "") || "/";
+  let end = pathname.length;
+  while (end > 1 && pathname.charCodeAt(end - 1) === 47) end -= 1;
+  const clean = pathname.slice(0, end) || "/";
   return ADMIN_TABS.find((item) => item.path === clean)?.id ?? null;
 }
 
