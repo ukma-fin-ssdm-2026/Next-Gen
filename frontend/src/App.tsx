@@ -650,7 +650,7 @@ function PhotoCropper({ src, name, queued, aspect = CROP_ASPECT, outputWidth = C
   onDone: (blob: Blob) => void;
   onUnreadable: () => void;
 }) {
-  const frameRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLButtonElement>(null);
   const dragRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [frame, setFrame] = useState({ w: 0, h: 0 });
@@ -732,13 +732,12 @@ function PhotoCropper({ src, name, queued, aspect = CROP_ASPECT, outputWidth = C
           <h2>{title}</h2>
           <p>{hint ?? "Кадр 4:3 такий самий, як у каталозі й на сторінці оголошення. Можна заповнити його фото або вписати фото повністю, а порожні місця заповнити полями."}{queued > 0 ? ` Ще фото в черзі: ${queued}.` : ""}</p>
         </div>
-        <div
+        <button
+          type="button"
           className={`crop-frame${aspect === 1 ? " crop-frame-square" : ""}`}
           style={{ aspectRatio: String(aspect) }}
           ref={frameRef}
-          role="application"
           aria-label="Область кадрування фото. Перетягуйте фото вказівником або використовуйте клавіші зі стрілками."
-          tabIndex={0}
           onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); dragRef.current = { x: event.clientX, y: event.clientY, ox: offset.x, oy: offset.y }; }}
           onPointerMove={(event) => { const drag = dragRef.current; if (drag) setOffset(clamp(drag.ox + event.clientX - drag.x, drag.oy + event.clientY - drag.y, scale)); }}
           onPointerUp={() => { dragRef.current = null; }}
@@ -764,7 +763,7 @@ function PhotoCropper({ src, name, queued, aspect = CROP_ASPECT, outputWidth = C
             style={natural ? { width: natural.w * scale, height: natural.h * scale, transform: `translate(${offset.x}px, ${offset.y}px)` } : { visibility: "hidden" }}
           />
           <span className="crop-grid" aria-hidden="true" />
-        </div>
+        </button>
         <div className="crop-modes" role="group" aria-label="Режим кадру">
           <button type="button" className={!hasGaps ? "active" : ""} onClick={() => { if (!natural) return; setZoom(1); setOffset({ x: (frame.w - natural.w * minScale) / 2, y: (frame.h - natural.h * minScale) / 2 }); }}>Заповнити кадр</button>
           <button type="button" className={hasGaps ? "active" : ""} disabled={fitRatio > 0.995} onClick={() => { if (!natural) return; const nextScale = minScale * fitRatio; setZoom(fitRatio); setOffset({ x: (frame.w - natural.w * nextScale) / 2, y: (frame.h - natural.h * nextScale) / 2 }); }}>Вписати повністю</button>
@@ -1215,9 +1214,8 @@ function ListingGallery({ listing }: { listing: Listing }) {
   };
 
   return (
-    <div
+    <section
       className="gallery"
-      role="region"
       aria-roledescription="карусель"
       aria-label="Фотографії оголошення"
     >
@@ -1255,7 +1253,7 @@ function ListingGallery({ listing }: { listing: Listing }) {
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
