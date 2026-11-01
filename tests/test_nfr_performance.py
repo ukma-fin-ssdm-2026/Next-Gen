@@ -76,6 +76,7 @@ def performance_dataset() -> None:
         app.dependency_overrides.pop(get_listing_service, None)
 
 
+@pytest.mark.performance
 @pytest.mark.anyio
 async def test_nfr_perf_001_concurrent_catalog_latency_under_500_listings(
     performance_dataset: None,

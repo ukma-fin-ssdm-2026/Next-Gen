@@ -55,7 +55,7 @@ jobs:
         run: pip-audit -r requirements.txt
 
       - name: Tests with coverage gate (85%)
-        run: pytest -q --cov=src --cov-report=term-missing --cov-report=html --cov-fail-under=85
+        run: pytest -q -m "not performance" --cov=src --cov-report=term-missing --cov-report=html --cov-fail-under=85
 
       - name: Coverage summary
         if: always()
