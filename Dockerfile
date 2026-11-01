@@ -29,6 +29,7 @@ RUN python -m pip install \
     -r requirements.lock
 
 COPY --chown=app:app src ./src
+COPY --chown=app:app scripts/seed_listings.py ./scripts/seed_listings.py
 COPY --chown=app:app alembic ./alembic
 COPY --chown=app:app alembic.ini ./
 COPY --from=frontend-build --chown=app:app /frontend/dist ./frontend/dist
