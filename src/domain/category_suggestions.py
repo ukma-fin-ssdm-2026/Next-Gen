@@ -7,12 +7,12 @@ import re
 import unicodedata
 from uuid import UUID, uuid4
 
+from src.domain.categories import CATEGORY_SLUG_MAX_LENGTH, CATEGORY_SLUG_PATTERN
 from src.domain.exceptions import InvalidCategorySuggestionError
 from src.domain.listings import utc_now
 
 SUGGESTION_NAME_MIN_LENGTH = 2
 SUGGESTION_NAME_MAX_LENGTH = 40
-CATEGORY_SLUG_MAX_LENGTH = 100
 MAX_PENDING_SUGGESTIONS_PER_USER = 3
 
 _CYRILLIC_TO_LATIN: dict[str, str] = {
@@ -102,7 +102,7 @@ def normalize_category_slug(slug: str) -> str:
         raise InvalidCategorySuggestionError(
             f"Slug категорії має містити від 1 до {CATEGORY_SLUG_MAX_LENGTH} символів"
         )
-    if re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", cleaned) is None:
+    if re.fullmatch(CATEGORY_SLUG_PATTERN, cleaned) is None:
         raise InvalidCategorySuggestionError(
             "Slug категорії може містити лише латинські літери, цифри й одинарні дефіси"
         )

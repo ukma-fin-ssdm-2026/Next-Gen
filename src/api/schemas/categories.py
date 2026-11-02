@@ -3,6 +3,8 @@
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.domain.categories import CATEGORY_SLUG_MAX_LENGTH, CATEGORY_SLUG_PATTERN
+
 
 class CategoryResponse(BaseModel):
     """Публічна схема категорії."""
@@ -20,7 +22,12 @@ class CategoryCreateRequest(BaseModel):
     """Схема створення нової категорії (адміністративна дія, FR-012)."""
 
     name: str = Field(min_length=1, max_length=100, description="Назва категорії")
-    slug: str = Field(min_length=1, max_length=100, description="Slug категорії")
+    slug: str = Field(
+        min_length=1,
+        max_length=CATEGORY_SLUG_MAX_LENGTH,
+        pattern=rf"^{CATEGORY_SLUG_PATTERN}$",
+        description="Slug категорії",
+    )
     description: str | None = Field(
         default=None, max_length=500, description="Опис категорії"
     )
@@ -33,7 +40,11 @@ class CategoryUpdateRequest(BaseModel):
         default=None, min_length=1, max_length=100, description="Нова назва категорії"
     )
     slug: str | None = Field(
-        default=None, min_length=1, max_length=100, description="Новий slug категорії"
+        default=None,
+        min_length=1,
+        max_length=CATEGORY_SLUG_MAX_LENGTH,
+        pattern=rf"^{CATEGORY_SLUG_PATTERN}$",
+        description="Новий slug категорії",
     )
     description: str | None = Field(
         default=None, max_length=500, description="Новий опис категорії"

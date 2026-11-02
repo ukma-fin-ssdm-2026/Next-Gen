@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from src.api.deps import require_current_user
 from src.api.main import app
-from src.domain.listings import SEED_CATEGORY_ID
+from src.domain.listings import OTHER_CATEGORY_ID, SEED_CATEGORY_ID
 from src.domain.users import CurrentUser, UserRole
 
 URL = "/api/v1/categories"
@@ -147,6 +147,25 @@ def test_create_category_duplicate_slug_returns_409(admin_client: TestClient) ->
     assert "вже існує" in response.json()["detail"].lower()
 
 
+@pytest.mark.parametrize("slug", ["../admin", "two words", "leading-", "a--b"])
+def test_admin_create_category_rejects_invalid_slug(
+    admin_client: TestClient, slug: str
+) -> None:
+    """[SEC-002] POST відхиляє slug поза серверним allowlist."""
+    response = admin_client.post(URL, json={"name": "Некоректна", "slug": slug})
+    assert response.status_code == 422
+
+
+def test_admin_patch_category_rejects_invalid_slug(
+    admin_client: TestClient,
+) -> None:
+    """[SEC-002] PATCH не дозволяє обійти allowlist slug прямим API-запитом."""
+    response = admin_client.patch(
+        f"{URL}/{SEED_CATEGORY_ID}", json={"slug": "unsafe/path"}
+    )
+    assert response.status_code == 422
+
+
 def test_admin_update_category_and_deactivate(admin_client: TestClient) -> None:
     """[TP-017] [FR-012]
     Адміністратор може оновити та деактивувати категорію (HTTP 200).
@@ -171,6 +190,21 @@ def test_admin_update_category_and_deactivate(admin_client: TestClient) -> None:
 
     public_list = admin_client.get(URL).json()
     assert cat_id not in [cat["id"] for cat in public_list]
+
+
+def test_admin_cannot_deactivate_system_other_category(
+    admin_client: TestClient,
+) -> None:
+    """[SEC-002] Системну fallback-категорію не вимкнути навіть прямим PATCH."""
+    response = admin_client.patch(
+        f"{URL}/{OTHER_CATEGORY_ID}", json={"is_active": False}
+    )
+    assert response.status_code == 422
+    assert "не можна деактивувати" in response.json()["detail"]
+
+    other = admin_client.get(f"{URL}/{OTHER_CATEGORY_ID}")
+    assert other.status_code == 200
+    assert other.json()["is_active"] is True
 
 
 def test_non_admin_cannot_update_category(client: TestClient) -> None:

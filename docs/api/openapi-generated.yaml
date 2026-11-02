@@ -2448,6 +2448,7 @@ components:
           type: string
           maxLength: 100
           minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
           title: Slug
           description: Slug категорії
         description:
@@ -2638,6 +2639,7 @@ components:
           - type: string
             maxLength: 100
             minLength: 1
+            pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
           - type: 'null'
           title: Slug
           description: Новий slug категорії
