@@ -903,7 +903,8 @@ paths:
       summary: Схвалити пропозицію та створити категорію
       description: 'Адміністратор схвалює пропозицію категорії (FR-015): створюється
         нова активна категорія, усі активні оголошення з категорії «Інше» переміщуються
-        до неї, а дія фіксується в журналі модерації.'
+        до неї, назву та slug перед схваленням можна скоригувати, а дія фіксується
+        в журналі модерації.'
       operationId: approve_category_suggestion_api_v1_category_suggestions__suggestion_id__approve_post
       parameters:
       - name: suggestion_id
@@ -2447,6 +2448,7 @@ components:
           type: string
           maxLength: 100
           minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
           title: Slug
           description: Slug категорії
         description:
@@ -2505,10 +2507,21 @@ components:
           description: Скоригована адміністратором назва категорії
           examples:
           - Музичні інструменти та аудіо
+        slug:
+          anyOf:
+          - type: string
+            maxLength: 100
+            minLength: 1
+            pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          - type: 'null'
+          title: Slug
+          description: Скоригований slug; якщо не передано, він автоматично генерується
+            з назви
+          examples:
+          - muzychni-instrumenty-ta-audio
       type: object
       title: CategorySuggestionApproveRequest
-      description: Необов'язкове тіло запиту на схвалення пропозиції з можливістю
-        уточнити назву.
+      description: Необов'язкові назва та slug створюваної категорії.
     CategorySuggestionCreateRequest:
       properties:
         name:
@@ -2626,6 +2639,7 @@ components:
           - type: string
             maxLength: 100
             minLength: 1
+            pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
           - type: 'null'
           title: Slug
           description: Новий slug категорії

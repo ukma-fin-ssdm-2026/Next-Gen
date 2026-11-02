@@ -2,8 +2,9 @@
 
 from uuid import UUID
 
-from src.domain.categories import Category
+from src.domain.categories import Category, normalize_category_slug
 from src.domain.exceptions import CategoryNotFoundError, InvalidCategoryError
+from src.domain.listings import OTHER_CATEGORY_ID
 from src.repositories.categories import CategoryRepository
 
 
@@ -72,16 +73,14 @@ class CategoryService:
 
         new_slug = category.slug
         if slug is not None:
-            clean_slug = slug.strip().lower()
-            if not clean_slug:
-                raise InvalidCategoryError("Slug категорії не може бути порожнім")
-            new_slug = clean_slug
+            new_slug = normalize_category_slug(slug)
 
         new_description = category.description
         if description is not None:
             new_description = description.strip() if description.strip() else None
 
         new_is_active = category.is_active if is_active is None else is_active
+        self._ensure_system_category_remains_active(category_id, new_is_active)
 
         updated_copy = Category(
             id=category.id,
@@ -95,6 +94,7 @@ class CategoryService:
     def deactivate(self, category_id: UUID) -> Category:
         """Деактивує категорію зі збереженням запису в БД (FR-012)."""
         category = self.get_by_id(category_id)
+        self._ensure_system_category_remains_active(category_id, False)
         deactivated_copy = Category(
             id=category.id,
             name=category.name,
@@ -103,6 +103,16 @@ class CategoryService:
             is_active=False,
         )
         return self._repository.update(deactivated_copy)
+
+    @staticmethod
+    def _ensure_system_category_remains_active(
+        category_id: UUID, is_active: bool
+    ) -> None:
+        """Забороняє вимкнення fallback-категорії, потрібної оголошенням."""
+        if category_id == OTHER_CATEGORY_ID and not is_active:
+            raise InvalidCategoryError(
+                "Системну категорію «Інше» не можна деактивувати"
+            )
 
     def is_valid_category_id(self, category_id: UUID) -> bool:
         """Перевіряє, чи існує активна категорія із зазначеним ID."""

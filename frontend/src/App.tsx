@@ -15,6 +15,7 @@ import {
   approveCategorySuggestion,
   blockUser,
   blockUserByEmail,
+  createCategory,
   createListing,
   deleteListing,
   getCategories,
@@ -35,6 +36,7 @@ import {
   unblockUser,
   unblockUserByEmail,
   deleteAvatar,
+  updateCategory,
   updateListing,
   updateProfile,
   uploadAvatar,
@@ -1905,10 +1907,11 @@ function ProfilePage({ user, authChecked, onUserChange, onError, onNotice }: {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UKMA_EMAIL_PATTERN = /^[^@\s]+@ukma\.edu\.ua$/i;
 
-type AdminTab = "moderation" | "complaints" | "feedback" | "blocked" | "user-log" | "admin-log";
+type AdminTab = "moderation" | "categories" | "complaints" | "feedback" | "blocked" | "user-log" | "admin-log";
 /** Кожна вкладка має власну адресу, щоб на неї можна було посилатися. */
 const ADMIN_TABS: { id: AdminTab; label: string; path: string }[] = [
   { id: "moderation", label: "Модерація", path: "/admin" },
+  { id: "categories", label: "Категорії", path: "/admin/categories" },
   { id: "complaints", label: "Скарги", path: "/admin/complaints" },
   { id: "feedback", label: "Звернення", path: "/admin/feedback" },
   { id: "blocked", label: "Заблоковані", path: "/admin/blocked" },
@@ -1978,6 +1981,10 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
         ))}
       </div>
       {tab === null && <NotFoundPage />}
+      {tab === "categories" && (<>
+        <AdminCategoriesPanel onError={onError} onNotice={onNotice} onCategoriesChanged={onCategoriesChanged} />
+        <CategorySuggestionsPanel onError={onError} onNotice={onNotice} onCategoriesChanged={onCategoriesChanged} />
+      </>)}
       {tab === "complaints" && <ComplaintsPanel onError={onError} onNotice={onNotice} />}
       {tab === "feedback" && <FeedbackAdminPanel onError={onError} onNotice={onNotice} />}
       {tab === "blocked" && <BlockedUsersPanel onError={onError} onNotice={onNotice} />}
@@ -2011,13 +2018,143 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
           </section>
         )}
       </form>
-      <CategorySuggestionsPanel onError={onError} onNotice={onNotice} onCategoriesChanged={onCategoriesChanged} />
       </>)}
     </main>
   );
 }
 
 const OTHER_CATEGORY_ID = "55555555-5555-5555-5555-555555555555";
+const CATEGORY_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function AdminCategoriesPanel({ onError, onNotice, onCategoriesChanged }: {
+  onError: (message: string) => void;
+  onNotice: (message: string) => void;
+  onCategoriesChanged: () => void;
+}) {
+  const [items, setItems] = useState<Category[] | null>(null);
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [description, setDescription] = useState("");
+  const [editedNames, setEditedNames] = useState<Record<string, string>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setItems(sortCategories(await getCategories()));
+    } catch (requestError) {
+      setItems([]);
+      onError(errorText(requestError));
+    }
+  }, [onError]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function submitNew(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const cleanName = name.trim();
+    const cleanSlug = slug.trim().toLowerCase();
+    if (!cleanName) { onError("Вкажіть назву категорії"); return; }
+    if (!CATEGORY_SLUG_PATTERN.test(cleanSlug)) {
+      onError("Slug має містити лише латинські літери, цифри й одинарні дефіси");
+      return;
+    }
+    setCreating(true);
+    try {
+      await createCategory({ name: cleanName, slug: cleanSlug, description: description.trim() || null });
+      setName("");
+      setSlug("");
+      setDescription("");
+      onNotice(`Категорію «${cleanName}» створено`);
+      onCategoriesChanged();
+      await load();
+    } catch (requestError) {
+      onError(errorText(requestError));
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function rename(item: Category) {
+    const cleanName = (editedNames[item.id] ?? item.name).trim();
+    if (!cleanName) { onError("Назва категорії не може бути порожньою"); return; }
+    setBusyId(item.id);
+    try {
+      await updateCategory(item.id, { name: cleanName });
+      onNotice(`Категорію перейменовано на «${cleanName}»`);
+      onCategoriesChanged();
+      await load();
+    } catch (requestError) {
+      onError(errorText(requestError));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function deactivate(item: Category) {
+    setBusyId(item.id);
+    try {
+      await updateCategory(item.id, { is_active: false });
+      setConfirmId(null);
+      onNotice(`Категорію «${item.name}» деактивовано; наявні оголошення збережено`);
+      onCategoriesChanged();
+      await load();
+    } catch (requestError) {
+      onError(errorText(requestError));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="category-management">
+      <form className="form-block" onSubmit={(event) => void submitNew(event)}>
+        <div className="form-block-head"><div><h2>Створити категорію</h2><p className="form-hint">Slug використовується в адресах і після створення не змінюється автоматично.</p></div></div>
+        <div className="form-row">
+          <label><span>Назва</span><input value={name} onChange={(event) => setName(event.target.value)} maxLength={100} required /></label>
+          <label><span>Slug</span><input value={slug} onChange={(event) => setSlug(event.target.value)} maxLength={100} placeholder="muzychni-instrumenty" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required /></label>
+        </div>
+        <label><span>Опис <small>необов’язково</small></span><textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} rows={2} /></label>
+        <div className="form-actions"><button className="button button-primary" type="submit" disabled={creating}>{creating ? "Створюємо…" : "Створити категорію"}</button></div>
+      </form>
+
+      <section className="form-block">
+        <div className="form-block-head"><div><h2>Активні категорії</h2><p className="form-hint">Деактивація прибирає категорію з нових оголошень, але не видаляє наявні.</p></div></div>
+        {items === null && <p className="form-hint">Завантажуємо…</p>}
+        {items?.length === 0 && <p className="form-hint">Активних категорій немає.</p>}
+        <ul className="category-management-list">
+          {items?.map((item) => {
+            const isSystemOther = item.id === OTHER_CATEGORY_ID;
+            return (
+              <li key={item.id}>
+                <div className="category-management-fields">
+                  <label><span>Назва</span><input value={editedNames[item.id] ?? item.name} maxLength={100} onChange={(event) => setEditedNames((current) => ({ ...current, [item.id]: event.target.value }))} /></label>
+                  <div><span className="field-label">Slug</span><code>{item.slug}</code></div>
+                </div>
+                {item.description && <p className="form-hint">{item.description}</p>}
+                {confirmId === item.id ? (
+                  <div className="category-deactivate-confirm" role="alert">
+                    <span>Деактивувати «{item.name}»?</span>
+                    <div className="form-actions">
+                      <button className="button button-danger" type="button" disabled={busyId === item.id} onClick={() => void deactivate(item)}>Так, деактивувати</button>
+                      <button className="button button-light" type="button" disabled={busyId === item.id} onClick={() => setConfirmId(null)}>Скасувати</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="form-actions">
+                    <button className="button button-primary" type="button" disabled={busyId === item.id} onClick={() => void rename(item)}>Зберегти назву</button>
+                    <button className="button button-danger" type="button" disabled={isSystemOther || busyId === item.id} title={isSystemOther ? "Системна категорія потрібна для пропозицій" : undefined} onClick={() => setConfirmId(item.id)}>Деактивувати</button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    </div>
+  );
+}
 
 /** Категорія «Інше» завжди остання; решта лишається в порядку сервера. */
 function sortCategories(items: Category[]): Category[] {
@@ -2102,6 +2239,7 @@ function CategorySuggestionsPanel({ onError, onNotice, onCategoriesChanged }: {
 }) {
   const [items, setItems] = useState<CategorySuggestion[] | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
+  const [slugs, setSlugs] = useState<Record<string, string>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -2118,10 +2256,15 @@ function CategorySuggestionsPanel({ onError, onNotice, onCategoriesChanged }: {
 
   async function approve(item: CategorySuggestion) {
     const edited = (names[item.suggestion_id] ?? item.name).trim();
+    const editedSlug = (slugs[item.suggestion_id] ?? "").trim().toLowerCase();
     if (edited.length < SUGGESTION_MIN || edited.length > SUGGESTION_MAX) { onError(`Назва категорії: від ${SUGGESTION_MIN} до ${SUGGESTION_MAX} символів`); return; }
+    if (editedSlug && !CATEGORY_SLUG_PATTERN.test(editedSlug)) { onError("Slug має містити лише латинські літери, цифри й одинарні дефіси"); return; }
     setBusyId(item.suggestion_id);
     try {
-      await approveCategorySuggestion(item.suggestion_id, edited === item.name ? undefined : edited);
+      await approveCategorySuggestion(item.suggestion_id, {
+        ...(edited === item.name ? {} : { name: edited }),
+        ...(editedSlug ? { slug: editedSlug } : {}),
+      });
       onNotice(`Категорію «${edited}» створено, оголошення перенесено`);
       onCategoriesChanged();
       await load();
@@ -2149,7 +2292,7 @@ function CategorySuggestionsPanel({ onError, onNotice, onCategoriesChanged }: {
 
   return (
     <section className="form-block suggestions-panel">
-      <div className="form-block-head"><div><h2>Пропозиції категорій</h2><p className="form-hint">Схвалення створює категорію й переносить оголошення з «Інше»; назву можна виправити. Відхилення лишає оголошення в «Інше».</p></div></div>
+      <div className="form-block-head"><div><h2>Пропозиції користувачів</h2><p className="form-hint">Схвалення створює категорію й переносить оголошення з «Інше»; назву та slug можна виправити. Порожній slug сервер сформує автоматично.</p></div></div>
       {items === null && <p className="form-hint">Завантажуємо…</p>}
       {items?.length === 0 && <p className="form-hint">Нових пропозицій немає.</p>}
       <ul className="suggestion-list">
@@ -2158,6 +2301,9 @@ function CategorySuggestionsPanel({ onError, onNotice, onCategoriesChanged }: {
             <div className="suggestion-head"><strong>{item.name}</strong><span className="form-hint">оголошень: {item.listings_count}</span></div>
             <div className="form-row">
               <label><span>Назва категорії</span><input value={names[item.suggestion_id] ?? item.name} maxLength={SUGGESTION_MAX} onChange={(event) => setNames((current) => ({ ...current, [item.suggestion_id]: event.target.value }))} /></label>
+              <label><span>Slug <small>необов’язково</small></span><input value={slugs[item.suggestion_id] ?? ""} maxLength={100} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" onChange={(event) => setSlugs((current) => ({ ...current, [item.suggestion_id]: event.target.value }))} placeholder="Автоматично з назви" /></label>
+            </div>
+            <div className="form-row">
               <label><span>Причина відхилення</span><input value={reasons[item.suggestion_id] ?? ""} maxLength={500} onChange={(event) => setReasons((current) => ({ ...current, [item.suggestion_id]: event.target.value }))} placeholder="Для відхилення" /></label>
             </div>
             <div className="form-actions">

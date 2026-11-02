@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from src.domain.category_suggestions import (
+    CATEGORY_SLUG_MAX_LENGTH,
     SUGGESTION_NAME_MAX_LENGTH,
     SUGGESTION_NAME_MIN_LENGTH,
     CategorySuggestionStatus,
@@ -27,12 +28,22 @@ class CategorySuggestionCreateRequest(BaseModel):
 
 
 class CategorySuggestionApproveRequest(BaseModel):
-    """Необов'язкове тіло запиту на схвалення пропозиції з можливістю уточнити назву."""
+    """Необов'язкові назва та slug створюваної категорії."""
 
     name: Optional[str] = Field(
         None,
         description="Скоригована адміністратором назва категорії",
         examples=["Музичні інструменти та аудіо"],
+    )
+    slug: Optional[str] = Field(
+        None,
+        min_length=1,
+        max_length=CATEGORY_SLUG_MAX_LENGTH,
+        pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$",
+        description=(
+            "Скоригований slug; якщо не передано, він автоматично генерується з назви"
+        ),
+        examples=["muzychni-instrumenty-ta-audio"],
     )
 
 

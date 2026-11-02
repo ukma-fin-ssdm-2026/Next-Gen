@@ -17,13 +17,16 @@ package "Server Tier (FastAPI Monolith)" {
     component "Auth Service" as AuthService <<Service>>
     component "Listing Service" as ListingService <<Service>>
     component "Moderation Service" as ModerationService <<Service>>
+    component "Complaint Service" as ComplaintService <<Service>>
+    component "Feedback Service" as FeedbackService <<Service>>
+    component "Activity Log Service" as ActivityLogService <<Service>>
     
     component "Data Access Layer\n(ORM)" as DAL <<Repository>>
 }
 
 package "Data Tier" {
     database "PostgreSQL" as DB <<Database>>
-    storage "Image Storage\n(Object Storage / S3)" as S3 <<Storage>>
+    storage "Image Storage\n(Local Docker Volume)" as ImageStorage <<Storage>>
 }
 
 ' Connections
@@ -33,12 +36,21 @@ RestAPI - Router
 Router --> AuthService
 Router --> ListingService
 Router --> ModerationService
+Router --> ComplaintService
+Router --> FeedbackService
+Router --> ActivityLogService
 
 AuthService --> DAL
 AuthService ..> Entra : "OIDC Authorization Code\nHTTPS"
 ListingService --> DAL
-ListingService --> S3 : "Save/Delete Images"
+ListingService --> ImageStorage : "Save/Delete WebP Images"
+ListingService --> ActivityLogService : "Record User Actions"
 ModerationService --> DAL
+ComplaintService --> DAL
+ComplaintService --> ActivityLogService : "Record Submit/Resolution"
+FeedbackService --> DAL
+FeedbackService --> ActivityLogService : "Record Submit/Resolution"
+ActivityLogService --> DAL
 
 DAL ..> DB : "TCP/IP\n(SQL)"
 
