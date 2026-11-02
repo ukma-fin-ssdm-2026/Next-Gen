@@ -23,14 +23,18 @@ import type {
 } from "./types";
 
 const API_ROOT = "/api/v1";
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class ApiError extends Error {
+  public readonly status: number;
+
   constructor(
-    public readonly status: number,
+    status: number,
     message: string,
   ) {
     super(message);
     this.name = "ApiError";
+    this.status = status;
   }
 }
 
@@ -51,16 +55,25 @@ function errorMessage(payload: unknown, fallback: string): string {
   return fallback;
 }
 
-/** Екранує значення, що підставляється в сегмент шляху API (захист від path traversal / SSRF). */
+/** Пропускає в динамічні сегменти API лише UUID. */
 function segment(value: string): string {
-  return encodeURIComponent(value);
+  const normalized = value.trim();
+  if (!UUID_PATTERN.test(normalized)) {
+    throw new Error("Некоректний ідентифікатор ресурсу");
+  }
+  return normalized.toLowerCase();
 }
 
-/** Дозволяє лише відносні шляхи API без обходу каталогів і зміни хоста. */
-function assertApiPath(path: string): void {
+/** Будує лише same-origin URL усередині API-префікса. */
+function apiUrl(path: string): URL {
   if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\") || path.split("?")[0].split("/").some((part) => part === "..")) {
     throw new Error("Некоректний шлях запиту");
   }
+  const url = new URL(`${API_ROOT}${path}`, window.location.origin);
+  if (url.origin !== window.location.origin || !url.pathname.startsWith(`${API_ROOT}/`)) {
+    throw new Error("Некоректна адреса запиту");
+  }
+  return url;
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -68,8 +81,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function apiFetchWithHeaders<T>(path: string, init?: RequestInit): Promise<{ data: T; headers: Headers }> {
-  assertApiPath(path);
-  const response = await fetch(`${API_ROOT}${path}`, {
+  const response = await fetch(apiUrl(path), {
     credentials: "include",
     ...init,
     headers: {

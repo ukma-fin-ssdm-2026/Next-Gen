@@ -1294,9 +1294,7 @@ function HomePage({ categories, categoryNames, user, favorites, busy, onFavorite
     navigate(q ? `/listings?${new URLSearchParams({ q }).toString()}` : "/listings");
   }
 
-  const totalLabel = totalListings === null
-    ? "…"
-    : totalListings >= STATS_SAMPLE_SIZE ? `${STATS_SAMPLE_SIZE}+` : String(totalListings);
+  const totalLabel = totalListings === null ? "…" : String(totalListings);
 
   return (
     <main>
