@@ -57,7 +57,7 @@ def test_create_listing_with_suggested_category_and_approve_flow(
 
     approve_resp = client.post(
         f"/api/v1/category-suggestions/{suggestion_id}/approve",
-        json={"name": "Музичні інструменти"},
+        json={"name": "Музичні інструменти", "slug": "music-gear"},
     )
     assert approve_resp.status_code == 200
     approved_data = approve_resp.json()
@@ -69,6 +69,10 @@ def test_create_listing_with_suggested_category_and_approve_flow(
     # Нова категорія з'явилася в GET /api/v1/categories, а оголошення перейшло до неї
     cats_resp = client.get("/api/v1/categories")
     assert any(c["id"] == new_category_id for c in cats_resp.json())
+    created_category = next(
+        category for category in cats_resp.json() if category["id"] == new_category_id
+    )
+    assert created_category["slug"] == "music-gear"
     assert (
         client.get(f"/api/v1/listings/{listing_id}").json()["category_id"]
         == new_category_id

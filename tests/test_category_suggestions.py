@@ -185,12 +185,16 @@ def test_approve_moves_only_active_other_listings_and_records_audit(
     assert queue[0][1] == 2  # l1 та l3 активні
 
     approved = category_suggestion_service.approve(
-        admin, suggestion_id, name="Музичні інструменти та звук"
+        admin,
+        suggestion_id,
+        name="Музичні інструменти та звук",
+        slug="music-and-sound",
     )
     assert approved.status == CategorySuggestionStatus.APPROVED
     assert approved.category_id is not None
     assert approved.reviewed_by == admin.user_id
     assert approved.reviewed_at is not None
+    assert category_service.get_by_slug("music-and-sound").id == approved.category_id
 
     # Нова категорія з'явилася в активному каталозі
     active_ids = {cat.id for cat in category_service.list_active()}

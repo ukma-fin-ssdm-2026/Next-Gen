@@ -17,6 +17,9 @@
 | FR-012   | Керування категоріями                               | Moderation Service, Data Access Layer (ORM), Category | Unit-тест CRUD категорій |
 | FR-013   | Блокування користувачів                             | User Moderation Service, Auth Service, Data Access Layer (ORM), User.is_blocked, ModerationAction | TP-026, TP-027 |
 | FR-015   | Пропозиції нових категорій і їх модерація           | Category Suggestion Service, Listing Service, Category Service, Data Access Layer, CategorySuggestion, Listing.suggested_category_id, ModerationAction | TP-026, TP-027, TP-028 |
+| FR-016   | Скарги на оголошення                                | React SPA, Complaint Service, Activity Log Service, Data Access Layer (ORM), Complaint, Listing, ActivityEvent | TP-031, TP-034 |
+| FR-017   | Звернення до адміністрації                          | React SPA, Feedback Service, Activity Log Service, Data Access Layer (ORM), FeedbackMessage, ActivityEvent | TP-032, TP-034 |
+| FR-018   | Окремі журнали дій користувачів та адміністраторів  | React SPA, Activity Log Service, Moderation Service, Data Access Layer (ORM), ActivityEvent, ModerationAction | TP-033, TP-034 |
 | PERF-001 | Час завантаження ≤300мс при 50 користувачах         | React SPA, API Router, Listing Service, Data Access Layer (ORM), PostgreSQL (Listing) | Навантажувальний тест |
 | REL-001  | Відновлення без втрати даних, RTO ≤5хв              | Data Access Layer (ORM), PostgreSQL Database | Хаос-експеримент (збій сервера) |
 | SEC-001  | Лише tenant НаУКМА та @ukma.edu.ua | Microsoft Entra ID, Auth Service, User.tenant_id/entra_object_id/email | Негативні тести tenant, issuer, audience, expiry, state/nonce і domain |
@@ -40,3 +43,4 @@
 > - **Етап:** Побудова матриці простежуваності вимог до архітектурних компонентів та сценаріїв атрибутів якості, включаючи FR-014 і FR-015.
 > - **Що згенеровано:** Чорновий варіант прив'язок FR/NFR до компонентів на основі high-level-design.md, components.puml, deployment.puml та data-model.md; формулювання методів верифікації; чернетка двох сценаріїв атрибутів якості за довідником курсу (цифри з requirements.md).
 > - **Що перевірено / відкинуто вручну:** Прив'язки і сценарії перевірено і підтверджено мною; звірено назви компонентів з components.puml та deployment.puml; підтверджено з Architecture Lead, що PERF-001 стосується всього ланцюжка обробки запиту; Data Access Layer додано в усі рядки після зауваження викладача; сценарії звірено з довідником про сценарії атрибутів якості.
+> - **Доповнення (Артем Солодкий, 02.11.2026):** OpenAI Codex допоміг додати архітектурну простежуваність FR-016–FR-018 після проміжного оцінювання. Компоненти, сутності та тест-кейси вручну звірено з `requirements.md`, `rtm.md`, сервісами, SQLAlchemy-моделями й тест-планом.

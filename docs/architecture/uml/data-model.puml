@@ -79,6 +79,43 @@ entity "Favorite" as favorite {
   * created_at : datetime
 }
 
+entity "Complaint" as complaint {
+  * complaint_id : UUID <<PK>>
+  --
+  * listing_id : UUID <<FK>>
+  * reporter_id : UUID <<FK>>
+  * reason : enum
+  * details : text
+  * status : enum
+  * created_at : datetime
+  resolved_by : UUID <<FK, nullable>>
+  resolved_at : datetime <<nullable>>
+  * resolution_note : text
+}
+
+entity "FeedbackMessage" as feedback {
+  * feedback_id : UUID <<PK>>
+  --
+  * user_id : UUID <<FK>>
+  * subject : string
+  * message : text
+  * status : enum
+  * created_at : datetime
+  resolved_by : UUID <<FK, nullable>>
+  resolved_at : datetime <<nullable>>
+}
+
+entity "ActivityEvent" as activity {
+  * event_id : UUID <<PK>>
+  --
+  * actor_id : UUID <<FK>>
+  * actor_role : enum
+  * action_type : enum
+  listing_id : UUID <<nullable>>
+  * details : string
+  * created_at : datetime
+}
+
 user ||--o{ listing : creates
 category ||--o{ listing : categorizes
 suggestion o|--o{ listing : suggested for
@@ -92,6 +129,13 @@ listing o|--o{ moderation : target listing
 suggestion o|--o{ moderation : target suggestion
 user ||--o{ favorite : adds
 listing ||--o{ favorite : is_favorited
+user ||--o{ complaint : reports
+user o|--o{ complaint : resolves
+listing ||--o{ complaint : receives
+user ||--o{ feedback : submits
+user o|--o{ feedback : resolves
+user ||--o{ activity : performs
+listing o|..o{ activity : referenced by
 
 note right of user
   role: USER | ADMIN
@@ -113,6 +157,23 @@ note right of moderation
 
   Exactly one target must be set:
   listing_id XOR target_user_id XOR suggestion_id
+end note
+
+note right of complaint
+  reason: SPAM | FRAUD | PROHIBITED |
+          INAPPROPRIATE | WRONG_CATEGORY | OTHER
+  status: OPEN | RESOLVED | DISMISSED
+  UNIQUE (listing_id, reporter_id)
+end note
+
+note right of feedback
+  status: NEW | RESOLVED
+end note
+
+note right of activity
+  Immutable audit event (FR-018)
+  listing_id is a logical reference without FK
+  INDEX (actor_role, created_at)
 end note
 
 @enduml

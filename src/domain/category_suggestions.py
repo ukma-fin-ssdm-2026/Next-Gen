@@ -12,6 +12,7 @@ from src.domain.listings import utc_now
 
 SUGGESTION_NAME_MIN_LENGTH = 2
 SUGGESTION_NAME_MAX_LENGTH = 40
+CATEGORY_SLUG_MAX_LENGTH = 100
 MAX_PENDING_SUGGESTIONS_PER_USER = 3
 
 _CYRILLIC_TO_LATIN: dict[str, str] = {
@@ -90,6 +91,22 @@ def build_category_slug(name: str) -> str:
     if not slug:
         slug = f"category-{uuid4().hex[:8]}"
     return slug[:100]
+
+
+def normalize_category_slug(slug: str) -> str:
+    """Нормалізує заданий адміністратором slug і перевіряє безпечний формат."""
+    if not isinstance(slug, str):
+        raise InvalidCategorySuggestionError("Slug категорії має бути рядком")
+    cleaned = slug.strip().lower()
+    if not cleaned or len(cleaned) > CATEGORY_SLUG_MAX_LENGTH:
+        raise InvalidCategorySuggestionError(
+            f"Slug категорії має містити від 1 до {CATEGORY_SLUG_MAX_LENGTH} символів"
+        )
+    if re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", cleaned) is None:
+        raise InvalidCategorySuggestionError(
+            "Slug категорії може містити лише латинські літери, цифри й одинарні дефіси"
+        )
+    return cleaned
 
 
 @dataclass

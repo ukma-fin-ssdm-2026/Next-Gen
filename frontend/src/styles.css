@@ -640,6 +640,15 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .suggestion-list li { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; }
 .suggestion-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .suggestions-panel { margin-top: 16px; }
+.category-management { display: grid; gap: 16px; }
+.category-management-list { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.category-management-list > li { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; }
+.category-management-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, 0.55fr); gap: 12px; align-items: end; }
+.category-management-fields > div { display: grid; gap: 7px; min-width: 0; }
+.category-management-fields code { min-height: 46px; display: flex; align-items: center; padding: 0 13px; border-radius: 11px; background: #f2f4f1; color: var(--muted); overflow-wrap: anywhere; }
+.field-label { padding-left: 2px; color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+.category-deactivate-confirm { display: grid; gap: 10px; padding: 12px; border-radius: 12px; background: #f9e6e3; color: #8f2f27; font-weight: 700; }
+@media (max-width: 640px) { .category-management-fields { grid-template-columns: 1fr; } }
 
 .field { display: grid; gap: 7px; }
 .field > span { padding-left: 2px; color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }

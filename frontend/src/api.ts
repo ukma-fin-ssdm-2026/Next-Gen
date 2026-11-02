@@ -125,6 +125,23 @@ export function getCategories(): Promise<Category[]> {
   return apiFetch<Category[]>("/categories");
 }
 
+export function createCategory(payload: { name: string; slug: string; description?: string | null }): Promise<Category> {
+  return apiFetch<Category>("/categories", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateCategory(
+  categoryId: string,
+  payload: { name?: string; slug?: string; description?: string | null; is_active?: boolean },
+): Promise<Category> {
+  return apiFetch<Category>(`/categories/${segment(categoryId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 export interface ListingPage {
   items: Listing[];
   total: number;
@@ -233,10 +250,13 @@ export function getCategorySuggestions(status: CategorySuggestionStatus = "PENDI
   return apiFetch<CategorySuggestion[]>(`/category-suggestions?status=${encodeURIComponent(status)}`);
 }
 
-export function approveCategorySuggestion(suggestionId: string, name?: string): Promise<CategorySuggestion> {
+export function approveCategorySuggestion(
+  suggestionId: string,
+  overrides: { name?: string; slug?: string } = {},
+): Promise<CategorySuggestion> {
   return apiFetch<CategorySuggestion>(`/category-suggestions/${segment(suggestionId)}/approve`, {
     method: "POST",
-    body: JSON.stringify(name ? { name } : {}),
+    body: JSON.stringify(overrides),
   });
 }
 
