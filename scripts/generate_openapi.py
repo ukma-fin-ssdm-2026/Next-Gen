@@ -15,18 +15,28 @@ if str(ROOT_DIR) not in sys.path:
 
 from src.api.main import app  # noqa: E402
 
+# Маркер для release-please (generic updater): під час релізу він оновлює
+# номер версії саме в цьому рядку, тож закомічена специфікація лишається
+# актуальною без повторної генерації в CI.
+RELEASE_MARKER = "x-release-please-version"
+
+
+def render_openapi_yaml() -> str:
+    """Повертає OpenAPI у YAML з маркером релізу на рядку `info.version`."""
+    openapi_schema = app.openapi()
+    text = yaml.dump(openapi_schema, allow_unicode=True, sort_keys=False)
+    version_line = f"\n  version: {openapi_schema['info']['version']}\n"
+    marked_line = version_line.rstrip("\n") + f" # {RELEASE_MARKER}\n"
+    return text.replace(version_line, marked_line, 1)
+
 
 def generate_openapi_yaml():
     output_dir = ROOT_DIR / "docs" / "api"
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / "openapi-generated.yaml"
 
-    # Отримуємо згенеровану FastAPI OpenAPI схему (dict)
-    openapi_schema = app.openapi()
-
     # Записуємо у YAML файл з коректним кодуванням UTF-8
-    with open(output_file, "w", encoding="utf-8") as f:
-        yaml.dump(openapi_schema, f, allow_unicode=True, sort_keys=False)
+    output_file.write_text(render_openapi_yaml(), encoding="utf-8")
 
     print(f"[OK] Специфікація OpenAPI успішно згенерована: {output_file}")
 
