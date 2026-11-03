@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from src import __version__
 from src.api.deps import get_image_storage
 from src.api.routers import (
     activity,
@@ -31,7 +32,7 @@ app = FastAPI(
         "REST API для маркетплейсу студентських оголошень Києво-Могилянської академії "
         "(Baraholka NaUKMA). Розроблено за підходом Code-First."
     ),
-    version="1.0.0",
+    version=__version__,
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -118,7 +119,7 @@ def health_check() -> dict:
     return {
         "status": "ok",
         "app": "Baraholka NaUKMA API",
-        "version": "1.0.0",
+        "version": __version__,
         "timestamp": datetime.now(timezone.utc),
     }
 
