@@ -8,6 +8,11 @@
 `pyproject.toml`, `frontend/package.json`, у цьому журналі та в git-тегу `vX.Y.Z`;
 узгодженість перевіряє `tests/test_version.py`.
 
+Записи нових версій додає release-please за повідомленнями комітів
+(Conventional Commits), див. розділ «Релізи та журнал змін» у `README.md`.
+Пункти, які не випливають із комітів, дописуйте вручну в `[Unreleased]`:
+під час релізу вони переносяться в нову версію.
+
 ## [Unreleased]
 
 ### Refactoring

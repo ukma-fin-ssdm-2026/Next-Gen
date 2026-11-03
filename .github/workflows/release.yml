@@ -1,0 +1,57 @@
+name: Release
+
+# Автоматизований реліз (Лаб 8, бонус): release-please читає Conventional
+# Commits у main, відкриває PR «chore: release X.Y.Z» з новою версією у всіх
+# файлах і записом у CHANGELOG.md, а після його злиття створює тег vX.Y.Z і
+# GitHub Release. refactor: дає patch-реліз (секція Refactoring не прихована).
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: [self-hosted, linux]
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - name: Checkout release PR branch
+        if: ${{ steps.release.outputs.pr }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+
+      - name: Set up Python
+        if: ${{ steps.release.outputs.pr }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Normalize CHANGELOG to Keep a Changelog
+        if: ${{ steps.release.outputs.pr }}
+        run: |
+          python -m scripts.release_changelog CHANGELOG.md \
+            --repo-url "${{ github.server_url }}/${{ github.repository }}"
+          if [ -n "$(git status --porcelain -- CHANGELOG.md)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -am "chore: format CHANGELOG as Keep a Changelog"
+            git push
+          fi
+
+      - name: Release summary
+        if: ${{ steps.release.outputs.release_created }}
+        run: echo "Створено реліз ${{ steps.release.outputs.tag_name }}" >> "$GITHUB_STEP_SUMMARY"

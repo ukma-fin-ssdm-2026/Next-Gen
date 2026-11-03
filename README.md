@@ -57,6 +57,7 @@ Baraholka NaUKMA — вебзастосунок для обміну речами
 - [Про проєкт](#про-проєкт)
 - [Команда](#команда)
 - [Стратегія роботи з гілками](#стратегія-роботи-з-гілками--github-flow)
+- [Релізи та журнал змін](#релізи-та-журнал-змін)
 - [Артефакти вимог](#артефакти-вимог)
 - [Архітектура та проєктування](#архітектура-та-проєктування)
 - [Проєктування та документація API](#проєктування-та-документація-api)
@@ -94,6 +95,26 @@ Baraholka NaUKMA — вебзастосунок для обміну речами
 | `docs/...` | зміни в документації |
 | `ci/...` | зміни, пов'язані з CI/CD |
 | `loom-videos` | файли з посиланням на відео до лабораторних |
+
+## Релізи та журнал змін
+
+Версії нумеруються за [SemVer](https://semver.org/lang/uk/), зміни описано в [CHANGELOG.md](CHANGELOG.md) (формат Keep a Changelog), кожен реліз позначено тегом `vX.Y.Z`. Номер версії збігається в `src/__init__.py`, `pyproject.toml`, `frontend/package.json`, `frontend/package-lock.json` і `docs/api/openapi-generated.yaml`; це перевіряють `tests/test_version.py` і `tests/test_release_changelog.py`.
+
+Реліз автоматизовано через [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`, налаштування в `release-please-config.json` і `.release-please-manifest.json`):
+
+1. Повідомлення комітів пишемо за [Conventional Commits](https://www.conventionalcommits.org/uk/v1.0.0/): тип стоїть першим, позначки на кшталт `[REFACTOR]` — у кінці, наприклад `refactor: винести константу версії [REFACTOR]`.
+2. Після злиття в `main` release-please відкриває або оновлює PR `chore: release X.Y.Z`. У ньому нова версія у всіх файлах вище і запис у `CHANGELOG.md`, який `scripts/release_changelog.py` приводить до формату Keep a Changelog.
+3. PR, створений ботом, не запускає CI автоматично: закрийте його й одразу відкрийте знову, дочекайтеся зеленого CI і злийте.
+4. Після злиття release-please ставить тег `vX.Y.Z` і створює GitHub Release.
+
+| Тип коміту | Розділ CHANGELOG | Версія |
+|---|---|---|
+| `feat:` | Added | MINOR (`1.0.0` → `1.1.0`) |
+| `fix:` | Fixed | PATCH |
+| `refactor:` | Refactoring | PATCH |
+| `perf:`, `revert:` | Changed | PATCH |
+| `feat!:` або `BREAKING CHANGE:` у тексті | — | MAJOR |
+| `docs:`, `test:`, `ci:`, `build:`, `style:`, `chore:` | не потрапляють | реліз не створюють |
 
 ## Артефакти вимог
 
