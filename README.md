@@ -69,12 +69,12 @@ Baraholka NaUKMA — вебзастосунок для обміну речами
 
 ## Команда
 
-| Учасник | Lab 1 — репозиторій | Lab 2 — вимоги | Lab 3 — архітектура | Lab 4 — API | Lab 5 — якість коду | Lab 6 — тестування | Lab 7 — валідація |
-|---|---|---|---|---|---|---|---|
-| **Артем Солодкий** | Repo Maintainer | Requirements Lead + Functional Requirements Lead | Data Model & Threat Modeling Lead | Quality Lead | Code Reviewer | Testing Lead + Test Doubles Lead | Test Planner |
-| **Данііл Чернявський** | CI Maintainer | Quality Lead (NFR) | Architecture Lead | Backend Lead + API Design Lead | Quality & Prototype Lead | Debugging Lead | Review Manager + AI Code Reviewer |
-| **Євгеній Остапенко** | Documentation Lead | Documentation Lead | Documentation & UML Lead | Documentation Lead | Documentation Lead | Testing Strategist | Documentation Lead |
-| **Богдан Солонина** | Issue Tracker Lead | Traceability Lead | Traceability Lead | Integration Lead | Security Analyst | Integration Lead | Quality Analyst |
+| Учасник | Lab 1 — репозиторій | Lab 2 — вимоги | Lab 3 — архітектура | Lab 4 — API | Lab 5 — якість коду | Lab 6 — тестування | Lab 7 — валідація | Lab 8 — рефакторинг |
+|---|---|---|---|---|---|---|---|---|
+| **Артем Солодкий** | Repo Maintainer | Requirements Lead + Functional Requirements Lead | Data Model & Threat Modeling Lead | Quality Lead | Code Reviewer | Testing Lead + Test Doubles Lead | Test Planner | Code Analyst |
+| **Данііл Чернявський** | CI Maintainer | Quality Lead (NFR) | Architecture Lead | Backend Lead + API Design Lead | Quality & Prototype Lead | Debugging Lead | Review Manager + AI Code Reviewer | Refactoring Lead |
+| **Євгеній Остапенко** | Documentation Lead | Documentation Lead | Documentation & UML Lead | Documentation Lead | Documentation Lead | Testing Strategist | Documentation Lead | Testing Engineer |
+| **Богдан Солонина** | Issue Tracker Lead | Traceability Lead | Traceability Lead | Integration Lead | Security Analyst | Integration Lead | Quality Analyst | Release Manager |
 
 Детальний опис відповідальностей наведено в [Командному статуті](TeamCharter.md#2-ролі-та-відповідальності).
 
@@ -158,6 +158,7 @@ Baraholka NaUKMA — вебзастосунок для обміну речами
 | [Lab 5](Labs/Lab05/) (`Labs/Lab05/`) | [відео](Labs/Lab05/video_Cherniavskyi.txt) | [відео](Labs/Lab05/video_Ostapenko.txt) | [відео](Labs/Lab05/video_Solodkyi.txt) | [відео](Labs/Lab05/video_Solonyna.txt) |
 | [Lab 6](Labs/Lab06/) (`Labs/Lab06/`) | [відео](Labs/Lab06/video_Cherniavskyi.txt) · [TDD](Labs/Lab06/videoTDD_Cherniavskyi.txt) | [відео](Labs/Lab06/video_Ostapenko.txt) | [відео](Labs/Lab06/video_Solodkyi.txt) | [відео](Labs/Lab06/video_Solonyna.txt) |
 | [Lab 7](Labs/Lab07/) (`Labs/Lab07/`) | [відео](Labs/Lab07/video_Cherniavskyi.txt) | [відео](Labs/Lab07/video_Ostapenko.txt) | [відео](Labs/Lab07/video_Solodkyi.txt) | [відео](Labs/Lab07/video_Solonyna.txt) |
+| [Lab 8](Labs/Lab08/) (Labs/Lab08/) | — | [відео](Labs/Lab08/video_Ostapenko.txt) | — | — |
 
 ## Швидкий запуск та перевірки якості коду
 
