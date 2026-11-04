@@ -39,12 +39,16 @@ def test_project_configs_share_one_version() -> None:
 
 
 def test_api_reports_package_version() -> None:
-    """[TP-036] FastAPI, згенерований OpenAPI і /health повертають ту саму версію."""
+    """[TP-036]
+    FastAPI, OpenAPI (разом із прикладом /health) і /health мають ту саму версію.
+    """
     spec = yaml.safe_load(
         (ROOT / "docs" / "api" / "openapi-generated.yaml").read_text("utf-8")
     )
     assert app.version == __version__
     assert spec["info"]["version"] == __version__
+    health = spec["components"]["schemas"]["HealthResponse"]["properties"]
+    assert health["version"]["examples"] == [__version__]
     with TestClient(app) as client:
         assert client.get("/health").json()["version"] == __version__
 

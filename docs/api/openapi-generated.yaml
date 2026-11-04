@@ -2940,7 +2940,7 @@ components:
           title: Version
           description: Поточна версія API
           examples:
-          - 1.0.0
+          - 1.1.0
         timestamp:
           type: string
           format: date-time
