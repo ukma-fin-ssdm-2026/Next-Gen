@@ -684,6 +684,8 @@ function PhotoCropper({ src, name, queued, aspect = CROP_ASPECT, outputWidth = C
           className={`crop-frame${aspect === 1 ? " crop-frame-square" : ""}`}
           style={{ aspectRatio: String(aspect) }}
           ref={frameRef}
+          role="region"
+          aria-label="Кадрування зображення"
           tabIndex={0}
           onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); dragRef.current = { x: event.clientX, y: event.clientY, ox: offset.x, oy: offset.y }; }}
           onPointerMove={(event) => { const drag = dragRef.current; if (drag) setOffset(clamp(drag.ox + event.clientX - drag.x, drag.oy + event.clientY - drag.y, scale)); }}
@@ -1153,8 +1155,9 @@ function ListingGallery({ listing }: { listing: Listing }) {
   const markBroken = (id: string) => setBroken((value) => new Set(value).add(id));
 
   return (
-    <div
+    <section
       className="gallery"
+      role="region"
       tabIndex={0}
       aria-label="Фотографії оголошення"
       onKeyDown={(event) => {
@@ -1195,7 +1198,7 @@ function ListingGallery({ listing }: { listing: Listing }) {
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -1493,9 +1496,21 @@ function ListingGrid({ listings, categoryNames, favorites, busy, onFavorite }: {
 
 function contactHref(contact: string): string | null {
   const value = contact.trim();
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return `mailto:${value}`;
-  if (/^@[A-Za-z0-9_]{3,}$/.test(value)) return `https://t.me/${value.slice(1)}`;
-  if (/^\+?[0-9][0-9\s()-]{6,}$/.test(value)) return `tel:${value.replace(/[^\d+]/g, "")}`;
+  if (value.includes("@") && !value.includes(" ") && !value.startsWith("@")) {
+    const atIndex = value.lastIndexOf("@");
+    const local = value.slice(0, atIndex);
+    const domain = value.slice(atIndex + 1);
+    if (local.length > 0 && domain.includes(".") && !domain.startsWith(".") && !domain.endsWith(".")) {
+      return `mailto:${value}`;
+    }
+  }
+  if (/^@[A-Za-z0-9_]{3,32}$/.test(value)) {
+    return `https://t.me/${value.slice(1)}`;
+  }
+  const digitsOnly = value.replace(/[^\d+]/g, "");
+  if (digitsOnly.length >= 7 && digitsOnly.length <= 16 && /^(\+?\d{7,15})$/.test(digitsOnly)) {
+    return `tel:${digitsOnly}`;
+  }
   return null;
 }
 
