@@ -865,6 +865,7 @@ def test_api_categories_returns_seeded_categories_on_fresh_db(monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
         db_path = tmp.name
+    eng = None
     try:
         cfg = Config()
         cfg.set_main_option("script_location", "alembic")
@@ -893,7 +894,8 @@ def test_api_categories_returns_seeded_categories_on_fresh_db(monkeypatch):
             assert other["is_active"] is True
     finally:
         app.dependency_overrides.clear()
-        eng.dispose()
+        if eng is not None:
+            eng.dispose()
         if os.path.exists(db_path):
             os.remove(db_path)
 
