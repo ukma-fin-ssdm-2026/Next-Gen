@@ -10,12 +10,48 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-04
+
+Реліз Лабораторної 8 (рефакторинг). Версія MINOR, а не PATCH, бо після `1.0.0`
+додано нову функціональність адміністратора (розділ Added); рефакторинги
+поведінку не змінюють.
+
+### Added
+
+- Керування категоріями в адмін-панелі: створення, перейменування і
+  деактивація без втрати наявних оголошень; власний slug під час схвалення
+  пропозиції категорії (FR-012).
+
+### Fixed
+
+- Slug категорії перевіряється за безпечним шаблоном у домені та API;
+  системну резервну категорію не можна деактивувати.
+- Знахідки безпеки SonarCloud: API-клієнт фронтенду будує лише same-origin URL
+  під префіксом API, динамічні сегменти обмежено UUID; залежності CI
+  зафіксовано в `requirements-ci.lock`.
+
 ### Refactoring
 
-- **Бекенд (ORM / Domain)**: `src/db/converters.py` — усунено дублювання коду та рутинне зіставлення полів при двосторонній конвертації між SQLAlchemy ORM моделями та Domain dataclass за допомогою узагальнених допоміжних функцій `_populate_row` та `_row_to_domain`. Забезпечено повну еквівалентність контрактів і цілісність інкапсуляції, підтверджену характеризаційними тестами `tests/test_converters.py` (20 тестів, 100% покриття).
-- **Бекенд (Сервіси)**: `src/services/listings.py` — декомпоновано довгий метод `ListingService.create` (техніка Extract Method: виділено `_resolve_category`). Знижено цикломатичну складність, ізольовано валідацію/дозволи категорій та спрощено читабельність бізнес-логіки створення оголошення.
-- **Фронтенд (Доступність та безпека)**: `frontend/src/App.tsx` — покращено семантику доступності (заміна несемантичних клікабельних елементів на нативні `<button>` у кропері фотографій `PhotoCropper`, додано коректні ARIA-атрибути для скрінрідерів у галереї `ListingGallery`) та усунено потенційний ризик ReDoS / некоректного парсингу.
-- **Константи версій**: Номер версії, що повторювався рядком `"1.0.0"` у `src/api/main.py` (FastAPI і `/health`), винесено в єдину константу `src.__version__`; версію фронтенду узгоджено з бекендом. Техніка: Replace Magic Literal with Symbolic Constant. Поведінка API не змінилась: OpenAPI і `/health` повертають ту саму версію, що доводить `tests/test_version.py`.
+- `src/db/converters.py`: однотипне заповнення рядків ORM у конвертерах
+  `*_domain_to_row` замінено спільною функцією `_populate_row`. Техніка:
+  Extract Function. Поведінку фіксують характеризаційні тести
+  `tests/test_converters.py`, написані до зміни.
+- `src/services/listings.py`: довгий метод `ListingService.create` розбито на
+  `_resolve_target_category_for_creation`, `_save_listing_with_suggestion` і
+  `_cleanup_failed_creation`. Техніка: Extract Method. Тести:
+  `tests/test_listing_service.py`, `tests/test_listings_api.py`.
+- `src/domain/feedback.py`: дубльовану перевірку меж довжини в
+  `Feedback.__post_init__` винесено в `_validate_text_length`. Техніка: Extract
+  Method. Тести: `tests/test_feedback_characterization.py`, написані до зміни.
+- `frontend/src/App.tsx`: клікабельні `div` у `PhotoCropper` замінено на
+  `<button type="button">`, галерея оголошення позначена як `region`
+  (SonarCloud S6848). Техніка: Replace Element with Semantic Element.
+  Перевірка: `npm test`, `npm run build`.
+- Номер версії, що повторювався рядком `"1.0.0"` у `src/api/main.py` (FastAPI і
+  `/health`), винесено в єдину константу `src.__version__`; версію фронтенду
+  (`0.1.0`) узгоджено з бекендом. Техніка: Replace Magic Literal with Symbolic
+  Constant. Поведінка API не змінилась: OpenAPI і `/health` повертають ту саму
+  версію, що доводить `tests/test_version.py`.
 
 ## [1.0.0] - 2026-11-01
 
@@ -41,5 +77,17 @@
 - CI: Black, Flake8, Bandit, pip-audit, тести фронтенду й бекенду з порогом
   покриття 85%, перевірка OpenAPI, job із PostgreSQL 16 і Alembic.
 
-[Unreleased]: https://github.com/ukma-fin-ssdm-2026/Next-Gen/compare/v1.0.0...HEAD
+### Refactoring
+
+- `frontend/src/contactLinks.ts`: перевірку email регулярним виразом із
+  ризиком backtracking (SonarCloud S5852) замінено лінійною перевіркою
+  `isEmail`, посилання на контакт будує `contactHref`. Техніка: Substitute
+  Algorithm, Extract Function. Тест: `frontend/tests/contactLinks.test.mjs`.
+- `frontend/src/App.tsx`: довгу функцію `confirm` у `PhotoCropper` розбито,
+  заливку полів винесено в `paintGaps`, числа й кольори — в `GAP_COLORS` і
+  `BLUR_SAMPLE`. Техніка: Extract Function, Replace Magic Number with Symbolic
+  Constant.
+
+[Unreleased]: https://github.com/ukma-fin-ssdm-2026/Next-Gen/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/ukma-fin-ssdm-2026/Next-Gen/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/ukma-fin-ssdm-2026/Next-Gen/releases/tag/v1.0.0
