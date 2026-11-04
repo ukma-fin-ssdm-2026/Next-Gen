@@ -18,6 +18,7 @@ from src.domain.listings import (
     OTHER_CATEGORY_ID,
     Listing,
     ListingCondition,
+    ListingImage,
     ListingSortOrder,
     ListingStatus,
     utc_now,
@@ -114,21 +115,11 @@ class ListingService:
     ) -> Listing:
         """Створює оголошення від імені актора з фотографіями (FR-002, FR-015)."""
         owner_id = self._require_actor(actor_id)
-        target_category_id = (
-            OTHER_CATEGORY_ID if suggested_category_name is not None else category_id
+        target_category_id = self._resolve_target_category_for_creation(
+            category_id=category_id,
+            suggested_category_name=suggested_category_name,
+            actor_id=actor_id,
         )
-        if target_category_id is None:
-            raise InvalidCategoryError(
-                "Потрібно вказати category_id або suggested_category_name"
-            )
-        self._validate_target_category(target_category_id)
-
-        if suggested_category_name is not None:
-            if self._category_suggestion_service is None:
-                raise InvalidCategoryError("Сервіс пропозицій категорій не налаштовано")
-            self._category_suggestion_service.validate_submission(
-                actor_id, suggested_category_name
-            )
 
         listing_id = uuid4()
         images = self._image_storage.save_images(
@@ -152,41 +143,80 @@ class ListingService:
                 suggested_category_id=None,
             )
             if suggested_category_name is not None:
-                assert self._category_suggestion_service is not None  # nosec B101
-                with self._category_suggestion_service.lock:
-                    suggestion = self._category_suggestion_service.submit(
-                        actor_id, suggested_category_name
-                    )
-                    suggestion_id = suggestion.suggestion_id
-                    listing = replace(listing, suggested_category_id=suggestion_id)
-                    with self._listing_lock:
-                        saved = self._repository.add(listing)
-                    current_suggestion = self._category_suggestion_service.get(
-                        suggestion_id
-                    )
-                    if (
-                        current_suggestion is not None
-                        and current_suggestion.status
-                        == CategorySuggestionStatus.APPROVED
-                        and current_suggestion.category_id is not None
-                    ):
-                        saved = replace(
-                            saved, category_id=current_suggestion.category_id
-                        )
-                        with self._listing_lock:
-                            saved = self._repository.save(saved)
-                    return saved
+                saved, suggestion_id = self._save_listing_with_suggestion(
+                    listing=listing,
+                    actor_id=actor_id,
+                    suggested_category_name=suggested_category_name,
+                )
+                return saved
+
             with self._listing_lock:
                 self._validate_target_category(target_category_id)
                 return self._repository.add(listing)
         except Exception:
-            if (
-                suggestion_id is not None
-                and self._category_suggestion_service is not None
-            ):
-                self._category_suggestion_service.delete(suggestion_id)
-            self._image_storage.delete_images([img.image_url for img in images])
+            self._cleanup_failed_creation(images, suggestion_id)
             raise
+
+    def _resolve_target_category_for_creation(
+        self,
+        category_id: UUID | None,
+        suggested_category_name: str | None,
+        actor_id: UUID | CurrentUser | User | None,
+    ) -> UUID:
+        """Валідує та визначає цільову категорію оголошення при створенні."""
+        target_category_id = (
+            OTHER_CATEGORY_ID if suggested_category_name is not None else category_id
+        )
+        if target_category_id is None:
+            raise InvalidCategoryError(
+                "Потрібно вказати category_id або suggested_category_name"
+            )
+        self._validate_target_category(target_category_id)
+
+        if suggested_category_name is not None:
+            if self._category_suggestion_service is None:
+                raise InvalidCategoryError("Сервіс пропозицій категорій не налаштовано")
+            self._category_suggestion_service.validate_submission(
+                actor_id, suggested_category_name
+            )
+        return target_category_id
+
+    def _save_listing_with_suggestion(
+        self,
+        listing: Listing,
+        actor_id: UUID | CurrentUser | User | None,
+        suggested_category_name: str,
+    ) -> tuple[Listing, UUID]:
+        """Оркеструє подання пропозиції категорії та транзакційне збереження."""
+        assert self._category_suggestion_service is not None  # nosec B101
+        with self._category_suggestion_service.lock:
+            suggestion = self._category_suggestion_service.submit(
+                actor_id, suggested_category_name
+            )
+            suggestion_id = suggestion.suggestion_id
+            listing_with_sug = replace(listing, suggested_category_id=suggestion_id)
+            with self._listing_lock:
+                saved = self._repository.add(listing_with_sug)
+            current_suggestion = self._category_suggestion_service.get(suggestion_id)
+            if (
+                current_suggestion is not None
+                and current_suggestion.status == CategorySuggestionStatus.APPROVED
+                and current_suggestion.category_id is not None
+            ):
+                saved = replace(saved, category_id=current_suggestion.category_id)
+                with self._listing_lock:
+                    saved = self._repository.save(saved)
+            return saved, suggestion_id
+
+    def _cleanup_failed_creation(
+        self,
+        images: list[ListingImage],
+        suggestion_id: UUID | None,
+    ) -> None:
+        """Виконує компенсаційні дії при помилці створення оголошення."""
+        if suggestion_id is not None and self._category_suggestion_service is not None:
+            self._category_suggestion_service.delete(suggestion_id)
+        self._image_storage.delete_images([img.image_url for img in images])
 
     def get_suggested_category_name(self, listing: Listing) -> str | None:
         """Повертає назву запропонованої категорії для власника оголошення (FR-015)."""
