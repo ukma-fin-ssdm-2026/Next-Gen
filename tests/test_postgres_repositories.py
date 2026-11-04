@@ -893,6 +893,7 @@ def test_api_categories_returns_seeded_categories_on_fresh_db(monkeypatch):
             assert other["is_active"] is True
     finally:
         app.dependency_overrides.clear()
+        eng.dispose()
         if os.path.exists(db_path):
             os.remove(db_path)
 
