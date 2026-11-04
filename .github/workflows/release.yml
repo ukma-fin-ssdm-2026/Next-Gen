@@ -1,0 +1,52 @@
+name: Automated Release
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Conventional Release (refactor -> patch)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Determine version bump and update changelog
+        id: release_step
+        run: |
+          python scripts/release.py
+
+      - name: Check for version changes
+        id: git_status
+        run: |
+          if [ -n "$(git status --porcelain pyproject.toml CHANGELOG.md)" ]; then
+            VERSION=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and tag release
+        if: steps.git_status.outputs.has_changes == 'true'
+        run: |
+          VERSION="${{ steps.git_status.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml CHANGELOG.md
+          git commit -m "chore(release): bump version to v${VERSION} [skip ci]"
+          git tag -a "v${VERSION}" -m "Release v${VERSION}"
+          git push origin main --tags
