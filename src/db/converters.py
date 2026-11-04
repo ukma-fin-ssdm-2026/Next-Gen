@@ -1,5 +1,7 @@
 """Конвертори між ORM-рядками (Row) та доменними dataclass-об'єктами."""
 
+from typing import Any, TypeVar
+
 from src.db.models import (
     ActivityEventRow,
     CategoryRow,
@@ -12,11 +14,11 @@ from src.db.models import (
     ModerationActionRow,
     UserRow,
 )
+from src.domain.activity import ActivityEvent, ActivityType
 from src.domain.categories import Category
 from src.domain.category_suggestions import CategorySuggestion, CategorySuggestionStatus
-from src.domain.favorites import Favorite
-from src.domain.activity import ActivityEvent, ActivityType
 from src.domain.complaints import Complaint, ComplaintReason, ComplaintStatus
+from src.domain.favorites import Favorite
 from src.domain.feedback import Feedback, FeedbackStatus
 from src.domain.listings import (
     Listing,
@@ -26,6 +28,22 @@ from src.domain.listings import (
 )
 from src.domain.moderation import ModerationAction, ModerationActionType
 from src.domain.users import User, UserRole
+
+RowT = TypeVar("RowT")
+
+
+def _populate_row(
+    row_cls: type[RowT], existing: RowT | None, **attributes: Any
+) -> RowT:
+    """Утиліта безпечного заповнення атрибутів ORM-рядка.
+
+    Використовує переданий екземпляр `existing` або створює новий об'єкт `row_cls`.
+    """
+    row = existing or row_cls()
+    for attr_name, value in attributes.items():
+        setattr(row, attr_name, value)
+    return row
+
 
 # ---------------------------------------------------------------------------
 # User
@@ -51,21 +69,23 @@ def user_row_to_domain(row: UserRow) -> User:
 
 
 def user_domain_to_row(user: User, existing: UserRow | None = None) -> UserRow:
-    row = existing or UserRow()
-    row.user_id = user.user_id
-    row.tenant_id = user.tenant_id
-    row.entra_object_id = user.entra_object_id
-    row.email = user.email
-    row.display_name = user.display_name
-    row.role = user.role.value
-    row.is_blocked = user.is_blocked
-    row.display_name_customized = user.display_name_customized
-    row.avatar_url = user.avatar_url
-    row.contact = user.contact
-    row.created_at = user.created_at
-    row.block_reason = user.block_reason
-    row.blocked_at = user.blocked_at
-    return row
+    return _populate_row(
+        UserRow,
+        existing,
+        user_id=user.user_id,
+        tenant_id=user.tenant_id,
+        entra_object_id=user.entra_object_id,
+        email=user.email,
+        display_name=user.display_name,
+        role=user.role.value,
+        is_blocked=user.is_blocked,
+        display_name_customized=user.display_name_customized,
+        avatar_url=user.avatar_url,
+        contact=user.contact,
+        created_at=user.created_at,
+        block_reason=user.block_reason,
+        blocked_at=user.blocked_at,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -87,14 +107,16 @@ def category_row_to_domain(row: CategoryRow) -> Category:
 def category_domain_to_row(
     cat: Category, existing: CategoryRow | None = None
 ) -> CategoryRow:
-    row = existing or CategoryRow()
-    row.category_id = cat.id
-    row.name = cat.name
-    row.slug = cat.slug
-    row.description = cat.description
-    row.is_active = cat.is_active
-    row.created_at = cat.created_at
-    return row
+    return _populate_row(
+        CategoryRow,
+        existing,
+        category_id=cat.id,
+        name=cat.name,
+        slug=cat.slug,
+        description=cat.description,
+        is_active=cat.is_active,
+        created_at=cat.created_at,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -119,17 +141,19 @@ def suggestion_row_to_domain(row: CategorySuggestionRow) -> CategorySuggestion:
 def suggestion_domain_to_row(
     s: CategorySuggestion, existing: CategorySuggestionRow | None = None
 ) -> CategorySuggestionRow:
-    row = existing or CategorySuggestionRow()
-    row.suggestion_id = s.suggestion_id
-    row.name = s.name
-    row.proposer_id = s.proposer_id
-    row.status = s.status.value
-    row.reason = s.reason
-    row.category_id = s.category_id
-    row.reviewed_by = s.reviewed_by
-    row.created_at = s.created_at
-    row.reviewed_at = s.reviewed_at
-    return row
+    return _populate_row(
+        CategorySuggestionRow,
+        existing,
+        suggestion_id=s.suggestion_id,
+        name=s.name,
+        proposer_id=s.proposer_id,
+        status=s.status.value,
+        reason=s.reason,
+        category_id=s.category_id,
+        reviewed_by=s.reviewed_by,
+        created_at=s.created_at,
+        reviewed_at=s.reviewed_at,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -155,18 +179,20 @@ def image_row_to_domain(row: ListingImageRow) -> ListingImage:
 def image_domain_to_row(
     img: ListingImage, existing: ListingImageRow | None = None
 ) -> ListingImageRow:
-    row = existing or ListingImageRow()
-    row.image_id = img.image_id
-    row.listing_id = img.listing_id
-    row.image_url = img.image_url
-    row.thumbnail_url = img.thumbnail_url
-    row.storage_key = img.storage_key
-    row.display_order = img.display_order
-    row.width = img.width
-    row.height = img.height
-    row.thumbnail_width = img.thumbnail_width
-    row.thumbnail_height = img.thumbnail_height
-    return row
+    return _populate_row(
+        ListingImageRow,
+        existing,
+        image_id=img.image_id,
+        listing_id=img.listing_id,
+        image_url=img.image_url,
+        thumbnail_url=img.thumbnail_url,
+        storage_key=img.storage_key,
+        display_order=img.display_order,
+        width=img.width,
+        height=img.height,
+        thumbnail_width=img.thumbnail_width,
+        thumbnail_height=img.thumbnail_height,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -196,20 +222,22 @@ def listing_row_to_domain(row: ListingRow) -> Listing:
 def listing_domain_to_row(
     listing: Listing, existing: ListingRow | None = None
 ) -> ListingRow:
-    row = existing or ListingRow()
-    row.listing_id = listing.id
-    row.title = listing.title
-    row.description = listing.description
-    row.price = listing.price
-    row.category_id = listing.category_id
-    row.contact = listing.contact
-    row.user_id = listing.user_id
-    row.condition = listing.condition.value
-    row.status = listing.status.value
-    row.suggested_category_id = listing.suggested_category_id
-    row.created_at = listing.created_at
-    row.updated_at = listing.updated_at
-    return row
+    return _populate_row(
+        ListingRow,
+        existing,
+        listing_id=listing.id,
+        title=listing.title,
+        description=listing.description,
+        price=listing.price,
+        category_id=listing.category_id,
+        contact=listing.contact,
+        user_id=listing.user_id,
+        condition=listing.condition.value,
+        status=listing.status.value,
+        suggested_category_id=listing.suggested_category_id,
+        created_at=listing.created_at,
+        updated_at=listing.updated_at,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -228,11 +256,13 @@ def favorite_row_to_domain(row: FavoriteRow) -> Favorite:
 def favorite_domain_to_row(
     fav: Favorite, existing: FavoriteRow | None = None
 ) -> FavoriteRow:
-    row = existing or FavoriteRow()
-    row.user_id = fav.user_id
-    row.listing_id = fav.listing_id
-    row.created_at = fav.created_at
-    return row
+    return _populate_row(
+        FavoriteRow,
+        existing,
+        user_id=fav.user_id,
+        listing_id=fav.listing_id,
+        created_at=fav.created_at,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -256,16 +286,18 @@ def moderation_row_to_domain(row: ModerationActionRow) -> ModerationAction:
 def moderation_domain_to_row(
     action: ModerationAction, existing: ModerationActionRow | None = None
 ) -> ModerationActionRow:
-    row = existing or ModerationActionRow()
-    row.action_id = action.id
-    row.moderator_id = action.moderator_id
-    row.action_type = action.action_type.value
-    row.reason = action.reason
-    row.listing_id = action.listing_id
-    row.target_user_id = action.target_user_id
-    row.suggestion_id = action.suggestion_id
-    row.created_at = action.created_at
-    return row
+    return _populate_row(
+        ModerationActionRow,
+        existing,
+        action_id=action.id,
+        moderator_id=action.moderator_id,
+        action_type=action.action_type.value,
+        reason=action.reason,
+        listing_id=action.listing_id,
+        target_user_id=action.target_user_id,
+        suggestion_id=action.suggestion_id,
+        created_at=action.created_at,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -291,18 +323,20 @@ def complaint_row_to_domain(row: ComplaintRow) -> Complaint:
 def complaint_domain_to_row(
     c: Complaint, existing: ComplaintRow | None = None
 ) -> ComplaintRow:
-    row = existing or ComplaintRow()
-    row.complaint_id = c.id
-    row.listing_id = c.listing_id
-    row.reporter_id = c.reporter_id
-    row.reason = c.reason.value
-    row.details = c.details
-    row.status = c.status.value
-    row.created_at = c.created_at
-    row.resolved_by = c.resolved_by
-    row.resolved_at = c.resolved_at
-    row.resolution_note = c.resolution_note
-    return row
+    return _populate_row(
+        ComplaintRow,
+        existing,
+        complaint_id=c.id,
+        listing_id=c.listing_id,
+        reporter_id=c.reporter_id,
+        reason=c.reason.value,
+        details=c.details,
+        status=c.status.value,
+        created_at=c.created_at,
+        resolved_by=c.resolved_by,
+        resolved_at=c.resolved_at,
+        resolution_note=c.resolution_note,
+    )
 
 
 def feedback_row_to_domain(row: FeedbackRow) -> Feedback:
@@ -321,16 +355,18 @@ def feedback_row_to_domain(row: FeedbackRow) -> Feedback:
 def feedback_domain_to_row(
     f: Feedback, existing: FeedbackRow | None = None
 ) -> FeedbackRow:
-    row = existing or FeedbackRow()
-    row.feedback_id = f.id
-    row.user_id = f.user_id
-    row.subject = f.subject
-    row.message = f.message
-    row.status = f.status.value
-    row.created_at = f.created_at
-    row.resolved_by = f.resolved_by
-    row.resolved_at = f.resolved_at
-    return row
+    return _populate_row(
+        FeedbackRow,
+        existing,
+        feedback_id=f.id,
+        user_id=f.user_id,
+        subject=f.subject,
+        message=f.message,
+        status=f.status.value,
+        created_at=f.created_at,
+        resolved_by=f.resolved_by,
+        resolved_at=f.resolved_at,
+    )
 
 
 def activity_row_to_domain(row: ActivityEventRow) -> ActivityEvent:
@@ -345,8 +381,12 @@ def activity_row_to_domain(row: ActivityEventRow) -> ActivityEvent:
     )
 
 
-def activity_domain_to_row(e: ActivityEvent) -> ActivityEventRow:
-    return ActivityEventRow(
+def activity_domain_to_row(
+    e: ActivityEvent, existing: ActivityEventRow | None = None
+) -> ActivityEventRow:
+    return _populate_row(
+        ActivityEventRow,
+        existing,
         event_id=e.id,
         actor_id=e.actor_id,
         actor_role=e.actor_role.value,

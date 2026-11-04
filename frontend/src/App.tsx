@@ -1218,6 +1218,7 @@ function ListingGallery({ listing }: { listing: Listing }) {
   return (
     <section
       className="gallery"
+      role="region"
       aria-roledescription="карусель"
       aria-label="Фотографії оголошення"
     >
