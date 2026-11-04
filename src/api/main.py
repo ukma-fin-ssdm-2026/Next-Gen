@@ -99,7 +99,7 @@ class HealthResponse(BaseModel):
         description="Назва застосунку",
         examples=["Baraholka NaUKMA API"],
     )
-    version: str = Field(..., description="Поточна версія API", examples=["1.0.0"])
+    version: str = Field(..., description="Поточна версія API", examples=[__version__])
     timestamp: datetime = Field(..., description="Час серверної перевірки")
 
 
