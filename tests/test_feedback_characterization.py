@@ -20,7 +20,7 @@ from src.domain.feedback import (
 
 
 def test_feedback_creation_with_valid_data():
-    """Фіксація базового створення об'єкта та значень за замовчуванням."""
+    """[FR-017] [TP-032] Базове створення об'єкта та значення за замовчуванням."""
     uid = uuid4()
     fb = Feedback(
         user_id=uid,
@@ -38,7 +38,7 @@ def test_feedback_creation_with_valid_data():
 
 
 def test_feedback_strips_whitespace_characters():
-    """Фіксація поточної поведінки: неявний strip() для subject та message."""
+    """[FR-017] [TP-032] Неявний strip() для subject та message."""
     uid = uuid4()
     fb = Feedback(
         user_id=uid,
@@ -50,7 +50,7 @@ def test_feedback_strips_whitespace_characters():
 
 
 def test_feedback_boundary_subject_lengths():
-    """Фіксація точних меж довжини теми: 3..120 символів."""
+    """[FR-017] [TP-032] Точні межі довжини теми: 3..120 символів."""
     uid = uuid4()
     # Мінімальна валідна довжина (3 символи)
     fb_min = Feedback(user_id=uid, subject="123", message="Валідне повідомлення")
@@ -77,7 +77,7 @@ def test_feedback_boundary_subject_lengths():
 
 
 def test_feedback_boundary_message_lengths():
-    """Фіксація точних меж довжини повідомлення: 10..2000 символів."""
+    """[FR-017] [TP-032] Точні межі довжини повідомлення: 10..2000 символів."""
     uid = uuid4()
     # Мінімальна валідна довжина (10 символів)
     fb_min = Feedback(user_id=uid, subject="Валідна тема", message="1234567890")
