@@ -1,7 +1,7 @@
 """Точка входу FastAPI: маршрутизація та службові ендпоінти."""
 
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from fastapi import Depends, FastAPI, HTTPException, Response, status
 from fastapi.openapi.utils import get_openapi
@@ -9,13 +9,17 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from src import __version__
 from src.api.deps import get_image_storage
 from src.api.routers import (
+    activity,
     auth,
     categories,
     category_suggestions,
+    complaints,
     contacts,
     favorites,
+    feedback,
     listings,
     moderation,
     users,
@@ -28,7 +32,7 @@ app = FastAPI(
         "REST API для маркетплейсу студентських оголошень Києво-Могилянської академії "
         "(Baraholka NaUKMA). Розроблено за підходом Code-First."
     ),
-    version="1.0.0",
+    version=__version__,
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -41,6 +45,9 @@ app.include_router(category_suggestions.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(moderation.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
+app.include_router(complaints.router, prefix="/api/v1")
+app.include_router(feedback.router, prefix="/api/v1")
+app.include_router(activity.router, prefix="/api/v1")
 
 
 def _custom_openapi() -> dict:
@@ -112,7 +119,7 @@ def health_check() -> dict:
     return {
         "status": "ok",
         "app": "Baraholka NaUKMA API",
-        "version": "1.0.0",
+        "version": __version__,
         "timestamp": datetime.now(timezone.utc),
     }
 
@@ -140,6 +147,29 @@ def get_uploaded_image(
     )
 
 
+def resolve_frontend_file(frontend_path: str, frontend_root: Path) -> Path:
+    """Повертає файл React build-у для шляху або index.html для SPA-маршруту.
+
+    404 для зарезервованих префіксів backend, для шляхів поза build-ом і для
+    невідомих file-like шляхів (з розширенням): вони не маскуються під
+    успішний React-маршрут (TM-03).
+    """
+    if frontend_path.startswith(RESERVED_FRONTEND_PREFIXES):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    root = frontend_root.resolve()
+    requested_file = (root / frontend_path).resolve()
+    if (
+        frontend_path
+        and requested_file.is_relative_to(root)
+        and requested_file.is_file()
+    ):
+        return requested_file
+    if PurePosixPath(frontend_path).suffix:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return root / "index.html"
+
+
 if FRONTEND_DIST.is_dir():
     assets_directory = FRONTEND_DIST / "assets"
     if assets_directory.is_dir():
@@ -152,15 +182,4 @@ if FRONTEND_DIST.is_dir():
     @app.get("/{frontend_path:path}", include_in_schema=False)
     def serve_frontend(frontend_path: str) -> FileResponse:
         """Віддає React build і підтримує пряме відкриття SPA-маршрутів."""
-        if frontend_path.startswith(RESERVED_FRONTEND_PREFIXES):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-
-        frontend_root = FRONTEND_DIST.resolve()
-        requested_file = (frontend_root / frontend_path).resolve()
-        if (
-            frontend_path
-            and requested_file.is_file()
-            and requested_file.is_relative_to(frontend_root)
-        ):
-            return FileResponse(requested_file)
-        return FileResponse(frontend_root / "index.html")
+        return FileResponse(resolve_frontend_file(frontend_path, FRONTEND_DIST))

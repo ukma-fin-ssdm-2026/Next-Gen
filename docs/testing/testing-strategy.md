@@ -1,6 +1,25 @@
 # Стратегія тестування (Testing Strategy) — Baraholka NaUKMA
 
-## 1. Поточний статус тестування (Current Testing Status)
+## Актуальний стан на 31.10.2026 (проміжне оцінювання)
+
+Розділи 1–2 нижче зберігають історичний зріз Лабораторної 6 (52 тести, 260 рядків, 98%). Поточний стан:
+
+- **Обсяг:** 385 тестів (324 тестові функції, частина параметризована) у 33 файлах `tests/test_*.py`.
+- **Покриття `src/`:** ~92% (92,24% у локальному прогоні `pytest --cov=src` 31.10.2026; поріг CI — 85%). Повний звіт кожного прогону CI — артефакт `htmlcov`.
+- **Що покрито тестами зараз:**
+  - оголошення, каталог, пошук і фільтри, власна історія (`test_listing_service.py`, `test_listings_api.py`, `test_decision_table.py`, `test_properties.py`);
+  - обране й контакт продавця для автентифікованого покупця, FR-009/FR-010 закрито (`test_favorites*.py`, `test_contacts*.py`, `test_security.py`);
+  - модерація оголошень, користувачів, категорій; скарги, звернення, журнали дій (`test_moderation*.py`, `test_user_moderation*.py`, `test_category_suggestions*.py`, `test_support_api.py`);
+  - Microsoft Entra ID, серверні сесії, профіль (`test_auth_*.py`, `test_entra_integration.py`, `test_config.py`, `test_profile*.py`);
+  - зображення й SPA fallback (`test_image_storage.py`, `test_image_upload_api.py`, `test_spa_fallback.py`);
+  - PostgreSQL-адаптери, міграції Alembic, транзакція й блокування рядка модерації (`test_postgres_repositories.py`, `test_postgres_moderation.py`);
+  - нефункціональні й службові: продуктивність каталогу (`test_nfr_performance.py`), простежуваність вимог (`test_traceability.py`), валідатори.
+- **Найменше покриті модулі та чому:** `src/db/engine.py` (0%: підключення до реальної БД перевіряється в окремому job `postgres-migration`, який не входить у звіт покриття), `src/api/deps.py` (~75%: гілки збирання PostgreSQL-залежностей), `src/integrations/entra.py` (~76%: реальні виклики MSAL), `src/api/main.py` (~78%: роздача зібраного фронтенду, виконується лише з `frontend/dist`).
+- **CI:** перед pytest збирається фронтенд (`npm ci`, `npm test`, `npm run build`), тож HTTP-тести SPA fallback виконуються з реальним `frontend/dist`. Окремий job `postgres-migration` піднімає PostgreSQL 16, проганяє `alembic upgrade/check/downgrade/upgrade` і інтеграційні тести на реальній БД.
+
+---
+
+## 1. Стан на Лабораторну 6 (історичний зріз)
 
 У межах Лабораторної роботи №6 реалізовано комплексну піраміду модульних тестів для ядра студентського маркетплейсу **Baraholka NaUKMA** (модулі [`src/domain/`](../../src/domain), [`src/services/`](../../src/services), [`src/repositories/`](../../src/repositories), [`src/api/routers/`](../../src/api/routers)).
 
@@ -16,7 +35,7 @@
 
 ---
 
-## 2. Підсумок покриття коду (Coverage Summary)
+## 2. Підсумок покриття коду на Лабораторну 6 (історичний зріз)
 
 Звіт генеровано інструментом `pytest-cov` та збережено в директорії [`htmlcov/`](../../htmlcov/index.html).
 
@@ -83,7 +102,9 @@
    - `bandit -r src -ll -c pyproject.toml` (безпековий аудит)
    - `pip-audit -r requirements.txt` (перевірка вразливостей бібліотек)
    - `pytest -q --cov=src --cov-report=term-missing --cov-report=html --cov-fail-under=85` (виконання набору тестів із валідацією порогу покриття)
+   - `npm ci`, `npm test`, `npm run build` у `frontend/` перед pytest (тести SPA fallback з реальним build-ом)
    - `python scripts/generate_openapi.py` (перевірка актуальності контракту OpenAPI)
+   - окремий job `postgres-migration`: PostgreSQL 16, Alembic round-trip, `tests/test_postgres_repositories.py` і `tests/test_postgres_moderation.py`
 3. **Артефакти**: Звіт `htmlcov/` автоматично вивантажується в артефакти кожної збірки CI (`actions/upload-artifact@v4`).
 
 ---
@@ -132,3 +153,4 @@
 > - **Етап:** Розробка стратегії тестування (Лабораторна робота 6), аналіз звіту покриття `pytest-cov`, формулювання політики воріт покриття (Coverage Gate 85%) та опис бонусних підходів (Property-Based Testing і Mutation Testing).
 > - **Що згенеровано:** Чернетка структури документа `testing-strategy.md`, зведення таблиці покриття за модулями, опис планів розвитку піраміди тестування та інженерне обґрунтування порогу покриття 85%.
 > - **Що перевірено / відкинуто вручну:** Точні показники покриття звірено з фактичним виводом `pytest --cov=src` і звітом `htmlcov/`; проаналізовано конкретні непокриті рядки в `listings.py`; зафіксовано відкриту функціональну прогалину позитивного сценарію `FR-010` та узгоджено критерій `PERF-001` із `requirements.md`.
+> - **Доповнення (Богдан Солонина, 31.10.2026):** Claude (Anthropic) допоміг сформулювати розділ «Актуальний стан». Кількість тестів звірено з `pytest --collect-only`, покриття — з власним прогоном `pytest --cov=src`, перелік модулів — зі звітом покриття CI.

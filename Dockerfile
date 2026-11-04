@@ -18,7 +18,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN addgroup --system app && adduser --system --ingroup app app
-RUN mkdir -p /var/lib/baraholka/uploads && chown -R app:app /var/lib/baraholka/uploads
+RUN mkdir -p /var/lib/baraholka/uploads /app/scripts \
+    && chown -R app:app /var/lib/baraholka/uploads \
+    && chown root:root /app/scripts \
+    && chmod 0555 /app/scripts
 
 COPY requirements.txt requirements.lock ./
 RUN python -m pip install \
@@ -29,6 +32,7 @@ RUN python -m pip install \
     -r requirements.lock
 
 COPY --chown=app:app src ./src
+COPY --chown=root:root --chmod=0444 scripts/seed_listings.py ./scripts/seed_listings.py
 COPY --chown=app:app alembic ./alembic
 COPY --chown=app:app alembic.ini ./
 COPY --from=frontend-build --chown=app:app /frontend/dist ./frontend/dist

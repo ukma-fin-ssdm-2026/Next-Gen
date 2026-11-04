@@ -15,10 +15,12 @@ import {
   approveCategorySuggestion,
   blockUser,
   blockUserByEmail,
+  createCategory,
   createListing,
   deleteListing,
   getCategories,
   getCategorySuggestions,
+  getBlockedStatus,
   getCurrentUser,
   getFavorites,
   getListing,
@@ -34,13 +36,26 @@ import {
   unblockUser,
   unblockUserByEmail,
   deleteAvatar,
+  updateCategory,
   updateListing,
   updateProfile,
   uploadAvatar,
   uploadListingImages,
 } from "./api";
+import { contactHref } from "./contactLinks";
 import { NaukmaLogo } from "./NaukmaLogo";
+import {
+  ActivityLogPanel,
+  BlockedNotice,
+  BlockedUsersPanel,
+  ComplaintDialog,
+  ComplaintsPanel,
+  FeedbackAdminPanel,
+  FeedbackPage,
+} from "./SupportPanels";
+import { Pagination, usePaged } from "./Pagination";
 import type {
+  BlockedStatus,
   Category,
   CategorySuggestion,
   CurrentUser,
@@ -60,15 +75,24 @@ const INITIAL_FILTERS: ListingFilters = {
 };
 
 const CATALOG_PAGE_SIZE = 24;
+const LOCAL_PAGE_SIZE = 12;
 const STATS_SAMPLE_SIZE = 100;
 const MAX_PHOTOS = 10;
 
 const CONDITION_LABELS: Record<ListingCondition, string> = {
-  NEW: "Нове",
-  LIKE_NEW: "Як нове",
-  GOOD: "Добрий стан",
-  USED: "Вживане",
+  NEW: "Новий",
+  LIKE_NEW: "Як новий",
+  GOOD: "Задовільний",
+  USED: "З помітними дефектами",
+  FOR_PARTS: "На запчастини",
 };
+
+const MAX_PRICE = 100_000_000;
+const SORT_VALUES: ListingFilters["sort"][] = ["newest", "oldest", "price_asc", "price_desc"];
+
+function parseSort(value: string | null): ListingFilters["sort"] {
+  return SORT_VALUES.find((item) => item === value) ?? "newest";
+}
 
 function formatPrice(price: number): string {
   return new Intl.NumberFormat("uk-UA", {
@@ -124,7 +148,7 @@ function filtersFromParams(params: URLSearchParams, categories: Category[]): Lis
     categoryId: category?.id ?? "",
     minPrice: params.get("min_price") ?? "",
     maxPrice: params.get("max_price") ?? "",
-    sort: params.get("sort") === "oldest" ? "oldest" : "newest",
+    sort: parseSort(params.get("sort")),
   };
 }
 
@@ -151,6 +175,7 @@ function App() {
   const currentLoginUrl = useCurrentLoginUrl();
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [blocked, setBlocked] = useState<BlockedStatus | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const reloadCategories = useCallback(() => {
     getCategories().then((items) => setCategories(sortCategories(items))).catch(() => undefined);
@@ -181,7 +206,17 @@ function App() {
     void Promise.all([
       getCurrentUser()
         .then(setUser)
-        .catch(() => setUser(null))
+        .catch((requestError) => {
+          setUser(null);
+          // Заблокований користувач бачить вікно з причиною (FR-013): або сервер
+          // повернув 403, або /auth/callback перенаправив сюди з ?blocked=1.
+          const redirected = new URLSearchParams(window.location.search).get("blocked") === "1";
+          if ((requestError instanceof ApiError && requestError.status === 403) || redirected) {
+            return getBlockedStatus()
+              .then((status) => setBlocked(status.is_blocked ? status : null))
+              .catch(() => undefined);
+          }
+        })
         .finally(() => setAuthChecked(true)),
       getCategories().then((items) => setCategories(sortCategories(items))).catch(() => setCategories([])),
     ]);
@@ -210,6 +245,7 @@ function App() {
     try {
       await logout();
       setUser(null);
+      setBlocked(null);
       setFavorites(new Set());
       setNotice("Ви вийшли з облікового запису");
       navigate("/");
@@ -247,6 +283,7 @@ function App() {
   return (
     <div className="app-shell">
       <Header user={user} authChecked={authChecked} busy={busy} favoritesCount={favorites.size} onLogout={() => void handleLogout()} />
+      {blocked && <BlockedNotice status={blocked} busy={busy} onLogout={() => void handleLogout()} />}
 
       {error && (
         <div className="global-alert-wrap">
@@ -325,8 +362,9 @@ function App() {
             />
           }
         />
+        <Route path="/feedback" element={<FeedbackPage user={user} authChecked={authChecked} loginHref={currentLoginUrl} onError={setError} onNotice={setNotice} />} />
         <Route path="/profile" element={<ProfilePage user={user} authChecked={authChecked} onUserChange={setUser} onError={setError} onNotice={setNotice} />} />
-        <Route path="/admin" element={<AdminPage user={user} authChecked={authChecked} onError={setError} onNotice={setNotice} onCategoriesChanged={reloadCategories} />} />
+        <Route path="/admin/*" element={<AdminPage user={user} authChecked={authChecked} onError={setError} onNotice={setNotice} onCategoriesChanged={reloadCategories} />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       <Footer />
@@ -381,10 +419,11 @@ function AccountMenu({ user, busy, onLogout }: { user: CurrentUser; busy: boolea
           <div className="account-head">
             <strong>{user.display_name}</strong>
             <small>{user.email}</small>
-            <small>{user.role === "ADMIN" ? "Адміністратор" : "Студент"}</small>
+            {user.role === "ADMIN" && <small>Адміністратор</small>}
           </div>
           <Link role="menuitem" to="/my">Мої оголошення</Link>
           <Link role="menuitem" to="/profile">Профіль</Link>
+          <Link role="menuitem" to="/feedback">Написати адміністрації</Link>
           {user.role === "ADMIN" && <Link role="menuitem" to="/admin">Адмін-панель</Link>}
           <button role="menuitem" type="button" disabled={busy} onClick={onLogout}>Вийти</button>
         </div>
@@ -405,6 +444,7 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
+  const onFormPage = /^\/(listings\/new|listings\/[^/]+\/edit|profile)\/?$/.test(location.pathname);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
   useEffect(() => { setMenuOpen(false); setHidden(false); }, [location.pathname]);
@@ -485,9 +525,9 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
 
       {!onCreatePage && (
         user ? (
-          <Link className={`fab${hidden || menuOpen ? " fab-hidden" : ""}`} to="/listings/new" aria-label="Створити оголошення">+</Link>
+          <Link className={`fab${hidden || menuOpen || onFormPage ? " fab-hidden" : ""}`} to="/listings/new" aria-label="Створити оголошення">+</Link>
         ) : (
-          <a className={`fab${hidden || menuOpen ? " fab-hidden" : ""}`} href={createLoginUrl} aria-label="Створити оголошення">+</a>
+          <a className={`fab${hidden || menuOpen || onFormPage ? " fab-hidden" : ""}`} href={createLoginUrl} aria-label="Створити оголошення">+</a>
         )
       )}
 
@@ -566,6 +606,39 @@ const CROP_OUTPUT_WIDTH = 1600;
 
 type CropJob = { id: string; kind: "new"; file: File } | { id: string; kind: "edit"; photoId: string; src: string; name: string; revoke: boolean };
 
+type CropFill = "blur" | "light" | "dark";
+
+const GAP_COLORS: Record<Exclude<CropFill, "blur">, string> = { light: "#ffffff", dark: "#101814" };
+const BLUR_SAMPLE = { w: 32, h: 24 };
+
+/** Малює фон полів навколо фото: розмита копія або однотонна заливка. */
+function paintGaps(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  natural: { w: number; h: number },
+  fill: CropFill,
+  outW: number,
+  outH: number,
+) {
+  if (fill !== "blur") {
+    context.fillStyle = GAP_COLORS[fill];
+    context.fillRect(0, 0, outW, outH);
+    return;
+  }
+  const tiny = document.createElement("canvas");
+  tiny.width = BLUR_SAMPLE.w;
+  tiny.height = BLUR_SAMPLE.h;
+  const tinyContext = tiny.getContext("2d");
+  if (!tinyContext) return;
+  const cover = Math.max(BLUR_SAMPLE.w / natural.w, BLUR_SAMPLE.h / natural.h);
+  tinyContext.drawImage(image, (BLUR_SAMPLE.w - natural.w * cover) / 2, (BLUR_SAMPLE.h - natural.h * cover) / 2, natural.w * cover, natural.h * cover);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(tiny, 0, 0, outW, outH);
+  context.fillStyle = "rgba(255, 255, 255, 0.18)";
+  context.fillRect(0, 0, outW, outH);
+}
+
 function PhotoCropper({ src, name, queued, aspect = CROP_ASPECT, outputWidth = CROP_OUTPUT_WIDTH, title = "Обріжте фото", hint, onCancel, onSkip, onDone, onUnreadable }: {
   src: string;
   name: string;
@@ -579,13 +652,13 @@ function PhotoCropper({ src, name, queued, aspect = CROP_ASPECT, outputWidth = C
   onDone: (blob: Blob) => void;
   onUnreadable: () => void;
 }) {
-  const frameRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLButtonElement>(null);
   const dragRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [frame, setFrame] = useState({ w: 0, h: 0 });
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [fill, setFill] = useState<"blur" | "light" | "dark">("blur");
+  const [fill, setFill] = useState<CropFill>("blur");
   const imageRef = useRef<HTMLImageElement | null>(null);
 
   const minScale = natural && frame.w ? Math.max(frame.w / natural.w, frame.h / natural.h) : 1;
@@ -647,26 +720,7 @@ function PhotoCropper({ src, name, queued, aspect = CROP_ASPECT, outputWidth = C
     canvas.height = outH;
     const context = canvas.getContext("2d");
     if (!context) { onSkip(); return; }
-    if (hasGaps) {
-      if (fill === "blur") {
-        const tiny = document.createElement("canvas");
-        tiny.width = 32;
-        tiny.height = 24;
-        const tinyContext = tiny.getContext("2d");
-        if (tinyContext) {
-          const cover = Math.max(32 / natural.w, 24 / natural.h);
-          tinyContext.drawImage(image, (32 - natural.w * cover) / 2, (24 - natural.h * cover) / 2, natural.w * cover, natural.h * cover);
-          context.imageSmoothingEnabled = true;
-          context.imageSmoothingQuality = "high";
-          context.drawImage(tiny, 0, 0, outW, outH);
-          context.fillStyle = "rgba(255, 255, 255, 0.18)";
-          context.fillRect(0, 0, outW, outH);
-        }
-      } else {
-        context.fillStyle = fill === "light" ? "#ffffff" : "#101814";
-        context.fillRect(0, 0, outW, outH);
-      }
-    }
+    if (hasGaps) paintGaps(context, image, natural, fill, outW, outH);
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = "high";
     context.drawImage(image, offset.x * k, offset.y * k, natural.w * scale * k, natural.h * scale * k);
@@ -680,13 +734,12 @@ function PhotoCropper({ src, name, queued, aspect = CROP_ASPECT, outputWidth = C
           <h2>{title}</h2>
           <p>{hint ?? "Кадр 4:3 такий самий, як у каталозі й на сторінці оголошення. Можна заповнити його фото або вписати фото повністю, а порожні місця заповнити полями."}{queued > 0 ? ` Ще фото в черзі: ${queued}.` : ""}</p>
         </div>
-        <div
+        <button
+          type="button"
           className={`crop-frame${aspect === 1 ? " crop-frame-square" : ""}`}
           style={{ aspectRatio: String(aspect) }}
           ref={frameRef}
-          role="region"
-          aria-label="Кадрування зображення"
-          tabIndex={0}
+          aria-label="Область кадрування фото. Перетягуйте фото вказівником або використовуйте клавіші зі стрілками."
           onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); dragRef.current = { x: event.clientX, y: event.clientY, ox: offset.x, oy: offset.y }; }}
           onPointerMove={(event) => { const drag = dragRef.current; if (drag) setOffset(clamp(drag.ox + event.clientX - drag.x, drag.oy + event.clientY - drag.y, scale)); }}
           onPointerUp={() => { dragRef.current = null; }}
@@ -712,7 +765,7 @@ function PhotoCropper({ src, name, queued, aspect = CROP_ASPECT, outputWidth = C
             style={natural ? { width: natural.w * scale, height: natural.h * scale, transform: `translate(${offset.x}px, ${offset.y}px)` } : { visibility: "hidden" }}
           />
           <span className="crop-grid" aria-hidden="true" />
-        </div>
+        </button>
         <div className="crop-modes" role="group" aria-label="Режим кадру">
           <button type="button" className={!hasGaps ? "active" : ""} onClick={() => { if (!natural) return; setZoom(1); setOffset({ x: (frame.w - natural.w * minScale) / 2, y: (frame.h - natural.h * minScale) / 2 }); }}>Заповнити кадр</button>
           <button type="button" className={hasGaps ? "active" : ""} disabled={fitRatio > 0.995} onClick={() => { if (!natural) return; const nextScale = minScale * fitRatio; setZoom(fitRatio); setOffset({ x: (frame.w - natural.w * nextScale) / 2, y: (frame.h - natural.h * nextScale) / 2 }); }}>Вписати повністю</button>
@@ -944,12 +997,12 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
             <section className="form-block">
               <div className="form-block-head"><span className="form-step">02</span><div><h2>Про товар</h2><p className="form-hint">Основна інформація для покупців.</p></div></div>
               <label><span>Назва</span><input value={title} onChange={(event) => setTitle(event.target.value)} minLength={3} maxLength={100} required placeholder="Наприклад, худі з логотипом НаУКМА" /></label>
-              <div className="form-row">
-                <div className="field"><span>Категорія</span><CategorySelect categories={categories} value={categoryId} onChange={setCategoryId} placeholder="Оберіть категорію" required disabled={editing} /></div>
+              <div className="form-row form-row-category">
+                <div className="field"><span>Категорія</span><CategorySelect categories={categories} value={categoryId} onChange={setCategoryId} placeholder="Оберіть категорію" otherHint required disabled={editing} /></div>
                 <label><span>Стан</span><select value={condition} onChange={(event) => setCondition(event.target.value as ListingCondition)}>
                   {(Object.keys(CONDITION_LABELS) as ListingCondition[]).map((key) => <option value={key} key={key}>{CONDITION_LABELS[key]}</option>)}
                 </select></label>
-                <label><span>Ціна, грн</span><input type="number" min="0" step="1" inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value)} required placeholder="0" /></label>
+                <label><span>Ціна, грн</span><input type="number" min="0" max={MAX_PRICE} step="1" inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value)} required placeholder="0" /></label>
               </div>
               {isOtherCategory && (
                 <label><span>Своя категорія <small>необов’язково, {SUGGESTION_MIN}–{SUGGESTION_MAX} символів</small></span><input value={suggestedName} onChange={(event) => setSuggestedName(event.target.value)} maxLength={SUGGESTION_MAX} placeholder="Наприклад, музичні інструменти" /><small className="form-hint">Оголошення з’явиться в «Інше», доки адміністратор не схвалить вашу категорію. Одночасно можна мати до 3 пропозицій на розгляді.</small></label>
@@ -972,7 +1025,7 @@ function ListingForm({ mode, listing, initialContact, categories, onError, onNot
         </div>
 
         {formError && <p className="form-error" role="alert">{formError}</p>}
-        <div className="form-actions">
+        <div className="form-actions sticky-actions">
           <button className="button button-primary" type="submit" disabled={submitting}>{submitting ? "Зберігаємо…" : editing ? "Зберегти зміни" : "Опублікувати"}</button>
           <Link className="button button-text" to={backTo}>Скасувати</Link>
         </div>
@@ -1077,14 +1130,15 @@ function MyListingsPage({ user, authChecked, categoryNames, onError, onNotice }:
     }
   }
 
-  if (!authChecked) return <PageLoading />;
-  if (!user) return <SignInRequired title="Ваші оголошення доступні після входу" />;
-
   const isLive = (item: Listing) => item.status === "ACTIVE" || item.status === "RESERVED";
   const sorted = [...items].sort((a, b) => b.created_at.localeCompare(a.created_at));
   const live = sorted.filter(isLive);
   const archive = sorted.filter((item) => !isLive(item));
-  const shown = tab === "active" ? live : archive;
+  const pagedMine = usePaged(tab === "active" ? live : archive, LOCAL_PAGE_SIZE, tab);
+  const shown = pagedMine.slice;
+
+  if (!authChecked) return <PageLoading />;
+  if (!user) return <SignInRequired title="Ваші оголошення доступні після входу" />;
 
   return (
     <main className="page-main">
@@ -1092,7 +1146,7 @@ function MyListingsPage({ user, authChecked, categoryNames, onError, onNotice }:
       <div className="my-toolbar">
         <div className="segmented" role="tablist">
           <button type="button" role="tab" aria-selected={tab === "active"} className={tab === "active" ? "active" : ""} onClick={() => setTab("active")}>Активні <b>{live.length}</b></button>
-          <button type="button" role="tab" aria-selected={tab === "archive"} className={tab === "archive" ? "active" : ""} onClick={() => setTab("archive")}>Знято <b>{archive.length}</b></button>
+          <button type="button" role="tab" aria-selected={tab === "archive"} className={tab === "archive" ? "active" : ""} onClick={() => setTab("archive")}>Зняті <b>{archive.length}</b></button>
         </div>
         <Link className="button button-primary" to="/listings/new">+ Створити</Link>
       </div>
@@ -1104,6 +1158,7 @@ function MyListingsPage({ user, authChecked, categoryNames, onError, onNotice }:
           {tab === "active" && <Link className="button button-primary" to="/listings/new">Створити оголошення</Link>}
         </div>
       ) : (
+        <>
         <div className="listing-grid">
           {shown.map((listing) => (
             <article className="listing-card my-card" key={listing.id}>
@@ -1136,6 +1191,8 @@ function MyListingsPage({ user, authChecked, categoryNames, onError, onNotice }:
             </article>
           ))}
         </div>
+        <Pagination page={pagedMine.page} totalPages={pagedMine.totalPages} onChange={pagedMine.setPage} />
+        </>
       )}
     </main>
   );
@@ -1153,17 +1210,17 @@ function ListingGallery({ listing }: { listing: Listing }) {
   const current = images[Math.min(index, count - 1)];
   const go = (step: number) => setIndex((value) => (value + step + count) % count);
   const markBroken = (id: string) => setBroken((value) => new Set(value).add(id));
+  const handleGalleryKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === "ArrowLeft") { event.preventDefault(); go(-1); }
+    if (event.key === "ArrowRight") { event.preventDefault(); go(1); }
+  };
 
   return (
     <section
       className="gallery"
       role="region"
-      tabIndex={0}
+      aria-roledescription="карусель"
       aria-label="Фотографії оголошення"
-      onKeyDown={(event) => {
-        if (event.key === "ArrowLeft") { event.preventDefault(); go(-1); }
-        if (event.key === "ArrowRight") { event.preventDefault(); go(1); }
-      }}
     >
       <div className="gallery-stage">
         {broken.has(current.image_id)
@@ -1171,8 +1228,8 @@ function ListingGallery({ listing }: { listing: Listing }) {
           : <img key={current.image_id} src={current.image_url} alt={`Фото ${index + 1} з ${count}`} onError={() => markBroken(current.image_id)} />}
         {count > 1 && (
           <>
-            <button className="gallery-nav prev" type="button" onClick={() => go(-1)} aria-label="Попереднє фото">‹</button>
-            <button className="gallery-nav next" type="button" onClick={() => go(1)} aria-label="Наступне фото">›</button>
+            <button className="gallery-nav prev" type="button" onClick={() => go(-1)} onKeyDown={handleGalleryKeyDown} aria-label="Попереднє фото">‹</button>
+            <button className="gallery-nav next" type="button" onClick={() => go(1)} onKeyDown={handleGalleryKeyDown} aria-label="Наступне фото">›</button>
             <span className="gallery-count">{index + 1} / {count}</span>
           </>
         )}
@@ -1185,6 +1242,7 @@ function ListingGallery({ listing }: { listing: Listing }) {
               type="button"
               key={image.image_id}
               onClick={() => setIndex(position)}
+              onKeyDown={handleGalleryKeyDown}
               aria-label={`Показати фото ${position + 1}`}
               aria-current={position === index}
             >
@@ -1221,9 +1279,9 @@ function HomePage({ categories, categoryNames, user, favorites, busy, onFavorite
 
   useEffect(() => {
     getListings(INITIAL_FILTERS, STATS_SAMPLE_SIZE)
-      .then((items) => {
+      .then(({ items, total }) => {
         setRecentListings(items.slice(0, 4));
-        setTotalListings(items.length);
+        setTotalListings(total);
         const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
         const fresh = items.filter((item) => Date.parse(item.created_at) >= dayAgo).length;
         if (fresh > 0) setFreshStat({ value: String(fresh), label: freshLabel(fresh) });
@@ -1239,9 +1297,7 @@ function HomePage({ categories, categoryNames, user, favorites, busy, onFavorite
     navigate(q ? `/listings?${new URLSearchParams({ q }).toString()}` : "/listings");
   }
 
-  const totalLabel = totalListings === null
-    ? "…"
-    : totalListings >= STATS_SAMPLE_SIZE ? `${STATS_SAMPLE_SIZE}+` : String(totalListings);
+  const totalLabel = totalListings === null ? "…" : String(totalListings);
 
   return (
     <main>
@@ -1295,9 +1351,20 @@ function HomePage({ categories, categoryNames, user, favorites, busy, onFavorite
       <section className="how-section">
         <div><span className="eyebrow dark">Без зайвого клопоту</span><h2>Три кроки до вдалої знахідки</h2></div>
         <div className="steps">
-          <article><span>01</span><h3>Знайдіть</h3><p>Скористайтеся пошуком і фільтрами каталогу.</p></article>
-          <article><span>02</span><h3>Увійдіть</h3><p>Підтвердьте належність до спільноти через Microsoft.</p></article>
-          <article><span>03</span><h3>Домовтеся</h3><p>Отримайте контакт продавця і напишіть напряму.</p></article>
+          <article>
+            <span>01</span><h3>Знайдіть</h3><p>Скористайтеся пошуком і фільтрами каталогу.</p>
+            <Link className="button button-light step-button" to="/listings">Відкрити каталог</Link>
+          </article>
+          <article>
+            <span>02</span><h3>Увійдіть</h3><p>Підтвердьте належність до спільноти через Microsoft.</p>
+            {user
+              ? <div className="step-done">Ви вже увійшли</div>
+              : <a className="button button-light step-button" href={loginUrl("/listings")}>Увійти через Microsoft</a>}
+          </article>
+          <article>
+            <span>03</span><h3>Домовтеся</h3><p>Отримайте контакт продавця і напишіть напряму.</p>
+            <Link className="button button-light step-button" to="/listings">Обрати оголошення</Link>
+          </article>
         </div>
       </section>
     </main>
@@ -1320,9 +1387,10 @@ function CatalogPage({ categories, categoryNames, favorites, busy, onFavorite, o
   const [draftFilters, setDraftFilters] = useState<ListingFilters>(filters);
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState(0);
   const requestGeneration = useRef(0);
+  const page = Math.max(1, Math.floor(Number(searchParams.get("page"))) || 1);
+  const totalPages = Math.max(1, Math.ceil(total / CATALOG_PAGE_SIZE));
 
   useEffect(() => setDraftFilters(filters), [filters]);
   useEffect(() => {
@@ -1338,12 +1406,11 @@ function CatalogPage({ categories, categoryNames, favorites, busy, onFavorite, o
     requestGeneration.current = generation;
     let cancelled = false;
     setLoading(true);
-    setLoadingMore(false);
-    getListings(filters, CATALOG_PAGE_SIZE)
-      .then((items) => {
+    getListings(filters, CATALOG_PAGE_SIZE, (page - 1) * CATALOG_PAGE_SIZE)
+      .then(({ items, total: found }) => {
         if (cancelled || generation !== requestGeneration.current) return;
         setListings(items);
-        setHasMore(items.length === CATALOG_PAGE_SIZE);
+        setTotal(found);
       })
       .catch((requestError) => {
         if (!cancelled && generation === requestGeneration.current) {
@@ -1361,29 +1428,13 @@ function CatalogPage({ categories, categoryNames, favorites, busy, onFavorite, o
         requestGeneration.current += 1;
       }
     };
-  }, [filters, onError]);
+  }, [filters, page, onError]);
 
-  async function loadMore() {
-    const generation = requestGeneration.current;
-    setLoadingMore(true);
-    try {
-      const items = await getListings(
-        filters,
-        CATALOG_PAGE_SIZE,
-        listings.length,
-      );
-      if (generation !== requestGeneration.current) return;
-      setListings((current) => [...current, ...items]);
-      setHasMore(items.length === CATALOG_PAGE_SIZE);
-    } catch (requestError) {
-      if (generation === requestGeneration.current) {
-        onError(errorText(requestError));
-      }
-    } finally {
-      if (generation === requestGeneration.current) {
-        setLoadingMore(false);
-      }
-    }
+  function goToPage(next: number) {
+    const params = new URLSearchParams(searchParams);
+    if (next <= 1) params.delete("page"); else params.set("page", String(next));
+    setSearchParams(params);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function applyFilters(event: FormEvent) {
@@ -1402,24 +1453,13 @@ function CatalogPage({ categories, categoryNames, favorites, busy, onFavorite, o
         <h1 className="sr-only">Оголошення</h1>
         <FilterForm filters={draftFilters} categories={categories} onChange={setDraftFilters} onSubmit={applyFilters} onClear={clearFilters} />
         <div className="results-bar">
-          <span className="result-count">{loading ? "Завантаження…" : `Показано: ${listings.length}`}</span>
-          {searchParams.toString() !== "" && <button className="link-button" type="button" onClick={clearFilters}>Скинути фільтри</button>}
+          <span className="result-count">{loading ? "Завантаження…" : `Знайдено: ${total}`}</span>
+          {[...searchParams.keys()].some((key) => key !== "page") && <button className="link-button" type="button" onClick={clearFilters}>Скинути фільтри</button>}
         </div>
         {loading ? <ListingSkeleton /> : listings.length ? (
           <ListingGrid listings={listings} categoryNames={categoryNames} favorites={favorites} busy={busy} onFavorite={onFavorite} />
         ) : <EmptyState onClear={clearFilters} />}
-        {hasMore && !loading && (
-          <div className="load-more-row">
-            <button
-              className="button button-light"
-              type="button"
-              disabled={loadingMore}
-              onClick={() => void loadMore()}
-            >
-              {loadingMore ? "Завантажуємо…" : "Показати ще"}
-            </button>
-          </div>
-        )}
+        {!loading && <Pagination page={page} totalPages={totalPages} onChange={goToPage} />}
       </section>
     </main>
   );
@@ -1447,10 +1487,11 @@ function FilterForm({ filters, categories, onChange, onSubmit, onClear }: {
       </button>
       <div className="filters-extra">
         <div className="field"><span>Категорія</span><CategorySelect categories={categories} value={filters.categoryId} onChange={(id) => onChange({ ...filters, categoryId: id })} placeholder="Усі категорії" allLabel="Усі категорії" /></div>
-        <label><span>Ціна від</span><input type="number" min="0" inputMode="numeric" value={filters.minPrice} onChange={(event) => onChange({ ...filters, minPrice: event.target.value })} placeholder="0" /></label>
-        <label><span>Ціна до</span><input type="number" min="0" inputMode="numeric" value={filters.maxPrice} onChange={(event) => onChange({ ...filters, maxPrice: event.target.value })} placeholder="Будь-яка" /></label>
+        <label><span>Ціна від</span><input type="number" min="0" max={MAX_PRICE} inputMode="numeric" value={filters.minPrice} onChange={(event) => onChange({ ...filters, minPrice: event.target.value })} placeholder="0" /></label>
+        <label><span>Ціна до</span><input type="number" min="0" max={MAX_PRICE} inputMode="numeric" value={filters.maxPrice} onChange={(event) => onChange({ ...filters, maxPrice: event.target.value })} placeholder="Будь-яка" /></label>
         <label><span>Сортування</span><select value={filters.sort} onChange={(event) => onChange({ ...filters, sort: event.target.value as ListingFilters["sort"] })}>
           <option value="newest">Спочатку нові</option><option value="oldest">Спочатку старі</option>
+          <option value="price_asc">Спочатку дешевші</option><option value="price_desc">Спочатку дорожчі</option>
         </select></label>
       </div>
       <button className="button button-primary filter-submit" type="submit">Знайти</button>
@@ -1494,26 +1535,6 @@ function ListingGrid({ listings, categoryNames, favorites, busy, onFavorite }: {
   );
 }
 
-function contactHref(contact: string): string | null {
-  const value = contact.trim();
-  if (value.includes("@") && !value.includes(" ") && !value.startsWith("@")) {
-    const atIndex = value.lastIndexOf("@");
-    const local = value.slice(0, atIndex);
-    const domain = value.slice(atIndex + 1);
-    if (local.length > 0 && domain.includes(".") && !domain.startsWith(".") && !domain.endsWith(".")) {
-      return `mailto:${value}`;
-    }
-  }
-  if (/^@[A-Za-z0-9_]{3,32}$/.test(value)) {
-    return `https://t.me/${value.slice(1)}`;
-  }
-  const digitsOnly = value.replace(/[^\d+]/g, "");
-  if (digitsOnly.length >= 7 && digitsOnly.length <= 16 && /^(\+?\d{7,15})$/.test(digitsOnly)) {
-    return `tel:${digitsOnly}`;
-  }
-  return null;
-}
-
 function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy, onError, onNotice }: {
   user: CurrentUser | null;
   categoryNames: Map<string, string>;
@@ -1535,6 +1556,7 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
   const [seller, setSeller] = useState<PublicProfile | null>(null);
   const [blockOpen, setBlockOpen] = useState(false);
   const [blockReason, setBlockReason] = useState("");
+  const [complaintOpen, setComplaintOpen] = useState(false);
   const userId = user?.user_id ?? null;
 
   useEffect(() => {
@@ -1601,16 +1623,16 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
   return (
     <main className="page-main listing-detail-page">
       <Link className="back-link" to="/listings">← До оголошень</Link>
-      <div className="ad-layout">
-        <section className="ad-card ad-gallery"><ListingGallery listing={listing} /></section>
+      <div className="lot-layout">
+        <section className="lot-card lot-gallery"><ListingGallery listing={listing} /></section>
 
-        <aside className="ad-side">
-          <div className="ad-card ad-price-card">
-            <time className="ad-date" dateTime={listing.created_at}>Опубліковано {published}</time>
-            <h1 className="ad-title">{listing.title}</h1>
-            <strong className="ad-price">{formatPrice(listing.price)}</strong>
-            <div className="ad-tags"><span>{categoryNames.get(listing.category_id) ?? "Інше"}</span><span>{CONDITION_LABELS[listing.condition]}</span></div>
-            <div className="ad-actions">
+        <aside className="lot-side">
+          <div className="lot-card lot-price-card">
+            <time className="lot-date" dateTime={listing.created_at}>Опубліковано {published}</time>
+            <h1 className="lot-title">{listing.title}</h1>
+            <strong className="lot-price">{formatPrice(listing.price)}</strong>
+            <div className="lot-tags"><span>{categoryNames.get(listing.category_id) ?? "Інше"}</span><span>{CONDITION_LABELS[listing.condition]}</span></div>
+            <div className="lot-actions">
               {isOwner ? (
                 <>
                   <Link className="button button-primary" to={`/listings/${listing.id}/edit`}>Редагувати оголошення</Link>
@@ -1625,37 +1647,44 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
                   )}
                 </>
               ) : (
-                <button className="button button-light" disabled={busy} onClick={() => onFavorite(listing.id)}>{favorites.has(listing.id) ? "♥ В обраному" : "♡ Додати в обране"}</button>
+                <>
+                  <button className="button button-light" disabled={busy} onClick={() => onFavorite(listing.id)}>{favorites.has(listing.id) ? "♥ В обраному" : "♡ Додати в обране"}</button>
+                  {user ? (
+                    <button className="button button-text report-button" type="button" disabled={busy} onClick={() => setComplaintOpen(true)}>Поскаржитись на оголошення</button>
+                  ) : (
+                    <a className="button button-text report-button" href={currentLoginUrl}>Увійти, щоб поскаржитись</a>
+                  )}
+                </>
               )}
               {user?.role === "ADMIN" && <button className="button button-danger" disabled={busy} onClick={() => void moderate()}>Зняти з публікації (модератор)</button>}
             </div>
           </div>
 
-          <div className="ad-card ad-seller">
+          <div className="lot-card lot-seller">
             <h2>{isOwner ? "Ваш контакт" : "Продавець"}</h2>
-            <div className="ad-seller-row">
+            <div className="lot-seller-row">
               {sellerName ? (
-                <Avatar name={sellerName} url={sellerAvatar} className="ad-avatar-img" />
+                <Avatar name={sellerName} url={sellerAvatar} className="lot-avatar-img" />
               ) : (
-                <span className="ad-avatar" aria-hidden="true">
+                <span className="lot-avatar" aria-hidden="true">
                   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.2 3.6-7 8-7s8 2.8 8 7" /></svg>
                 </span>
               )}
-              <div><strong>{sellerName ?? "Студент НаУКМА"}</strong><small>Вхід через корпоративну пошту</small></div>
+              <div><strong>{sellerName ?? "Продавець"}</strong><small>Вхід через корпоративну пошту</small></div>
             </div>
             {!user ? (
-              <a className="button button-primary ad-contact-button" href={currentLoginUrl}>Увійти, щоб побачити контакт</a>
+              <a className="button button-primary lot-contact-button" href={currentLoginUrl}>Увійти, щоб побачити контакт</a>
             ) : contactState === "loading" ? (
-              <div className="ad-contact skeleton-line" aria-busy="true" />
+              <div className="lot-contact skeleton-line" aria-busy="true" />
             ) : contact ? (
-              <div className="ad-contact">
+              <div className="lot-contact">
                 <span>Контакт</span>
                 {contactParts.main && (href ? <a href={href} target={href.startsWith("http") ? "_blank" : undefined} rel="noreferrer">{contactParts.main}</a> : <strong>{contactParts.main}</strong>)}
                 {contactParts.phone && <a href={`tel:${contactParts.phone.replace(/[^\d+]/g, "")}`}>{contactParts.phone}</a>}
-                {contactParts.location && <em className="ad-location">{contactParts.location}</em>}
+                {contactParts.location && <em className="lot-location">{contactParts.location}</em>}
               </div>
             ) : (
-              <p className="ad-muted">Контакт зараз недоступний.</p>
+              <p className="lot-muted">Контакт зараз недоступний.</p>
             )}
             {user?.role === "ADMIN" && !isOwner && (
               blockOpen ? (
@@ -1673,16 +1702,24 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
           </div>
         </aside>
 
-        <section className="ad-card ad-info">
+        <section className="lot-card lot-info">
           <h2>Опис</h2>
-          {listing.description ? <p className="ad-description">{listing.description}</p> : <p className="ad-muted">Продавець не додав опису.</p>}
-          <dl className="ad-facts">
+          {listing.description ? <p className="lot-description">{listing.description}</p> : <p className="lot-muted">Продавець не додав опису.</p>}
+          <dl className="lot-facts">
             <div><dt>Стан</dt><dd>{CONDITION_LABELS[listing.condition]}</dd></div>
             <div><dt>Категорія</dt><dd>{categoryNames.get(listing.category_id) ?? "Інше"}</dd></div>
             <div><dt>Опубліковано</dt><dd>{published}</dd></div>
           </dl>
         </section>
       </div>
+      {complaintOpen && (
+        <ComplaintDialog
+          listingId={listing.id}
+          onClose={() => setComplaintOpen(false)}
+          onDone={() => { setComplaintOpen(false); onNotice("Скаргу надіслано адміністраторам"); }}
+          onError={onError}
+        />
+      )}
     </main>
   );
 }
@@ -1697,6 +1734,7 @@ function FavoritesPage({ user, authChecked, categoryNames, favorites, busy, onFa
   onError: (message: string) => void;
 }) {
   const [items, setItems] = useState<Listing[]>([]);
+  const pagedFavorites = usePaged(items, LOCAL_PAGE_SIZE);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     if (!user) { setItems([]); setLoading(false); return; }
@@ -1709,7 +1747,10 @@ function FavoritesPage({ user, authChecked, categoryNames, favorites, busy, onFa
     <main className="page-main">
       <PageHeading eyebrow="Ваш особистий список" title="Обране" />
       {loading ? <ListingSkeleton /> : items.length ? (
-        <ListingGrid listings={items} categoryNames={categoryNames} favorites={favorites} busy={busy} onFavorite={onFavorite} />
+        <>
+          <ListingGrid listings={pagedFavorites.slice} categoryNames={categoryNames} favorites={favorites} busy={busy} onFavorite={onFavorite} />
+          <Pagination page={pagedFavorites.page} totalPages={pagedFavorites.totalPages} onChange={pagedFavorites.setPage} />
+        </>
       ) : (
         <div className="empty-state"><span>♡</span><h3>Тут поки порожньо</h3><p>Зберігайте цікаві оголошення, щоб не загубити їх.</p><Link className="button button-primary" to="/listings">Перейти до каталогу</Link></div>
       )}
@@ -1806,7 +1847,7 @@ function ProfilePage({ user, authChecked, onUserChange, onError, onNotice }: {
           <Avatar name={user.display_name} url={user.avatar_url} className="avatar-xl" />
           <div className="profile-top-info">
             <strong>{user.display_name}</strong>
-            <small>{user.email} · {user.role === "ADMIN" ? "Адміністратор" : "Студент"}</small>
+            <small>{user.role === "ADMIN" ? `${user.email} · Адміністратор` : user.email}</small>
             <div className="profile-avatar-actions">
               <input
                 ref={fileInput}
@@ -1838,7 +1879,7 @@ function ProfilePage({ user, authChecked, onUserChange, onError, onNotice }: {
         </section>
 
         {formError && <p className="form-error" role="alert">{formError}</p>}
-        <div className="form-actions">
+        <div className="form-actions sticky-actions">
           <button className="button button-primary" type="submit" disabled={saving}>{saving ? "Зберігаємо…" : "Зберегти профіль"}</button>
           <Link className="button button-text" to="/my">Мої оголошення</Link>
         </div>
@@ -1867,6 +1908,25 @@ function ProfilePage({ user, authChecked, onUserChange, onError, onNotice }: {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UKMA_EMAIL_PATTERN = /^[^@\s]+@ukma\.edu\.ua$/i;
 
+type AdminTab = "moderation" | "categories" | "complaints" | "feedback" | "blocked" | "user-log" | "admin-log";
+/** Кожна вкладка має власну адресу, щоб на неї можна було посилатися. */
+const ADMIN_TABS: { id: AdminTab; label: string; path: string }[] = [
+  { id: "moderation", label: "Модерація", path: "/admin" },
+  { id: "categories", label: "Категорії", path: "/admin/categories" },
+  { id: "complaints", label: "Скарги", path: "/admin/complaints" },
+  { id: "feedback", label: "Звернення", path: "/admin/feedback" },
+  { id: "blocked", label: "Заблоковані", path: "/admin/blocked" },
+  { id: "user-log", label: "Журнал", path: "/admin/logs/users" },
+  { id: "admin-log", label: "Адмін-дії", path: "/admin/logs/admins" },
+];
+
+function adminTabFromPath(pathname: string): AdminTab | null {
+  let end = pathname.length;
+  while (end > 1 && pathname.charCodeAt(end - 1) === 47) end -= 1;
+  const clean = pathname.slice(0, end) || "/";
+  return ADMIN_TABS.find((item) => item.path === clean)?.id ?? null;
+}
+
 function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }: {
   user: CurrentUser | null;
   authChecked: boolean;
@@ -1879,6 +1939,8 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
   const [working, setWorking] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [history, setHistory] = useState<ModerationAction[]>([]);
+  const adminLocation = useLocation();
+  const tab = adminTabFromPath(adminLocation.pathname);
 
   if (!authChecked) return <PageLoading />;
   if (!user) return <SignInRequired title="Адмін-панель доступна після входу" />;
@@ -1914,6 +1976,22 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
   return (
     <main className="page-main narrow-page">
       <PageHeading eyebrow="Модерація" title="Адмін-панель" />
+      <div className="admin-tabs" role="tablist" aria-label="Розділи адмін-панелі">
+        {ADMIN_TABS.map((item) => (
+          <Link key={item.id} role="tab" aria-selected={tab === item.id} className={tab === item.id ? "is-active" : ""} to={item.path}>{item.label}</Link>
+        ))}
+      </div>
+      {tab === null && <NotFoundPage />}
+      {tab === "categories" && (<>
+        <AdminCategoriesPanel onError={onError} onNotice={onNotice} onCategoriesChanged={onCategoriesChanged} />
+        <CategorySuggestionsPanel onError={onError} onNotice={onNotice} onCategoriesChanged={onCategoriesChanged} />
+      </>)}
+      {tab === "complaints" && <ComplaintsPanel onError={onError} onNotice={onNotice} />}
+      {tab === "feedback" && <FeedbackAdminPanel onError={onError} onNotice={onNotice} />}
+      {tab === "blocked" && <BlockedUsersPanel onError={onError} onNotice={onNotice} />}
+      {tab === "user-log" && <ActivityLogPanel kind="users" onError={onError} />}
+      {tab === "admin-log" && <ActivityLogPanel kind="admins" onError={onError} />}
+      {tab === "moderation" && (<>
       <form className="profile-form" onSubmit={(event) => event.preventDefault()}>
         <section className="form-block">
           <div className="form-block-head"><div><h2>Блокування користувачів</h2><p className="form-hint">Заблокований користувач втрачає чинні сесії й не може входити; його оголошення не видаляються. Зручніше блокувати зі сторінки оголошення кнопкою «Заблокувати продавця».</p></div></div>
@@ -1928,7 +2006,7 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
         </section>
         {history.length > 0 && (
           <section className="form-block">
-            <div className="form-block-head"><div><h2>Дії в цій сесії</h2><p className="form-hint">Журнал на сервері зберігається, але читання журналу через API ще немає.</p></div></div>
+            <div className="form-block-head"><div><h2>Дії в цій сесії</h2><p className="form-hint">Повний журнал — у вкладці «Адмін-дії».</p></div></div>
             <ul className="admin-log">
               {history.map((item) => (
                 <li key={item.id}>
@@ -1941,24 +2019,157 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
           </section>
         )}
       </form>
-      <CategorySuggestionsPanel onError={onError} onNotice={onNotice} onCategoriesChanged={onCategoriesChanged} />
+      </>)}
     </main>
   );
 }
 
 const OTHER_CATEGORY_ID = "55555555-5555-5555-5555-555555555555";
+const CATEGORY_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function AdminCategoriesPanel({ onError, onNotice, onCategoriesChanged }: {
+  onError: (message: string) => void;
+  onNotice: (message: string) => void;
+  onCategoriesChanged: () => void;
+}) {
+  const [items, setItems] = useState<Category[] | null>(null);
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [description, setDescription] = useState("");
+  const [editedNames, setEditedNames] = useState<Record<string, string>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setItems(sortCategories(await getCategories()));
+    } catch (requestError) {
+      setItems([]);
+      onError(errorText(requestError));
+    }
+  }, [onError]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function submitNew(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const cleanName = name.trim();
+    const cleanSlug = slug.trim().toLowerCase();
+    if (!cleanName) { onError("Вкажіть назву категорії"); return; }
+    if (!CATEGORY_SLUG_PATTERN.test(cleanSlug)) {
+      onError("Slug має містити лише латинські літери, цифри й одинарні дефіси");
+      return;
+    }
+    setCreating(true);
+    try {
+      await createCategory({ name: cleanName, slug: cleanSlug, description: description.trim() || null });
+      setName("");
+      setSlug("");
+      setDescription("");
+      onNotice(`Категорію «${cleanName}» створено`);
+      onCategoriesChanged();
+      await load();
+    } catch (requestError) {
+      onError(errorText(requestError));
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function rename(item: Category) {
+    const cleanName = (editedNames[item.id] ?? item.name).trim();
+    if (!cleanName) { onError("Назва категорії не може бути порожньою"); return; }
+    setBusyId(item.id);
+    try {
+      await updateCategory(item.id, { name: cleanName });
+      onNotice(`Категорію перейменовано на «${cleanName}»`);
+      onCategoriesChanged();
+      await load();
+    } catch (requestError) {
+      onError(errorText(requestError));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function deactivate(item: Category) {
+    setBusyId(item.id);
+    try {
+      await updateCategory(item.id, { is_active: false });
+      setConfirmId(null);
+      onNotice(`Категорію «${item.name}» деактивовано; наявні оголошення збережено`);
+      onCategoriesChanged();
+      await load();
+    } catch (requestError) {
+      onError(errorText(requestError));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="category-management">
+      <form className="form-block" onSubmit={(event) => void submitNew(event)}>
+        <div className="form-block-head"><div><h2>Створити категорію</h2><p className="form-hint">Slug використовується в адресах і після створення не змінюється автоматично.</p></div></div>
+        <div className="form-row">
+          <label><span>Назва</span><input value={name} onChange={(event) => setName(event.target.value)} maxLength={100} required /></label>
+          <label><span>Slug</span><input value={slug} onChange={(event) => setSlug(event.target.value)} maxLength={100} placeholder="muzychni-instrumenty" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required /></label>
+        </div>
+        <label><span>Опис <small>необов’язково</small></span><textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} rows={2} /></label>
+        <div className="form-actions"><button className="button button-primary" type="submit" disabled={creating}>{creating ? "Створюємо…" : "Створити категорію"}</button></div>
+      </form>
+
+      <section className="form-block">
+        <div className="form-block-head"><div><h2>Активні категорії</h2><p className="form-hint">Деактивація прибирає категорію з нових оголошень, але не видаляє наявні.</p></div></div>
+        {items === null && <p className="form-hint">Завантажуємо…</p>}
+        {items?.length === 0 && <p className="form-hint">Активних категорій немає.</p>}
+        <ul className="category-management-list">
+          {items?.map((item) => {
+            const isSystemOther = item.id === OTHER_CATEGORY_ID;
+            return (
+              <li key={item.id}>
+                <div className="category-management-fields">
+                  <label><span>Назва</span><input value={editedNames[item.id] ?? item.name} maxLength={100} onChange={(event) => setEditedNames((current) => ({ ...current, [item.id]: event.target.value }))} /></label>
+                  <div><span className="field-label">Slug</span><code>{item.slug}</code></div>
+                </div>
+                {item.description && <p className="form-hint">{item.description}</p>}
+                {confirmId === item.id ? (
+                  <div className="category-deactivate-confirm" role="alert">
+                    <span>Деактивувати «{item.name}»?</span>
+                    <div className="form-actions">
+                      <button className="button button-danger" type="button" disabled={busyId === item.id} onClick={() => void deactivate(item)}>Так, деактивувати</button>
+                      <button className="button button-light" type="button" disabled={busyId === item.id} onClick={() => setConfirmId(null)}>Скасувати</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="form-actions">
+                    <button className="button button-primary" type="button" disabled={busyId === item.id} onClick={() => void rename(item)}>Зберегти назву</button>
+                    <button className="button button-danger" type="button" disabled={isSystemOther || busyId === item.id} title={isSystemOther ? "Системна категорія потрібна для пропозицій" : undefined} onClick={() => setConfirmId(item.id)}>Деактивувати</button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    </div>
+  );
+}
 
 /** Категорія «Інше» завжди остання; решта лишається в порядку сервера. */
 function sortCategories(items: Category[]): Category[] {
   return [...items].sort((a, b) => Number(a.id === OTHER_CATEGORY_ID) - Number(b.id === OTHER_CATEGORY_ID));
 }
 
-function CategorySelect({ categories, value, onChange, placeholder, allLabel, required = false, disabled = false }: {
+function CategorySelect({ categories, value, onChange, placeholder, allLabel, otherHint = false, required = false, disabled = false }: {
   categories: Category[];
   value: string;
   onChange: (id: string) => void;
   placeholder: string;
   allLabel?: string;
+  /** У формі оголошення біля «Інше» підказує, що можна запропонувати власну категорію. */
+  otherHint?: boolean;
   required?: boolean;
   disabled?: boolean;
 }) {
@@ -2010,7 +2221,7 @@ function CategorySelect({ categories, value, onChange, placeholder, allLabel, re
           <input ref={searchRef} className="category-select-search" type="search" value={query} onChange={(event) => { setQuery(event.target.value); setActive(0); }} onKeyDown={onSearchKeyDown} placeholder="Пошук категорії" aria-label="Пошук категорії" />
           <ul role="listbox">
             {options.map((option, index) => (
-              <li key={option.id || "all"} role="option" aria-selected={option.id === value} className={index === active ? "is-active" : ""} onMouseEnter={() => setActive(index)} onMouseDown={(event) => { event.preventDefault(); choose(option.id); }}>{option.name}</li>
+              <li key={option.id || "all"} role="option" aria-selected={option.id === value} className={index === active ? "is-active" : ""} onMouseEnter={() => setActive(index)} onMouseDown={(event) => { event.preventDefault(); choose(option.id); }}>{option.name}{otherHint && option.id === OTHER_CATEGORY_ID && <small className="category-option-hint"> (або запропонуйте свою)</small>}</li>
             ))}
             {options.length === 0 && <li className="category-select-empty">Нічого не знайдено</li>}
           </ul>
@@ -2029,6 +2240,7 @@ function CategorySuggestionsPanel({ onError, onNotice, onCategoriesChanged }: {
 }) {
   const [items, setItems] = useState<CategorySuggestion[] | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
+  const [slugs, setSlugs] = useState<Record<string, string>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -2045,10 +2257,15 @@ function CategorySuggestionsPanel({ onError, onNotice, onCategoriesChanged }: {
 
   async function approve(item: CategorySuggestion) {
     const edited = (names[item.suggestion_id] ?? item.name).trim();
+    const editedSlug = (slugs[item.suggestion_id] ?? "").trim().toLowerCase();
     if (edited.length < SUGGESTION_MIN || edited.length > SUGGESTION_MAX) { onError(`Назва категорії: від ${SUGGESTION_MIN} до ${SUGGESTION_MAX} символів`); return; }
+    if (editedSlug && !CATEGORY_SLUG_PATTERN.test(editedSlug)) { onError("Slug має містити лише латинські літери, цифри й одинарні дефіси"); return; }
     setBusyId(item.suggestion_id);
     try {
-      await approveCategorySuggestion(item.suggestion_id, edited === item.name ? undefined : edited);
+      await approveCategorySuggestion(item.suggestion_id, {
+        ...(edited === item.name ? {} : { name: edited }),
+        ...(editedSlug ? { slug: editedSlug } : {}),
+      });
       onNotice(`Категорію «${edited}» створено, оголошення перенесено`);
       onCategoriesChanged();
       await load();
@@ -2076,7 +2293,7 @@ function CategorySuggestionsPanel({ onError, onNotice, onCategoriesChanged }: {
 
   return (
     <section className="form-block suggestions-panel">
-      <div className="form-block-head"><div><h2>Пропозиції категорій</h2><p className="form-hint">Схвалення створює категорію й переносить оголошення з «Інше»; назву можна виправити. Відхилення лишає оголошення в «Інше».</p></div></div>
+      <div className="form-block-head"><div><h2>Пропозиції користувачів</h2><p className="form-hint">Схвалення створює категорію й переносить оголошення з «Інше»; назву та slug можна виправити. Порожній slug сервер сформує автоматично.</p></div></div>
       {items === null && <p className="form-hint">Завантажуємо…</p>}
       {items?.length === 0 && <p className="form-hint">Нових пропозицій немає.</p>}
       <ul className="suggestion-list">
@@ -2085,6 +2302,9 @@ function CategorySuggestionsPanel({ onError, onNotice, onCategoriesChanged }: {
             <div className="suggestion-head"><strong>{item.name}</strong><span className="form-hint">оголошень: {item.listings_count}</span></div>
             <div className="form-row">
               <label><span>Назва категорії</span><input value={names[item.suggestion_id] ?? item.name} maxLength={SUGGESTION_MAX} onChange={(event) => setNames((current) => ({ ...current, [item.suggestion_id]: event.target.value }))} /></label>
+              <label><span>Slug <small>необов’язково</small></span><input value={slugs[item.suggestion_id] ?? ""} maxLength={100} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" onChange={(event) => setSlugs((current) => ({ ...current, [item.suggestion_id]: event.target.value }))} placeholder="Автоматично з назви" /></label>
+            </div>
+            <div className="form-row">
               <label><span>Причина відхилення</span><input value={reasons[item.suggestion_id] ?? ""} maxLength={500} onChange={(event) => setReasons((current) => ({ ...current, [item.suggestion_id]: event.target.value }))} placeholder="Для відхилення" /></label>
             </div>
             <div className="form-actions">
@@ -2120,7 +2340,7 @@ function ListingImage({ listing, large = false }: { listing: Listing; large?: bo
 }
 
 function Footer() {
-  return <footer><Link className="brand footer-brand" to="/" aria-label="Барахолка НаУКМА, на головну"><span className="brand-mark">Б</span><span className="brand-divider" aria-hidden="true" /><NaukmaLogo className="naukma-logo" /></Link><p>Проєкт створюється в рамках курсу SSDM 2026 · Без платежів і доставки всередині сервісу</p></footer>;
+  return <footer><Link className="brand footer-brand" to="/" aria-label="Барахолка НаУКМА, на головну"><span className="brand-mark">Б</span><span className="brand-divider" aria-hidden="true" /><NaukmaLogo className="naukma-logo" /></Link><p className="footer-note"><span>Проєкт створюється в рамках курсу SSDM 2026</span><span>Без платежів і доставки всередині сервісу</span><Link to="/feedback">Зворотний зв'язок</Link></p></footer>;
 }
 
 export default App;

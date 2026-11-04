@@ -8,7 +8,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from src.api.deps import get_favorite_service, require_current_user
+from src.api.deps import (
+    get_activity_service,
+    get_favorite_service,
+    require_current_user,
+)
 from src.api.routers.listings import _to_public
 from src.api.schemas.favorites import FavoriteResponse
 from src.api.schemas.listings import (
@@ -16,6 +20,8 @@ from src.api.schemas.listings import (
     ErrorResponse,
     ListingPublicResponse,
 )
+from src.domain.activity import ActivityType
+from src.services.activity import ActivityLogService
 from src.domain.exceptions import (
     FavoriteNotFoundError,
     ListingNotFoundError,
@@ -83,11 +89,13 @@ def add_favorite(
     listing_id: UUID,
     current_user: CurrentUser = Depends(require_current_user),
     service: FavoriteService = Depends(get_favorite_service),
+    activity: ActivityLogService = Depends(get_activity_service),
 ) -> FavoriteResponse:
     try:
         favorite = service.add(current_user.user_id, listing_id)
     except (ListingUnauthorizedError, ListingNotFoundError) as exc:
         _raise_domain(exc)
+    activity.record(current_user, ActivityType.FAVORITE_ADDED, listing_id)
     return FavoriteResponse(
         listing_id=favorite.listing_id, created_at=favorite.created_at
     )
@@ -109,8 +117,10 @@ def remove_favorite(
     listing_id: UUID,
     current_user: CurrentUser = Depends(require_current_user),
     service: FavoriteService = Depends(get_favorite_service),
+    activity: ActivityLogService = Depends(get_activity_service),
 ) -> None:
     try:
         service.remove(current_user.user_id, listing_id)
     except (ListingUnauthorizedError, FavoriteNotFoundError) as exc:
         _raise_domain(exc)
+    activity.record(current_user, ActivityType.FAVORITE_REMOVED, listing_id)

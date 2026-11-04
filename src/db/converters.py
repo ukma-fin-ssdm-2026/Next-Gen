@@ -3,17 +3,23 @@
 from typing import Any, TypeVar
 
 from src.db.models import (
+    ActivityEventRow,
     CategoryRow,
     CategorySuggestionRow,
+    ComplaintRow,
     FavoriteRow,
+    FeedbackRow,
     ListingImageRow,
     ListingRow,
     ModerationActionRow,
     UserRow,
 )
+from src.domain.activity import ActivityEvent, ActivityType
 from src.domain.categories import Category
 from src.domain.category_suggestions import CategorySuggestion, CategorySuggestionStatus
+from src.domain.complaints import Complaint, ComplaintReason, ComplaintStatus
 from src.domain.favorites import Favorite
+from src.domain.feedback import Feedback, FeedbackStatus
 from src.domain.listings import (
     Listing,
     ListingCondition,
@@ -57,6 +63,8 @@ def user_row_to_domain(row: UserRow) -> User:
         avatar_url=row.avatar_url,
         contact=row.contact,
         created_at=row.created_at,
+        block_reason=row.block_reason,
+        blocked_at=row.blocked_at,
     )
 
 
@@ -75,6 +83,8 @@ def user_domain_to_row(user: User, existing: UserRow | None = None) -> UserRow:
         avatar_url=user.avatar_url,
         contact=user.contact,
         created_at=user.created_at,
+        block_reason=user.block_reason,
+        blocked_at=user.blocked_at,
     )
 
 
@@ -120,8 +130,11 @@ def suggestion_row_to_domain(row: CategorySuggestionRow) -> CategorySuggestion:
         name=row.name,
         proposer_id=row.proposer_id,
         status=CategorySuggestionStatus(row.status),
+        reason=row.reason,
+        category_id=row.category_id,
+        reviewed_by=row.reviewed_by,
         created_at=row.created_at,
-        reviewed_at=row.resolved_at,
+        reviewed_at=row.reviewed_at,
     )
 
 
@@ -135,8 +148,11 @@ def suggestion_domain_to_row(
         name=s.name,
         proposer_id=s.proposer_id,
         status=s.status.value,
+        reason=s.reason,
+        category_id=s.category_id,
+        reviewed_by=s.reviewed_by,
         created_at=s.created_at,
-        resolved_at=s.reviewed_at,
+        reviewed_at=s.reviewed_at,
     )
 
 
@@ -281,4 +297,101 @@ def moderation_domain_to_row(
         target_user_id=action.target_user_id,
         suggestion_id=action.suggestion_id,
         created_at=action.created_at,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Complaint / Feedback / ActivityEvent
+# ---------------------------------------------------------------------------
+
+
+def complaint_row_to_domain(row: ComplaintRow) -> Complaint:
+    return Complaint(
+        id=row.complaint_id,
+        listing_id=row.listing_id,
+        reporter_id=row.reporter_id,
+        reason=ComplaintReason(row.reason),
+        details=row.details,
+        status=ComplaintStatus(row.status),
+        created_at=row.created_at,
+        resolved_by=row.resolved_by,
+        resolved_at=row.resolved_at,
+        resolution_note=row.resolution_note,
+    )
+
+
+def complaint_domain_to_row(
+    c: Complaint, existing: ComplaintRow | None = None
+) -> ComplaintRow:
+    return _populate_row(
+        ComplaintRow,
+        existing,
+        complaint_id=c.id,
+        listing_id=c.listing_id,
+        reporter_id=c.reporter_id,
+        reason=c.reason.value,
+        details=c.details,
+        status=c.status.value,
+        created_at=c.created_at,
+        resolved_by=c.resolved_by,
+        resolved_at=c.resolved_at,
+        resolution_note=c.resolution_note,
+    )
+
+
+def feedback_row_to_domain(row: FeedbackRow) -> Feedback:
+    return Feedback(
+        id=row.feedback_id,
+        user_id=row.user_id,
+        subject=row.subject,
+        message=row.message,
+        status=FeedbackStatus(row.status),
+        created_at=row.created_at,
+        resolved_by=row.resolved_by,
+        resolved_at=row.resolved_at,
+    )
+
+
+def feedback_domain_to_row(
+    f: Feedback, existing: FeedbackRow | None = None
+) -> FeedbackRow:
+    return _populate_row(
+        FeedbackRow,
+        existing,
+        feedback_id=f.id,
+        user_id=f.user_id,
+        subject=f.subject,
+        message=f.message,
+        status=f.status.value,
+        created_at=f.created_at,
+        resolved_by=f.resolved_by,
+        resolved_at=f.resolved_at,
+    )
+
+
+def activity_row_to_domain(row: ActivityEventRow) -> ActivityEvent:
+    return ActivityEvent(
+        id=row.event_id,
+        actor_id=row.actor_id,
+        actor_role=UserRole(row.actor_role),
+        action_type=ActivityType(row.action_type),
+        listing_id=row.listing_id,
+        details=row.details,
+        created_at=row.created_at,
+    )
+
+
+def activity_domain_to_row(
+    e: ActivityEvent, existing: ActivityEventRow | None = None
+) -> ActivityEventRow:
+    return _populate_row(
+        ActivityEventRow,
+        existing,
+        event_id=e.id,
+        actor_id=e.actor_id,
+        actor_role=e.actor_role.value,
+        action_type=e.action_type.value,
+        listing_id=e.listing_id,
+        details=e.details,
+        created_at=e.created_at,
     )

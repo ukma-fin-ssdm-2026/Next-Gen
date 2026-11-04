@@ -20,20 +20,27 @@ from fastapi import status
 from fastapi.responses import RedirectResponse
 
 from src.api.deps import (
+    BLOCKED_NOTICE_COOKIE_NAME,
     OIDC_STATE_COOKIE_NAME,
     SESSION_COOKIE_NAME,
     SessionCookie,
+    get_activity_service,
     get_auth_service,
     get_auth_session_store,
+    get_blocked_notice_store,
     get_entra_oidc_client,
     get_entra_settings,
     get_oidc_flow_store,
     get_profile_service,
+    get_user_repository,
     require_current_user,
 )
 from src.api.schemas.listings import ApiValidationErrorResponse, ErrorResponse
+from src.api.schemas.support import BlockedStatusResponse
 from src.api.schemas.users import CurrentUserResponse, ProfileUpdate
 from src.config import ConfigurationError, EntraSettings, development_auth_enabled
+from src.domain.activity import ActivityType
+from src.services.activity import ActivityLogService
 from src.domain.exceptions import InvalidProfileError, ProfileNotFoundError
 from src.domain.users import CurrentUser
 from src.integrations.entra import EntraOidcClient, EntraOidcError
@@ -44,11 +51,20 @@ from src.services.auth import (
     VerifiedEntraClaims,
 )
 from src.services.auth_sessions import InMemoryAuthSessionStore, InMemoryOidcFlowStore
+from src.repositories.users import UserRepository
 from src.services.profile import ProfileService
 
 MAX_AVATAR_FILE_SIZE_BYTES = 10 * 1024 * 1024
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+BlockedNoticeCookie = Annotated[
+    str | None,
+    Cookie(
+        alias=BLOCKED_NOTICE_COOKIE_NAME,
+        description="Короткий квиток для показу причини блокування",
+    ),
+]
 
 OidcStateCookie = Annotated[
     str | None,
@@ -202,6 +218,7 @@ def callback(
     oidc: EntraOidcClient = Depends(get_entra_oidc_client),
     flows: InMemoryOidcFlowStore = Depends(get_oidc_flow_store),
     sessions: InMemoryAuthSessionStore = Depends(get_auth_session_store),
+    notices: InMemoryAuthSessionStore = Depends(get_blocked_notice_store),
     service: AuthService = Depends(get_auth_service),
 ) -> RedirectResponse:
     if state is None or oidc_state is None or state != oidc_state:
@@ -227,10 +244,24 @@ def callback(
             detail=str(exc),
         ) from exc
     except BlockedUserError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(exc),
-        ) from exc
+        # Замість сирого JSON 403 показуємо сторінку з причиною блокування:
+        # квиток дає доступ лише до /auth/blocked-status, не до сесії.
+        response = RedirectResponse(
+            _frontend_destination(settings, "/?blocked=1"),
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+        response.delete_cookie(OIDC_STATE_COOKIE_NAME, path="/api/v1/auth")
+        if exc.user_id is not None:
+            response.set_cookie(
+                key=BLOCKED_NOTICE_COOKIE_NAME,
+                value=notices.create(exc.user_id),
+                max_age=600,
+                httponly=True,
+                secure=settings.session_cookie_secure,
+                samesite="lax",
+                path="/api/v1/auth",
+            )
+        return response
 
     session_token = sessions.create(current_user.user_id)
     response = RedirectResponse(
@@ -286,6 +317,36 @@ def me(
     return _me_response(current_user)
 
 
+@router.get(
+    "/blocked-status",
+    response_model=BlockedStatusResponse,
+    summary="Факт і причина блокування поточного користувача",
+    description=(
+        "Доступний без валідної сесії: розпізнає користувача за сесією або за "
+        "коротким квитком, який видає /auth/callback для заблокованого входу. "
+        "Повертає лише дані про блокування самого користувача (FR-013)."
+    ),
+)
+def blocked_status(
+    session_token: SessionCookie = None,
+    notice_token: BlockedNoticeCookie = None,
+    sessions: InMemoryAuthSessionStore = Depends(get_auth_session_store),
+    notices: InMemoryAuthSessionStore = Depends(get_blocked_notice_store),
+    users: UserRepository = Depends(get_user_repository),
+) -> BlockedStatusResponse:
+    user_id = None
+    if session_token is not None:
+        user_id = sessions.resolve(session_token)
+    if user_id is None and notice_token is not None:
+        user_id = notices.resolve(notice_token)
+    user = users.get_by_id(user_id) if user_id is not None else None
+    if user is None or not user.is_blocked:
+        return BlockedStatusResponse(is_blocked=False)
+    return BlockedStatusResponse(
+        is_blocked=True, reason=user.block_reason, blocked_at=user.blocked_at
+    )
+
+
 @router.post(
     "/logout",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -299,6 +360,7 @@ def logout(
         sessions.revoke(session_token)
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     response.delete_cookie(SESSION_COOKIE_NAME, path="/")
+    response.delete_cookie(BLOCKED_NOTICE_COOKIE_NAME, path="/api/v1/auth")
     return response
 
 
@@ -323,6 +385,7 @@ def update_me(
     payload: ProfileUpdate,
     current_user: CurrentUser = Depends(require_current_user),
     profiles: ProfileService = Depends(get_profile_service),
+    activity: ActivityLogService = Depends(get_activity_service),
 ) -> CurrentUserResponse:
     fields = payload.model_fields_set
     try:
@@ -335,6 +398,7 @@ def update_me(
         )
     except (InvalidProfileError, ProfileNotFoundError) as exc:
         raise _profile_error(exc) from exc
+    activity.record(current_user, ActivityType.PROFILE_UPDATED)
     return _me_response(updated)
 
 

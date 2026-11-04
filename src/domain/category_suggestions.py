@@ -7,6 +7,7 @@ import re
 import unicodedata
 from uuid import UUID, uuid4
 
+from src.domain.categories import CATEGORY_SLUG_MAX_LENGTH, CATEGORY_SLUG_PATTERN
 from src.domain.exceptions import InvalidCategorySuggestionError
 from src.domain.listings import utc_now
 
@@ -90,6 +91,22 @@ def build_category_slug(name: str) -> str:
     if not slug:
         slug = f"category-{uuid4().hex[:8]}"
     return slug[:100]
+
+
+def normalize_category_slug(slug: str) -> str:
+    """Нормалізує заданий адміністратором slug і перевіряє безпечний формат."""
+    if not isinstance(slug, str):
+        raise InvalidCategorySuggestionError("Slug категорії має бути рядком")
+    cleaned = slug.strip().lower()
+    if not cleaned or len(cleaned) > CATEGORY_SLUG_MAX_LENGTH:
+        raise InvalidCategorySuggestionError(
+            f"Slug категорії має містити від 1 до {CATEGORY_SLUG_MAX_LENGTH} символів"
+        )
+    if re.fullmatch(CATEGORY_SLUG_PATTERN, cleaned) is None:
+        raise InvalidCategorySuggestionError(
+            "Slug категорії може містити лише латинські літери, цифри й одинарні дефіси"
+        )
+    return cleaned
 
 
 @dataclass

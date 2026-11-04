@@ -33,6 +33,8 @@ class User:
     avatar_url: str | None = None
     contact: str | None = None
     created_at: datetime = field(default_factory=utc_now)
+    block_reason: str | None = None
+    blocked_at: datetime | None = None
 
 
 @dataclass(frozen=True)

@@ -19,6 +19,13 @@ class ListingRepository(Protocol):
     def get(self, listing_id: UUID) -> Listing | None:
         """Повертає оголошення за id або None."""
 
+    def get_for_update(self, listing_id: UUID) -> Listing | None:
+        """Як get, але блокує запис до кінця поточної транзакції.
+
+        Потрібно для операцій «перевір статус і зміни» (модерація, FR-011),
+        щоб паралельна транзакція не побачила застарілий статус.
+        """
+
     def add(self, listing: Listing) -> Listing:
         """Зберігає нове оголошення."""
 
@@ -49,6 +56,11 @@ class InMemoryListingRepository:
 
     def get(self, listing_id: UUID) -> Listing | None:
         return self._items.get(listing_id)
+
+    def get_for_update(self, listing_id: UUID) -> Listing | None:
+        # У пам'яті рядкових блокувань немає: серіалізацію забезпечує
+        # спільний get_listing_mutation_lock у сервісах.
+        return self.get(listing_id)
 
     def add(self, listing: Listing) -> Listing:
         self._items[listing.id] = listing

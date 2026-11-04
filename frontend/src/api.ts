@@ -1,4 +1,12 @@
 import type {
+  BlockedStatus,
+  BlockedUser,
+  Complaint,
+  ComplaintReason,
+  ComplaintStatus,
+  FeedbackMessage,
+  FeedbackStatus,
+  LogEntry,
   CategorySuggestion,
   CategorySuggestionStatus,
   Category,
@@ -15,14 +23,18 @@ import type {
 } from "./types";
 
 const API_ROOT = "/api/v1";
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class ApiError extends Error {
+  public readonly status: number;
+
   constructor(
-    public readonly status: number,
+    status: number,
     message: string,
   ) {
     super(message);
     this.name = "ApiError";
+    this.status = status;
   }
 }
 
@@ -43,21 +55,33 @@ function errorMessage(payload: unknown, fallback: string): string {
   return fallback;
 }
 
-/** Екранує значення, що підставляється в сегмент шляху API (захист від path traversal / SSRF). */
+/** Пропускає в динамічні сегменти API лише UUID. */
 function segment(value: string): string {
-  return encodeURIComponent(value);
+  const normalized = value.trim();
+  if (!UUID_PATTERN.test(normalized)) {
+    throw new Error("Некоректний ідентифікатор ресурсу");
+  }
+  return normalized.toLowerCase();
 }
 
-/** Дозволяє лише відносні шляхи API без обходу каталогів і зміни хоста. */
-function assertApiPath(path: string): void {
+/** Будує лише same-origin URL усередині API-префікса. */
+function apiUrl(path: string): URL {
   if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\") || path.split("?")[0].split("/").some((part) => part === "..")) {
     throw new Error("Некоректний шлях запиту");
   }
+  const url = new URL(`${API_ROOT}${path}`, window.location.origin);
+  if (url.origin !== window.location.origin || !url.pathname.startsWith(`${API_ROOT}/`)) {
+    throw new Error("Некоректна адреса запиту");
+  }
+  return url;
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  assertApiPath(path);
-  const response = await fetch(`${API_ROOT}${path}`, {
+  return (await apiFetchWithHeaders<T>(path, init)).data;
+}
+
+async function apiFetchWithHeaders<T>(path: string, init?: RequestInit): Promise<{ data: T; headers: Headers }> {
+  const response = await fetch(apiUrl(path), {
     credentials: "include",
     ...init,
     headers: {
@@ -79,8 +103,8 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
 
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+  if (response.status === 204) return { data: undefined as T, headers: response.headers };
+  return { data: (await response.json()) as T, headers: response.headers };
 }
 
 export function loginUrl(returnTo?: string): string {
@@ -101,11 +125,33 @@ export function getCategories(): Promise<Category[]> {
   return apiFetch<Category[]>("/categories");
 }
 
-export function getListings(
+export function createCategory(payload: { name: string; slug: string; description?: string | null }): Promise<Category> {
+  return apiFetch<Category>("/categories", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateCategory(
+  categoryId: string,
+  payload: { name?: string; slug?: string; description?: string | null; is_active?: boolean },
+): Promise<Category> {
+  return apiFetch<Category>(`/categories/${segment(categoryId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface ListingPage {
+  items: Listing[];
+  total: number;
+}
+
+export async function getListings(
   filters: ListingFilters,
   limit = 100,
   skip = 0,
-): Promise<Listing[]> {
+): Promise<ListingPage> {
   // Кожне значення екрануємо encodeURIComponent: фільтри походять з відповідей
   // сервера (id категорій) і введення користувача (q, ціна).
   const pairs: Array<[string, string]> = [
@@ -118,7 +164,9 @@ export function getListings(
   if (filters.minPrice) pairs.push(["min_price", filters.minPrice]);
   if (filters.maxPrice) pairs.push(["max_price", filters.maxPrice]);
   const query = pairs.map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join("&");
-  return apiFetch<Listing[]>(`/listings?${query}`);
+  const response = await apiFetchWithHeaders<Listing[]>(`/listings?${query}`);
+  const total = Number(response.headers.get("X-Total-Count"));
+  return { items: response.data, total: Number.isFinite(total) && total >= 0 ? total : response.data.length };
 }
 
 export function getListing(listingId: string): Promise<Listing> {
@@ -202,10 +250,13 @@ export function getCategorySuggestions(status: CategorySuggestionStatus = "PENDI
   return apiFetch<CategorySuggestion[]>(`/category-suggestions?status=${encodeURIComponent(status)}`);
 }
 
-export function approveCategorySuggestion(suggestionId: string, name?: string): Promise<CategorySuggestion> {
+export function approveCategorySuggestion(
+  suggestionId: string,
+  overrides: { name?: string; slug?: string } = {},
+): Promise<CategorySuggestion> {
   return apiFetch<CategorySuggestion>(`/category-suggestions/${segment(suggestionId)}/approve`, {
     method: "POST",
-    body: JSON.stringify(name ? { name } : {}),
+    body: JSON.stringify(overrides),
   });
 }
 
@@ -226,4 +277,40 @@ export function unblockUserByEmail(email: string, reason: string): Promise<Moder
 
 export function unblockUser(userId: string, reason: string): Promise<ModerationAction> {
   return apiFetch<ModerationAction>(`/admin/users/${segment(userId)}/unblock`, { method: "POST", body: JSON.stringify({ reason }) });
+}
+
+export function getBlockedStatus(): Promise<BlockedStatus> {
+  return apiFetch<BlockedStatus>("/auth/blocked-status");
+}
+
+export function getBlockedUsers(): Promise<BlockedUser[]> {
+  return apiFetch<BlockedUser[]>("/admin/users/blocked");
+}
+
+export function submitComplaint(listingId: string, reason: ComplaintReason, details: string): Promise<Complaint> {
+  return apiFetch<Complaint>(`/listings/${segment(listingId)}/complaints`, { method: "POST", body: JSON.stringify({ reason, details }) });
+}
+
+export function getComplaints(status?: ComplaintStatus): Promise<Complaint[]> {
+  return apiFetch<Complaint[]>(`/admin/complaints${status ? `?status=${encodeURIComponent(status)}` : ""}`);
+}
+
+export function resolveComplaint(complaintId: string, status: Exclude<ComplaintStatus, "OPEN">, note: string): Promise<Complaint> {
+  return apiFetch<Complaint>(`/admin/complaints/${segment(complaintId)}/resolve`, { method: "POST", body: JSON.stringify({ status, note }) });
+}
+
+export function submitFeedback(subject: string, message: string): Promise<FeedbackMessage> {
+  return apiFetch<FeedbackMessage>("/feedback", { method: "POST", body: JSON.stringify({ subject, message }) });
+}
+
+export function getFeedback(status?: FeedbackStatus): Promise<FeedbackMessage[]> {
+  return apiFetch<FeedbackMessage[]>(`/admin/feedback${status ? `?status=${encodeURIComponent(status)}` : ""}`);
+}
+
+export function resolveFeedback(feedbackId: string): Promise<FeedbackMessage> {
+  return apiFetch<FeedbackMessage>(`/admin/feedback/${segment(feedbackId)}/resolve`, { method: "POST" });
+}
+
+export function getActivityLog(kind: "users" | "admins", skip = 0, limit = 100): Promise<LogEntry[]> {
+  return apiFetch<LogEntry[]>(`/admin/logs/${kind}?skip=${skip}&limit=${limit}`);
 }

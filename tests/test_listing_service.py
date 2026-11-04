@@ -167,6 +167,37 @@ def test_filter_by_price_range(listing_service: ListingService) -> None:
     assert [item.id for item in exact_boundary] == [SEED_LISTING_ID]
 
 
+def test_list_public_sorts_by_price(
+    listing_service: ListingService,
+    listing_repository: InMemoryListingRepository,
+) -> None:
+    """[TP-004] [FR-008] Сортування каталогу за ціною за зростанням і спаданням."""
+    for price in (500.0, 20.0, 300.0):
+        listing_repository.add(
+            Listing(
+                title=f"Товар {price}",
+                description="",
+                price=price,
+                category_id=SEED_CATEGORY_ID,
+                contact="@seller",
+                user_id=SEED_OWNER_ID,
+            )
+        )
+
+    ascending = [
+        item.price
+        for item in listing_service.list_public(sort_order=ListingSortOrder.PRICE_ASC)
+    ]
+    descending = [
+        item.price
+        for item in listing_service.list_public(sort_order=ListingSortOrder.PRICE_DESC)
+    ]
+
+    assert ascending == sorted(ascending)
+    assert descending == sorted(descending, reverse=True)
+    assert ascending[0] == 20.0 and descending[0] == 500.0
+
+
 def test_list_public_rejects_inverted_price_range(
     listing_service: ListingService,
 ) -> None:

@@ -245,3 +245,24 @@ def test_concurrent_withdrawals_create_single_audit_record(favorites, actions) -
     # Assert
     assert sorted(outcomes) == ["not_found", "ok"]
     assert len(actions.list_by_listing(SEED_LISTING_ID)) == 1
+
+
+class BrokenCompensationListingRepository(InMemoryListingRepository):
+    """Імітує сховище, яке після першої помилки вже не приймає записів."""
+
+    def save(self, listing):
+        if listing.status == ListingStatus.ACTIVE:
+            raise ValueError("session is no longer usable")
+        return super().save(listing)
+
+
+def test_failed_compensation_does_not_mask_original_error(favorites) -> None:
+    """[TP-020] [FR-011]
+    Якщо компенсація теж падає, назовні йде початкова помилка запису аудиту.
+    """
+    listings = BrokenCompensationListingRepository(
+        InMemoryListingRepository.with_seed().list_all()
+    )
+    service = ModerationService(listings, favorites, FailingActionRepository())
+    with pytest.raises(RuntimeError, match="audit storage unavailable"):
+        service.withdraw_listing(ADMIN, SEED_LISTING_ID, REASON)

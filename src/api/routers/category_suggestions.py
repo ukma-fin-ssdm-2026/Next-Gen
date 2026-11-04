@@ -159,7 +159,8 @@ def list_category_suggestions(
     description=(
         "Адміністратор схвалює пропозицію категорії (FR-015): створюється нова активна "
         "категорія, усі активні оголошення з категорії «Інше» переміщуються до неї, "
-        "а дія фіксується в журналі модерації."
+        "назву та slug перед схваленням можна скоригувати, а дія фіксується "
+        "в журналі модерації."
     ),
     responses={
         401: {"model": ErrorResponse, "description": "Unauthorized"},
@@ -176,8 +177,11 @@ def approve_category_suggestion(
     service: CategorySuggestionService = Depends(get_category_suggestion_service),
 ) -> CategorySuggestionResponse:
     override_name = payload.name if payload is not None else None
+    override_slug = payload.slug if payload is not None else None
     try:
-        approved = service.approve(moderator, suggestion_id, name=override_name)
+        approved = service.approve(
+            moderator, suggestion_id, name=override_name, slug=override_slug
+        )
     except Exception as exc:
         _raise_suggestion_error(exc, field_name="name")
     return _to_response(approved, service.count_active_listings(approved.suggestion_id))

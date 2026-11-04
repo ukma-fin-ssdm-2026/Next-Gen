@@ -13,6 +13,7 @@ from src.api.deps import (
     get_entra_oidc_client,
     get_entra_settings,
     get_oidc_flow_store,
+    get_user_repository,
 )
 from src.api.main import app
 from src.config import EntraSettings
@@ -281,6 +282,41 @@ def test_blocked_user_loses_existing_session(auth_http_client) -> None:
     assert response.json() == {"detail": "Обліковий запис користувача заблоковано"}
     user.is_blocked = False
     assert client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_blocked_user_callback_redirects_to_notice_with_reason(
+    auth_http_client,
+) -> None:
+    """[TP-034] [FR-013] [SEC-001] Вхід заблокованого: без сесії, але з причиною."""
+    client, _, repository, sessions = auth_http_client
+    app.dependency_overrides[get_user_repository] = lambda: repository
+    client.get("/api/v1/auth/login", follow_redirects=False)
+    client.get(
+        "/api/v1/auth/callback?code=authorization-code&state=state-created-by-msal",
+        follow_redirects=False,
+    )
+    user = repository.get_by_entra_identity(TENANT_ID, OBJECT_ID)
+    assert user is not None
+    client.cookies.delete("baraholka_session")
+    user.is_blocked = True
+    user.block_reason = "Систематичні порушення правил"
+    client.get("/api/v1/auth/login", follow_redirects=False)
+    client.cookies.set("baraholka_oidc_state", "state-created-by-msal")
+
+    response = client.get(
+        "/api/v1/auth/callback?code=authorization-code&state=state-created-by-msal",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"].endswith("/?blocked=1")
+    assert "baraholka_session" not in response.headers.get("set-cookie", "")
+    assert client.get("/api/v1/auth/me").status_code == 401
+    status = client.get("/api/v1/auth/blocked-status").json()
+    assert status["is_blocked"] is True
+    assert status["reason"] == "Систематичні порушення правил"
+    assert client.post("/api/v1/auth/logout").status_code == 204
+    assert client.get("/api/v1/auth/blocked-status").json()["is_blocked"] is False
 
 
 def test_login_returns_503_when_entra_configuration_is_missing(monkeypatch) -> None:

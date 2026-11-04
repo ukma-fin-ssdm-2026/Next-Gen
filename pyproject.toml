@@ -1,6 +1,6 @@
 [project]
 name = "baraholka-naukma"
-version = "1.1.0"
+version = "1.0.0"
 description = "Baraholka NaUKMA — маркетплейс студентських оголошень"
 requires-python = ">=3.12"
 
@@ -18,6 +18,9 @@ extend-exclude = '''
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "performance: timing-sensitive benchmarks run separately from the coverage gate",
+]
 
 [tool.bandit]
 exclude_dirs = ["tests", "venv", ".venv"]

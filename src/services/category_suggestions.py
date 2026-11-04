@@ -10,6 +10,7 @@ from src.domain.category_suggestions import (
     CategorySuggestion,
     CategorySuggestionStatus,
     build_category_slug,
+    normalize_category_slug,
     normalize_suggestion_name,
 )
 from src.domain.exceptions import (
@@ -139,6 +140,7 @@ class CategorySuggestionService:
         moderator: CurrentUser | User | None,
         suggestion_id: UUID,
         name: str | None = None,
+        slug: str | None = None,
     ) -> CategorySuggestion:
         """Схвалює пропозицію: створює категорію, переносить оголошення і пише аудит."""
         admin = self._require_admin(moderator)
@@ -148,8 +150,12 @@ class CategorySuggestionService:
                 normalize_suggestion_name(name) if name is not None else original.name
             )
             self._check_duplicate_category(final_name)
-            slug = build_category_slug(final_name)
-            slug_collision = self._categories.get_by_slug(slug)
+            final_slug = (
+                normalize_category_slug(slug)
+                if slug is not None
+                else build_category_slug(final_name)
+            )
+            slug_collision = self._categories.get_by_slug(final_slug)
             if slug_collision is not None:
                 raise DuplicateCategorySuggestionError(
                     f"Категорія '{slug_collision.name}' "
@@ -162,7 +168,7 @@ class CategorySuggestionService:
             created_category_id: UUID | None = None
             try:
                 created_category = self._category_service.create(
-                    name=final_name, slug=slug
+                    name=final_name, slug=final_slug
                 )
                 created_category_id = created_category.id
                 self._uncommitted_category_ids.add(created_category_id)

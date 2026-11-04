@@ -14,7 +14,7 @@ from src.domain.exceptions import (
     DuplicateCategoryError,
     InvalidCategoryError,
 )
-from src.domain.listings import SEED_CATEGORY_ID
+from src.domain.listings import OTHER_CATEGORY_ID, SEED_CATEGORY_ID
 from src.repositories.categories import InMemoryCategoryRepository
 from src.services.categories import CategoryService
 
@@ -62,10 +62,12 @@ def test_category_slug_normalization_and_validation() -> None:
     ):
         Category.create(name="   ", slug="valid-slug")
 
-    with pytest.raises(
-        InvalidCategoryError, match="Slug категорії не може бути порожнім"
-    ):
+    with pytest.raises(InvalidCategoryError, match="Slug категорії має містити"):
         Category.create(name="Valid Name", slug="   ")
+
+    for invalid_slug in ("two words", "../admin", "leading-", "double--hyphen"):
+        with pytest.raises(InvalidCategoryError, match="латинські літери"):
+            Category.create(name="Valid Name", slug=invalid_slug)
 
 
 def test_category_repository_seed_contains_seed_category_id(
@@ -133,6 +135,21 @@ def test_category_service_deactivate_preserves_record(
     # Але більше не повертається у списку активних
     active_ids = [cat.id for cat in category_service.list_active()]
     assert SEED_CATEGORY_ID not in active_ids
+
+
+def test_category_service_cannot_deactivate_system_other_category(
+    category_service: CategoryService, category_repo: InMemoryCategoryRepository
+) -> None:
+    """[SEC-002] Fallback-категорія «Інше» завжди залишається активною."""
+    with pytest.raises(InvalidCategoryError, match="не можна деактивувати"):
+        category_service.deactivate(OTHER_CATEGORY_ID)
+
+    with pytest.raises(InvalidCategoryError, match="не можна деактивувати"):
+        category_service.update(OTHER_CATEGORY_ID, is_active=False)
+
+    other = category_repo.get(OTHER_CATEGORY_ID)
+    assert other is not None
+    assert other.is_active is True
 
 
 def test_category_service_update_attributes(
