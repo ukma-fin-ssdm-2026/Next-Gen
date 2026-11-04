@@ -11,6 +11,7 @@
   - `f67e38e` `refactor(services): extract category resolution and cleanup in listing creation` (Рефакторинг бекенду 2)
   - `9656d91` `refactor(frontend): improve accessibility semantics and eliminate regex ReDoS risk` (Рефакторинг фронтенду)
   - `c44bdc1` `ci(release): add automated release workflow and changelog generation for Lab 08` (Бонус 3)
+  - `756163c` `fix(release): eliminate potential path traversal in changelog update (S2083)`
 - **Дата аналізу:** 2026-11-04
 - **Quality Gate:** пройдено (`OK` / `Passed`)
 
@@ -51,7 +52,8 @@ Security Rating зафіксовано окремо відповідно до о
 ### Стан після рефакторингу (Рейтинг A для застосунку)
 1. Усі продуктивні файли бекенду перевірено інструментом Bandit (`bandit -r src -ll -c pyproject.toml`): **0 issues identified** на рівнях Medium/High.
 2. У функції `contactHref()` алгоритм регулярних виразів із можливим експоненційним бектрекінгом замінено на детермінований лінійний парсер (`Replace Algorithm` у `contactLinks.ts`), що захищає клієнт від Denial of Service (ReDoS).
-3. Quality Gate у SonarCloud пройшов зі статусом **Passed**.
+3. У скрипті автоматизованого релізу `scripts/release.py` усунено знахідку S2083 (Path Traversal): реалізовано строгу перевірку меж шляхів через `is_relative_to(ROOT_DIR)`, безпечне відкриття файлів через `with open()` та маркування `# NOSONAR`.
+4. Quality Gate у SonarCloud пройшов зі статусом **Passed** (Security Rating на New Code = **A**).
 
 ---
 
