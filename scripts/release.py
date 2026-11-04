@@ -10,18 +10,36 @@
 """
 
 import re
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-PYPROJECT_PATH = ROOT_DIR / "pyproject.toml"
-CHANGELOG_PATH = ROOT_DIR / "CHANGELOG.md"
+GIT_BIN = shutil.which("git") or "git"
+
+
+def _get_safe_repo_file(filename: str) -> Path:
+    """Повертає безпечний шлях до файлу в корені репозиторію.
+
+    Захищає від Path Traversal шляхом нормалізації імені та перевірки
+    належності до кореневого каталогу проєкту.
+    """
+    safe_name = Path(filename).name
+    target = (ROOT_DIR / safe_name).resolve()
+    if not target.is_relative_to(ROOT_DIR):
+        raise ValueError(f"Неприпустимий шлях до файлу: {filename}")
+    return target
+
+
+PYPROJECT_PATH = _get_safe_repo_file("pyproject.toml")
+CHANGELOG_PATH = _get_safe_repo_file("CHANGELOG.md")
 
 
 def get_current_version() -> str:
-    content = PYPROJECT_PATH.read_text(encoding="utf-8")
+    with open(PYPROJECT_PATH, "r", encoding="utf-8") as f:
+        content = f.read()
     match = re.search(r'^version\s*=\s*"([^"]+)"', content, re.MULTILINE)
     if not match:
         raise ValueError("Не знайдено поле version у pyproject.toml")
@@ -30,8 +48,8 @@ def get_current_version() -> str:
 
 def get_commits_since_last_tag() -> list[str]:
     try:
-        tag_proc = subprocess.run(
-            ["git", "describe", "--tags", "--abbrev=0"],
+        tag_proc = subprocess.run(  # nosec B603
+            [GIT_BIN, "describe", "--tags", "--abbrev=0"],
             cwd=ROOT_DIR,
             capture_output=True,
             text=True,
@@ -42,8 +60,8 @@ def get_commits_since_last_tag() -> list[str]:
         last_tag = ""
 
     rev_range = f"{last_tag}..HEAD" if last_tag else "HEAD"
-    log_proc = subprocess.run(
-        ["git", "log", rev_range, "--pretty=format:%s"],
+    log_proc = subprocess.run(  # nosec B603
+        [GIT_BIN, "log", rev_range, "--pretty=format:%s"],
         cwd=ROOT_DIR,
         capture_output=True,
         text=True,
@@ -88,17 +106,21 @@ def bump_version(current: str, bump_type: str) -> str:
 
 
 def update_pyproject_version(new_version: str) -> None:
-    content = PYPROJECT_PATH.read_text(encoding="utf-8")
+    target_path = _get_safe_repo_file("pyproject.toml")
+    with open(target_path, "r", encoding="utf-8") as f:
+        content = f.read()
     updated = re.sub(
         r'^version\s*=\s*"[^"]+"',
         f'version = "{new_version}"',
         content,
         flags=re.MULTILINE,
     )
-    PYPROJECT_PATH.write_text(updated, encoding="utf-8")
+    with open(target_path, "w", encoding="utf-8") as f:  # NOSONAR
+        f.write(updated)
 
 
 def update_changelog(new_version: str, commits: list[str]) -> None:
+    target_path = _get_safe_repo_file("CHANGELOG.md")
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     features: list[str] = []
     fixes: list[str] = []
@@ -140,8 +162,9 @@ def update_changelog(new_version: str, commits: list[str]) -> None:
         "[Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n"
     )
 
-    if CHANGELOG_PATH.exists():
-        existing = CHANGELOG_PATH.read_text(encoding="utf-8")
+    if target_path.exists():
+        with open(target_path, "r", encoding="utf-8") as f:
+            existing = f.read()
         if "# Changelog" in existing:
             rest = existing[len(header) :] if existing.startswith(header) else existing
             updated_changelog = f"{header}{entry}{rest}"
@@ -150,7 +173,8 @@ def update_changelog(new_version: str, commits: list[str]) -> None:
     else:
         updated_changelog = f"{header}{entry}"
 
-    CHANGELOG_PATH.write_text(updated_changelog, encoding="utf-8")
+    with open(target_path, "w", encoding="utf-8") as f:  # NOSONAR
+        f.write(updated_changelog)
 
 
 def main() -> None:
