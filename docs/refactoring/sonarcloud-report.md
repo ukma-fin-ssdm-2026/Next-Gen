@@ -10,8 +10,10 @@
   - `0e6b554` `refactor(db): streamline ORM domain converters and eliminate mapping boilerplate` (Рефакторинг бекенду 1)
   - `f67e38e` `refactor(services): extract category resolution and cleanup in listing creation` (Рефакторинг бекенду 2)
   - `9656d91` `refactor(frontend): improve accessibility semantics and eliminate regex ReDoS risk` (Рефакторинг фронтенду)
-  - `c44bdc1` `ci(release): add automated release workflow and changelog generation for Lab 08` (Бонус 3)
+  - `c44bdc1` `ci(release): add automated release workflow and changelog generation for Lab 08`
   - `756163c` `fix(release): eliminate potential path traversal in changelog update (S2083)`
+  - `d690acf`, `46ca5aa`, `59e4633`, `23842e3` (Artem S.) — виправлення знахідок SonarCloud: SRI, хешовані залежності CI, `assert` → `RuntimeError`, `adminTabFromPath` без regex, нативні елементи доступності
+  - `e3e2fde`, `9974b6f` (Artem S.) — захист побудови URL у `api.ts` (Client-Side Request Forgery) і валідація slug категорії
 - **Дата аналізу:** 2026-11-04
 - **Quality Gate:** пройдено (`OK` / `Passed`)
 
@@ -80,9 +82,19 @@ Security Rating зафіксовано окремо відповідно до о
 * **Запах коду (Code Smell):** *Non-semantic Interactive Elements — typescript:S6848* — використання інтерактивних `div` без семантичних тегів та відповідних ролей доступності.
 * **Техніка рефакторингу (за М. Фаулером):** *Replace Element with Semantic Element*
   - У `PhotoCropper`: клікабельні елементи пресетів та дій перетворено на нативні доступні елементи `<button type="button">`.
-  - У `ListingGallery`: контейнер галереї оформлено як семантичний `<section role="region" aria-label="Фотографії оголошення">`.
+  - У `ListingGallery`: контейнер галереї оформлено як семантичний `<section aria-roledescription="карусель" aria-label="Фотографії оголошення">` (явний `role="region"` прибрано: `<section>` з назвою вже має цю роль).
 * **Що лишилося незмінним:** Керування стрілками клавіатури, візуальний стиль та взаємодія користувача.
 * **Тест-доказ:** Успішна збірка TypeScript `tsc -b`, лінтинг та перевірка доступності елементів.
+
+### 4.3.1. Безпека та надійність: виправлення знахідок SonarCloud (Артем, Code Analyst)
+* **Модулі:** `frontend/src/api.ts`, `src/repositories/image_storage.py`, `frontend/src/App.tsx`, `docs/api/index.html`, `.github/workflows/*`, `requirements-ci.lock`
+* **Зміни (коміти `e3e2fde`, `d690acf`, `46ca5aa`, `59e4633`):**
+  - *Client-Side Request Forgery (High)* у `api.ts`: API-клієнт будує лише same-origin URL під префіксом API, динамічні сегменти обмежено UUID.
+  - *Replace Assertion with Explicit Error* у `image_storage.py`: `assert` замінено на `RuntimeError`, бо `assert` зникає при `python -O`.
+  - *Replace Algorithm* у `adminTabFromPath`: regex замінено на лінійний цикл (потенційний ReDoS, S5852).
+  - SRI-хеші та закріплена версія Swagger UI (Low); хешовані залежності CI `requirements-ci.lock` з `--require-hashes` (6 Medium).
+* **Що лишилося незмінним:** публічний контракт API та поведінка маршрутизації адмін-панелі.
+* **Тест-доказ:** `npm test`, `tsc --noEmit`, `npm run build`, `pytest`, Quality Gate `Passed`.
 
 ### 4.4. Бекенд: Допоміжна валідація у доменній сутності Feedback (`src/domain/feedback.py`)
 * **Модуль:** `src/domain/feedback.py` (сутність `Feedback`, FR-017)
@@ -176,7 +188,6 @@ Security Rating зафіксовано окремо відповідно до о
 >   2. Дженерик-утиліту `_populate_row` для усунення дублювання в `src/db/converters.py`.
 >   3. Декомпозицію методу `create()` у `src/services/listings.py` на допоміжні методи `_resolve_target_category_for_creation`, `_save_listing_with_suggestion`, `_cleanup_failed_creation`.
 >   4. Семантичну розмітку та безпечний алгоритм валідації контактів у фронтенді.
->   5. Скрипт Conventional Commits release `scripts/release.py` та CI workflow `.github/workflows/release.yml`.
 > - **Як верифіковано людиною (Керівник рефакторингу):**
 >   - Кожен крок рефакторингу верифіковано виконанням 416 автоматичних регресійних тестів.
 >   - Перевірено відсутність відхилень у контрактах API (`openapi-generated.yaml`) та схемах Alembic (`alembic check`).
@@ -187,7 +198,7 @@ Security Rating зафіксовано окремо відповідно до о
 
 ## 8. Бонусні бали
 
-Команда претендує на всі 3 бонусні пункти (сумарно +0,75 бала):
+Команда претендує на 2 бонусні пункти (сумарно +0,5 бала):
 
 ### Бонус 1: Quality Gate як обов'язкова перевірка в PR (+0.25)
 - **Налаштування:** У репозиторії GitHub для гілки `main` увімкнено Branch Protection Rules: `Require status checks to pass before merging` із обов'язковим чеком `SonarCloud Code Analysis`.
@@ -200,13 +211,3 @@ Security Rating зафіксовано окремо відповідно до о
   1. `src/db/converters.py` (ORM/Domain адаптер персистенції, 20 тестів у `tests/test_converters.py`). Коміт із тестами `6c28a78` створено строго ДО коміту рефакторингу `0e6b554`.
   2. `src/domain/feedback.py` (доменна сутність `Feedback`, 4 тести у `tests/test_feedback_characterization.py`). Коміт із тестами `d83013b` створено ДО коміту рефакторингу `83c93b6`.
 - **Результат:** Усі тести залишилися на 100% зеленими до і після внесення змін.
-
-### Бонус 3: Автоматизований реліз (+0.25)
-- **Конфігурація:** Створено робочий процес `.github/workflows/release.yml` та скрипт `scripts/release.py`, що аналізують історію комітів за стандартом **Conventional Commits** (`feat:`, `fix:`, `refactor:`).
-- **Спеціальне правило:** За замовчуванням типові інструменти ігнорують префікс `refactor:`. У скрипті `scripts/release.py` явно налаштовано правило:
-  - `refactor:` викликає підвищення **patch**-версії (наприклад, `1.0.0` → `1.0.1`).
-- **Автоматичні дії:**
-  1. Оновлення поля `version` у `pyproject.toml`, `src/__init__.py`, `frontend/package.json`.
-  2. Автоматична генерація та оновлення секцій у `CHANGELOG.md` за стандартом Keep a Changelog.
-  3. Створення анотованого git-тегу релізу.
-- **Доказ реалізації:** Скрипт `scripts/release.py` протестовано, робочий процес додано в `.github/workflows/release.yml`.
