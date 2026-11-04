@@ -105,23 +105,37 @@ Python-залежностей у GitHub Actions. Три Low issues стосую�
   успішний, у розділі Artifacts є `htmlcov` (≈456 КБ). Скриншот не додано: посилання
   на прогін є первинним доказом.
 
-### 4.4. Відкладені кандидати
+### 4.4. Додаткові рефакторинги спринту
 
-| Знахідка | Техніка | Стан |
-| --- | --- | --- |
-| Інтерактивний `div` у кадруванні фото | Replace Element with Semantic Element | не виконано |
-| Інтерактивний `div` у галереї | Replace Element with Semantic Element | не виконано |
-| Medium-знахідки щодо встановлення Python-залежностей у GitHub Actions | зміна CI-кроків | не виконано, потрібен текст знахідки |
+| Знахідка | Техніка | Стан | Автор / Доказ |
+| --- | --- | --- | --- |
+| Інтерактивні `div` у кадруванні фото та галереї | Replace Element with Semantic Element | Виконано | Коміт `23842e3` (Артем Солодкий): заміна несемантичних елементів на доступні нативні кнопки з клавіатурною навігацією |
+| Дублювання магічного літерала версії `"1.0.0"` у `src/api/main.py` | Replace Magic Literal with Symbolic Constant | Виконано | Коміт `660647d` (Богдан Солонина): єдине джерело `src.__version__`; доведено тестом `tests/test_version.py` (TP-036) |
+| Medium-знахідки встановлення Python-залежностей у GitHub Actions | Рефакторинг CI/CD пайплайну | Виконано | Коміти `59e4633`, `d690acf`: закріплення залежностей із хешами та прапорцем `--only-binary=:all:` |
 
 ## 5. Регресійне тестування
 
-| Етап | Команда | Результат |
-| --- | --- | --- |
-| До рефакторингу | `python -m pytest -q --cov=src` | 296 passed, покриття 93% |
-| Після рефакторингу | `python -m pytest -q --cov=src` | 296 passed, покриття 93% (бекенд не змінювався) |
-| Frontend: тести | `npm test` | 3 passed |
-| Frontend: типи | `tsc -b` | без помилок |
-| Frontend: збірка | `npm run build` | успішно |
+Регресійні перевірки виконано в повному обсязі локально та підтверджено в пайплайні GitHub Actions CI.
+
+### 5.1. Зведена таблиця прогонів
+
+| Етап | Коміт | Команда | Результат |
+| --- | --- | --- | --- |
+| До рефакторингу | `a40fbad` | `python -m pytest -q --cov=src` | 296 passed, покриття 93% |
+| Після рефакторингу | `c8a7bcd` (main) | `python -m pytest -q -m "not performance" --cov=src` | **391 passed**, 7 skipped, 1 deselected; покриття **93%** (поріг 85% виконано) |
+| Frontend: тести | `c8a7bcd` (main) | `npm test` | **7 passed** (всі тести контактів, санітизації URL та адмін-роутів) |
+| Frontend: типи | `c8a7bcd` (main) | `tsc -b` | без помилок (0 errors) |
+| Frontend: збірка | `c8a7bcd` (main) | `npm run build` | успішно |
+| OpenAPI валідація | `c8a7bcd` (main) | `python scripts/generate_openapi.py && git diff --exit-code` | схема актуальна, розбіжностей немає |
+| Статичний аналіз | `c8a7bcd` (main) | `black --check src tests scripts && flake8` | форматування та лінтинг чисті |
+
+### 5.2. Виявлені збої під час тестування та їх усунення
+
+Згідно з вимогами Етапу 3, зафіксовано та проаналізовано крос-платформений дефект тестової ізоляції:
+
+- **Збій:** `PermissionError: [WinError 32] The process cannot access the file because it is being used by another process` у тесті `tests/test_postgres_repositories.py::test_api_categories_returns_seeded_categories_on_fresh_db`.
+- **Причина:** Тест створює тимчасову базу даних SQLite через Alembic і підключає SQLAlchemy engine `create_engine(f"sqlite:///{db_path}")`. У середовищі Windows файлова система блокує видалення файлу (`os.remove(db_path)`), поки активний пул з'єднань тримає відкритий дескриптор. У середовищі Linux (на GitHub Actions CI) системний виклик `unlink` допускає видалення відкритого файлу, через що в CI дефект не проявлявся, але блокував локальні прогони на Windows.
+- **Усунення:** У блоці `finally` тесту додано детерміноване закриття пулу підключень `eng.dispose()` перед очищенням файлу. Після виправлення всі 391 тест проходять успішно (100% pass).
 
 ## 6. Скриншоти
 
@@ -139,5 +153,21 @@ Python-залежностей у GitHub Actions. Три Low issues стосую�
 
 ## 8. Бонуси
 
-На цьому етапі бонусні пункти не заявлено. Докази додаються лише після їх
-фактичного виконання та пояснення у відео.
+### 8.1. Характеризаційні тести перед рефакторингом (+0,25 бала)
+
+- **Обраний модуль:** `src/domain/feedback.py` (доменна сутність звернення до адміністрації `Feedback`, FR-017).
+- **Стан до Лаб 8:** модуль взагалі не мав власних доменних юніт-тестів і тестувався лише опосередковано через API/репозиторії.
+- **Етап 1 (Характеризаційні тести ДО рефакторингу):**
+  - Створено тестовий набір `tests/test_feedback_characterization.py` (4 тести), який зафіксував поточну поведінку сутності: неявний `strip()` пробілів для полів `subject` і `message`, дефолтні значення (`NEW`, `utc_now()`, `resolved_by is None`), граничні значення довжини теми (3..120) та повідомлення (10..2000), а також точний текст винятків `InvalidFeedbackError`.
+  - **Коміт із тестами (раніший за рефакторинг):** `d83013b` (`test: add characterization tests for Feedback domain entity (Lab 8 bonus)`).
+  - Результат прогону: 4 passed.
+- **Етап 2 (Рефакторинг):**
+  - **Запах:** дублювання логіки валідації довжини полів у `__post_init__` (Code Smell: *Duplicated Code*).
+  - **Техніка:** *Extract Method* — виділено допоміжну чисту функцію `_validate_text_length(value, min_len, max_len, field_name)`, яка усуває дублювання умов `not (min_len <= len(value) <= max_len)`.
+  - **Коміт із рефакторингом (пізніший за тести):** `83c93b6` (`[REFACTOR] refactor: extract _validate_text_length helper in Feedback domain entity`).
+- **Підтвердження збереження поведінки:** ті самі 4 характеризаційні тести виконано повторно після рефакторингу — 4 passed (100% зелені до і після).
+
+### 8.2. Автоматизований реліз (+0,25 бала)
+
+- **Інструмент:** `release-please` (PR команди `ci/release-please`).
+- **Опис:** автоматизація версіонування за Conventional Commits (`refactor:` дає patch-реліз), генерація оновлень у `CHANGELOG.md` у форматі Keep a Changelog (`scripts/release_changelog.py`) та створення git-тегу `vX.Y.Z` засобами CI.
