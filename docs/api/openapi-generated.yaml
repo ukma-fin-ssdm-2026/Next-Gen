@@ -3,7 +3,7 @@ info:
   title: Baraholka NaUKMA API
   description: REST API для маркетплейсу студентських оголошень Києво-Могилянської
     академії (Baraholka NaUKMA). Розроблено за підходом Code-First.
-  version: 1.0.0
+  version: 1.1.0
 paths:
   /api/v1/listings/images:
     post:
