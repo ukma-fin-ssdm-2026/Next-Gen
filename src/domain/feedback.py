@@ -21,6 +21,16 @@ class FeedbackStatus(str, Enum):
     RESOLVED = "RESOLVED"
 
 
+def _validate_text_length(
+    value: str, min_len: int, max_len: int, field_name: str
+) -> None:
+    """Перевіряє межі довжини текстового поля (Extract Method)."""
+    if not (min_len <= len(value) <= max_len):
+        raise InvalidFeedbackError(
+            f"{field_name} має містити від {min_len} до {max_len} символів"
+        )
+
+
 @dataclass
 class Feedback:
     """Звернення користувача: тема, текст і стан опрацювання."""
@@ -37,21 +47,15 @@ class Feedback:
     def __post_init__(self) -> None:
         self.subject = self.subject.strip()
         self.message = self.message.strip()
-        if not (
-            FEEDBACK_SUBJECT_MIN_LENGTH
-            <= len(self.subject)
-            <= FEEDBACK_SUBJECT_MAX_LENGTH
-        ):
-            raise InvalidFeedbackError(
-                f"Тема має містити від {FEEDBACK_SUBJECT_MIN_LENGTH} "
-                f"до {FEEDBACK_SUBJECT_MAX_LENGTH} символів"
-            )
-        if not (
-            FEEDBACK_MESSAGE_MIN_LENGTH
-            <= len(self.message)
-            <= FEEDBACK_MESSAGE_MAX_LENGTH
-        ):
-            raise InvalidFeedbackError(
-                f"Повідомлення має містити від {FEEDBACK_MESSAGE_MIN_LENGTH} "
-                f"до {FEEDBACK_MESSAGE_MAX_LENGTH} символів"
-            )
+        _validate_text_length(
+            self.subject,
+            FEEDBACK_SUBJECT_MIN_LENGTH,
+            FEEDBACK_SUBJECT_MAX_LENGTH,
+            "Тема",
+        )
+        _validate_text_length(
+            self.message,
+            FEEDBACK_MESSAGE_MIN_LENGTH,
+            FEEDBACK_MESSAGE_MAX_LENGTH,
+            "Повідомлення",
+        )

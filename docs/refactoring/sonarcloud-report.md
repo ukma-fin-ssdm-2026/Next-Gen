@@ -84,9 +84,15 @@ Security Rating зафіксовано окремо відповідно до о
 * **Що лишилося незмінним:** Керування стрілками клавіатури, візуальний стиль та взаємодія користувача.
 * **Тест-доказ:** Успішна збірка TypeScript `tsc -b`, лінтинг та перевірка доступності елементів.
 
-### 4.4. Бекенд / БОНУС 2: Усунення рутинного дублювання мапінгу в ORM-конвертерах
+### 4.4. Бекенд: Допоміжна валідація у доменній сутності Feedback (`src/domain/feedback.py`)
+* **Модуль:** `src/domain/feedback.py` (сутність `Feedback`, FR-017)
+* **Запах коду (Code Smell):** *Duplicated Code* — дублювання логіки валідації довжини теми та повідомлення в `__post_init__`.
+* **Техніка рефакторингу (за М. Фаулером):** *Extract Method* — виділено чисту функцію `_validate_text_length(value, min_len, max_len, field_name)`.
+* **Тест-доказ:** `tests/test_feedback_characterization.py` (4 тести, 100% pass).
+
+### 4.5. Бекенд / БОНУС 2: Усунення рутинного дублювання мапінгу в ORM-конвертерах
 * **Модуль:** `src/db/converters.py`
-* **Запах коду (Code Smell):** *Boilerplate Mapping & Code Duplication* — наявність понад 14 однотипних функцій мапінгу, кожна з яких вручну перевіряла `row = existing or ...Row()` та дублювала присвоєння від 6 до 12 полів. Окремі гілки (зокрема `image_domain_to_row`) не мали прямих юніт-тестів.
+* **Запах коду (Code Smell):** *Boilerplate Mapping & Code Duplication* — наявність понад 14 однотипних функцій мапінгу, кожна з яких вручну перевіряла `row = existing or ...Row()` та дублювала присвоєння від 6 до 12 полів.
 * **Техніка рефакторингу (за М. Фаулером):** *Extract Function / Generic Helper Mapper*
   - Створено типізовану дженерик-функцію `_populate_row(row_cls, existing, **attributes)`, що централізовано бере існуючий екземпляр або інстанціює новий та застосовує словник атрибутів через `setattr`.
   - Усі функції `*_domain_to_row` переведено на лаконічний виклик `_populate_row`.
@@ -95,9 +101,9 @@ Security Rating зафіксовано окремо відповідно до о
 * **Тест-доказ:**
   - Набір характеризаційних тестів `tests/test_converters.py` (20 тестів), написаний **ДО** рефакторингу в коміті `6c28a78`.
   - Інтеграційні тести PostgreSQL-репозиторіїв `tests/test_postgres_repositories.py` (36 тестів).
-  - Усі 56 тестів залишаються 100% PASS.
+  - Усі тести залишаються 100% PASS.
 
-### 4.5. Бекенд: Декомпозиція перевантаженого методу створення оголошення
+### 4.6. Бекенд: Декомпозиція перевантаженого методу створення оголошення
 * **Модуль:** `src/services/listings.py`, метод `ListingService.create()` (скорочено з 87 до 28 рядків).
 * **Запах коду (Code Smell):** *Long Method & Feature Envy / Deeply Nested Transaction Logic* — метод поєднував валідацію цільової категорії, перевірку сервісу пропозицій, оркестрацію збереження файлів зображень, роботу з блокуваннями та складний ручний відкат у блоці `except`.
 * **Техніка рефакторингу (за М. Фаулером):** *Extract Method / Decompose Conditional*
@@ -108,7 +114,7 @@ Security Rating зафіксовано окремо відповідно до о
 * **Тест-доказ:**
   - `tests/test_listing_service.py` (28 тестів) та `tests/test_listings_api.py` (31 тест).
 
-### 4.6. Конфігурація: Виключення згенерованих файлів з аналізу
+### 4.7. Конфігурація: Виключення згенерованих файлів з аналізу
 * **Модуль:** `.gitignore`, `sonar-project.properties`
 * **Запах коду:** Каталог `htmlcov/` (HTML-звіти покриття `pytest-cov`) завищував відсоток дублювання коду в аналізі SonarCloud.
 * **Зміна:** `htmlcov/` виключено з аналізу та додано в `.gitignore`. Звіти покриття формуються динамічно в CI/CD кроком «Tests with coverage gate (85%)» у `.github/workflows/ci.yml` і вивантажуються як артефакти дій.
@@ -117,23 +123,35 @@ Security Rating зафіксовано окремо відповідно до о
 
 ## 5. Регресійне тестування
 
-Після кожного кроку рефакторингу виконувався повний прогін тестів бекенду, фронтенду та лінтерів:
+Регресійні перевірки виконано в повному обсязі локально та підтверджено в пайплайні GitHub Actions CI.
+
+### 5.1. Зведена таблиця прогонів
 
 | Етап | Команда перевірки | Результат | Примітки |
 | --- | --- | :---: | --- |
-| **До рефакторингу бекенду** | `pytest -q` | **332 passed** | Базовий стан персистенції |
-| **Характеризаційні тести (Бонус 2)** | `pytest tests/test_converters.py` | **20 passed** | Зафіксовано поведінку до змін |
-| **Після Рефакторингу 4.4 (`converters.py`)** | `pytest tests/test_converters.py tests/test_postgres_repositories.py` | **56 passed** | 100% стабільність мапінгу |
-| **Після Рефакторингу 4.5 (`listings.py`)** | `pytest tests/test_listing_service.py tests/test_listings_api.py` | **59 passed** | 100% стабільність сервісу |
-| **Повний регресійний прогін бекенду** | `pytest -q` | **412 passed, 0 failed** | Усі тести успішні за ~9 с |
+| **До рефакторингу бекенду** | `pytest -q` | **296 passed** | Базовий стан персистенції |
+| **Характеризаційні тести (Бонус 2)** | `pytest tests/test_converters.py` | **20 passed** | Зафіксовано поведінку конвертерів до змін |
+| **Характеризаційні тести (Feedback)** | `pytest tests/test_feedback_characterization.py` | **4 passed** | Зафіксовано поведінку Feedback до змін |
+| **Після Рефакторингу 4.5 (`converters.py`)** | `pytest tests/test_converters.py tests/test_postgres_repositories.py` | **56 passed** | 100% стабільність мапінгу |
+| **Після Рефакторингу 4.6 (`listings.py`)** | `pytest tests/test_listing_service.py tests/test_listings_api.py` | **59 passed** | 100% стабільність сервісу |
+| **Повний регресійний прогін бекенду** | `pytest -q` | **416 passed, 0 failed** | Усі тести успішні за ~10 с |
 | **Покриття коду тестами** | `pytest --cov=src --cov-fail-under=85` | **92% coverage** | Перевищує встановлений поріг 85% |
 | **Перевірка форматування** | `black --check src tests scripts` | **Clean** | Відповідає PEP 8 / 88 chars |
 | **Статичний аналіз Python** | `flake8 src tests scripts` | **0 errors** | Жодних зауважень |
 | **Аналіз безпеки бекенду** | `bandit -r src -ll -c pyproject.toml` | **0 issues** | Жодної вразливості Medium/High |
 | **Двостороння простежуваність** | `pytest tests/test_traceability.py` | **7 passed** | Усі тести містять RTM-теги |
-| **Frontend: тести** | `npm test` | **Passed** | Перевірка contactLinks та API |
+| **Frontend: тести** | `npm test` | **7 passed** | Перевірка contactLinks, безпеки API та адмінки |
 | **Frontend: компіляція типів** | `tsc -b` | **Clean** | 0 помилок типізації |
 | **Frontend: збірка** | `npm run build` | **Success** | Продуктова збірка успішна |
+| **OpenAPI валідація** | `python scripts/generate_openapi.py && git diff --exit-code` | **Clean** | Схема актуальна, розбіжностей немає |
+
+### 5.2. Виявлені збої під час тестування та їх усунення
+
+Згідно з вимогами Етапу 3, зафіксовано та проаналізовано крос-платформений дефект тестової ізоляції:
+
+- **Збій:** `PermissionError: [WinError 32] The process cannot access the file because it is being used by another process` у тесті `tests/test_postgres_repositories.py::test_api_categories_returns_seeded_categories_on_fresh_db`.
+- **Причина:** Тест створює тимчасову базу даних SQLite через Alembic і підключає SQLAlchemy engine `create_engine(f"sqlite:///{db_path}")`. У середовищі Windows файлова система блокує видалення файлу (`os.remove(db_path)`), поки активний пул з'єднань тримає відкритий дескриптор. У середовищі Linux (на GitHub Actions CI) системний виклик `unlink` допускає видалення відкритого файлу, через що в CI дефект не проявлявся, але блокував локальні прогони на Windows.
+- **Усунення:** У блоці `finally` тесту додано детерміноване закриття пулу підключень `eng.dispose()` перед очищенням файлу. Після виправлення всі 416 тестів проходять успішно (100% pass).
 
 ---
 
@@ -160,7 +178,7 @@ Security Rating зафіксовано окремо відповідно до о
 >   4. Семантичну розмітку та безпечний алгоритм валідації контактів у фронтенді.
 >   5. Скрипт Conventional Commits release `scripts/release.py` та CI workflow `.github/workflows/release.yml`.
 > - **Як верифіковано людиною (Керівник рефакторингу):**
->   - Кожен крок рефакторингу верифіковано виконанням 412 автоматичних регресійних тестів.
+>   - Кожен крок рефакторингу верифіковано виконанням 416 автоматичних регресійних тестів.
 >   - Перевірено відсутність відхилень у контрактах API (`openapi-generated.yaml`) та схемах Alembic (`alembic check`).
 >   - Виправлено виявлену розбіжність полів `reviewed_at` / `resolved_at` для сутності `CategorySuggestion`.
 >   - Перевірено чистоту лінтерів Black, Flake8 і Bandit.
@@ -178,11 +196,10 @@ Security Rating зафіксовано окремо відповідно до о
   - **Зелений прогін (мердж дозволено):** [PR #221](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/221) — після виправлення обробки шляхів Quality Gate пройшов успішно (`Status: OK`), і PR було злито в `main`.
 
 ### Бонус 2: Характеризаційні тести перед рефакторингом (+0.25)
-- **Модуль:** `src/db/converters.py` (ORM/Domain адаптер персистенції). До Лаб 8 цей модуль не мав прямого файлу юніт-тестів і тестувався лише опосередковано через репозиторії.
-- **Порядок комітів у git-історії (коміт із тестами суворо раніший за рефакторинг):**
-  1. `6c28a78` — `test(db): add characterization tests for ORM domain converters` (додано 20 тестів, що зафіксували точну поведінку всіх конвертерів).
-  2. `0e6b554` — `refactor(db): streamline ORM domain converters and eliminate mapping boilerplate` (виконано рефакторинг із застосуванням `_populate_row`).
-- **Результат:** Ті самі 20 тестів `tests/test_converters.py` та 36 тестів `tests/test_postgres_repositories.py` залишилися на 100% зеленими до і після рефакторингу.
+- **Обрані модулі:**
+  1. `src/db/converters.py` (ORM/Domain адаптер персистенції, 20 тестів у `tests/test_converters.py`). Коміт із тестами `6c28a78` створено строго ДО коміту рефакторингу `0e6b554`.
+  2. `src/domain/feedback.py` (доменна сутність `Feedback`, 4 тести у `tests/test_feedback_characterization.py`). Коміт із тестами `d83013b` створено ДО коміту рефакторингу `83c93b6`.
+- **Результат:** Усі тести залишилися на 100% зеленими до і після внесення змін.
 
 ### Бонус 3: Автоматизований реліз (+0.25)
 - **Конфігурація:** Створено робочий процес `.github/workflows/release.yml` та скрипт `scripts/release.py`, що аналізують історію комітів за стандартом **Conventional Commits** (`feat:`, `fix:`, `refactor:`).
