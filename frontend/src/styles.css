@@ -923,8 +923,12 @@ footer { background: linear-gradient(120deg, #16213f 0%, #1f3169 100%); border-t
 }
 /* Широка картка пошуку, зсунута ліворуч */
 @media (min-width: 1300px) {
-  .hero { padding-right: clamp(22px, calc(var(--hero-art-w) * 0.8), 360px); grid-template-columns: minmax(0, 1fr) minmax(380px, 540px); }
-  .hero h1 { font-size: clamp(34px, 3.5vw, 50px); }
-  .hero .button { padding: 16px 24px; font-size: 14px; }
-  .hero .button-primary { padding: 16px 26px; }
+  .hero { padding-right: clamp(22px, calc(var(--hero-art-w) * 0.95), 440px); grid-template-columns: minmax(0, 1fr) minmax(380px, 520px); }
+  .hero h1 { font-size: clamp(34px, 3.1vw, 46px); }
+  .hero .button { padding: 15px 20px; font-size: 13.5px; }
+  .hero .button-primary { padding: 15px 22px; }
+  .hero-actions { flex-wrap: nowrap; gap: 10px; }
 }
+/* Випадні списки не мають ховатися під картками: панелі з розмиттям створюють власний шар */
+.filters, .form-block { position: relative; z-index: 6; }
+.filters:focus-within, .form-block:focus-within { z-index: 12; }
