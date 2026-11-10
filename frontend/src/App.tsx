@@ -43,6 +43,7 @@ import {
   uploadListingImages,
 } from "./api";
 import { contactHref } from "./contactLinks";
+import { AcademyPhoto, HeroBuilding, HeroScene } from "./HeroArt";
 import { NaukmaLogo } from "./NaukmaLogo";
 import {
   ActivityLogPanel,
@@ -1224,7 +1225,7 @@ function ListingGallery({ listing }: { listing: Listing }) {
     >
       <div className="gallery-stage">
         {broken.has(current.image_id)
-          ? <span className="gallery-fallback" aria-hidden="true">Б</span>
+          ? <AcademyPhoto seed={current.image_id} className="gallery-fallback-art" />
           : <img key={current.image_id} src={current.image_url} alt={`Фото ${index + 1} з ${count}`} onError={() => markBroken(current.image_id)} />}
         {count > 1 && (
           <>
@@ -1302,6 +1303,8 @@ function HomePage({ categories, categoryNames, user, favorites, busy, onFavorite
   return (
     <main>
       <section className="hero">
+        <HeroScene />
+        <HeroBuilding />
         <div className="hero-copy">
           <span className="eyebrow">Маркетплейс могилянської спільноти</span>
           <h1>Речі знаходять нових власників тут.</h1>
@@ -2336,7 +2339,7 @@ function ListingImage({ listing, large = false }: { listing: Listing; large?: bo
   const source = [...listing.images].sort((a, b) => a.display_order - b.display_order)[0]?.image_url;
   const [failed, setFailed] = useState(false);
   const count = listing.images.length;
-  return <div className={`listing-image ${large ? "large" : ""} ${!source || failed ? "fallback" : ""}`}>{source && !failed ? <img src={source} alt="" onError={() => setFailed(true)} /> : <span aria-hidden="true">Б</span>}{!large && count > 1 && <span className="photo-count" aria-label={`Фото: ${count}`}>{count} фото</span>}</div>;
+  return <div className={`listing-image ${large ? "large" : ""} ${!source || failed ? "fallback" : ""}`}>{source && !failed ? <img src={source} alt="" onError={() => setFailed(true)} /> : <AcademyPhoto seed={listing.id} className="fallback-art" />}{!large && count > 1 && <span className="photo-count" aria-label={`Фото: ${count}`}>{count} фото</span>}</div>;
 }
 
 function Footer() {
