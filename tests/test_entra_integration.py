@@ -3,12 +3,14 @@
 from datetime import datetime, timezone
 import sys
 from types import SimpleNamespace
+from typing import Any
 from uuid import UUID
 
 import pytest
 
 from src.config import EntraSettings
 from src.integrations.entra import (
+    ENTRA_HTTP_TIMEOUT_SECONDS,
     EntraOidcError,
     MsalEntraOidcClient,
     OIDC_SCOPES,
@@ -115,9 +117,9 @@ def test_production_msal_client_is_lazy_and_keeps_entra_configuration(
     Lazy initialization must preserve the real production OIDC configuration.
     """
     fake = FakeMsalClient()
-    constructor_calls: list[dict[str, str]] = []
+    constructor_calls: list[dict[str, Any]] = []
 
-    def confidential_client_application(**kwargs: str) -> FakeMsalClient:
+    def confidential_client_application(**kwargs: Any) -> FakeMsalClient:
         constructor_calls.append(kwargs)
         return fake
 
@@ -150,6 +152,7 @@ def test_production_msal_client_is_lazy_and_keeps_entra_configuration(
                 "https://login.microsoftonline.com/"
                 "11111111-1111-1111-1111-111111111111"
             ),
+            "timeout": ENTRA_HTTP_TIMEOUT_SECONDS,
         }
     ]
     assert fake.scopes == OIDC_SCOPES
