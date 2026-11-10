@@ -236,10 +236,10 @@ SonarCloud для аналізів від **2026-10-30 00:01:54 UTC** (стан 
 Команда претендує на 2 бонусні пункти (сумарно +0,5 бала):
 
 ### Бонус 1: Quality Gate як обов'язкова перевірка в PR (+0.25)
-- **Налаштування:** У репозиторії GitHub для гілки `main` увімкнено Branch Protection Rules: `Require status checks to pass before merging` із обов'язковим чеком `SonarCloud Code Analysis`.
+- **Налаштування:** У репозиторії GitHub в активному ruleset [main-protection](https://github.com/ukma-fin-ssdm-2026/Next-Gen/rules/23585644) для гілки main увімкнено правило Require status checks to pass із двома обов'язковими перевірками: 	est та SonarCloud Code Analysis (integration_id: 12526).
 - **Докази перевірки:**
-  - **Червоний прогін (мердж заблоковано):** [PR #220](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/220) — Quality Gate заблокував мердж через виявлену High Security вразливість (Client-Side Request Forgery у `api.ts`).
-  - **Зелений прогін (мердж дозволено):** [PR #221](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/221) — після виправлення обробки шляхів Quality Gate пройшов успішно (`Status: OK`), і PR було злито в `main`.
+  - **Червоний прогін (мердж реально зупинено обов'язковою перевіркою SonarCloud Code Analysis):** [PR #278](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/278) (коміт fcd1ad, [червоний check run SonarCloud Code Analysis](https://github.com/ukma-fin-ssdm-2026/Next-Gen/runs/130149637672)). На цьому PR стандартна CI-перевірка 	est пройшла зеленим ([success](https://github.com/ukma-fin-ssdm-2026/Next-Gen/actions/runs/42907560240/job/130149429882)), проте обов'язкова перевірка SonarCloud Code Analysis завершилася зі статусом ailure (Quality Gate failed через виявлений Reliability Bug python:S1764 та дублювання коду на New Code у src/domain/feedback.py) і заблокувала злиття PR у main (PR залишено незлитим із червоним чеком на останньому коміті як постійний доказ блокування).
+  - **Зелений прогін після виправлення (мердж дозволено):** [PR #279](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/279) (а також чистий стан src/domain/feedback.py після рефакторингу у [PR #269](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/269), [зелений check run SonarCloud Code Analysis](https://github.com/ukma-fin-ssdm-2026/Next-Gen/runs/129276109551)) — без дефектів S1764 і дублювання перевірка SonarCloud Code Analysis проходить успішно (Quality Gate passed), розблоковуючи злиття в main.
 
 ### Бонус 2: Характеризаційні тести перед рефакторингом (+0.25)
 - **Обрані модулі:**
