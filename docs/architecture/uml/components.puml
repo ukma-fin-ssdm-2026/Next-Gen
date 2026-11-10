@@ -1,5 +1,9 @@
 @startuml
 skinparam componentStyle uml2
+legend right
+  Жовтим позначено заплановані компоненти
+  (ADR-004, ADR-005); реалізація триває.
+endlegend
 
 title Component Diagram - Baraholka NaUKMA (Monolithic Client-Server)
 
@@ -20,6 +24,8 @@ package "Server Tier (FastAPI Monolith)" {
     component "Complaint Service" as ComplaintService <<Service>>
     component "Feedback Service" as FeedbackService <<Service>>
     component "Activity Log Service" as ActivityLogService <<Service>>
+    component "Review Service" as ReviewService <<Service, planned>> #FFF4D6;line:D9A441
+    component "Conversation Service" as ConversationService <<Service, planned>> #FFF4D6;line:D9A441
     
     component "Data Access Layer\n(ORM)" as DAL <<Repository>>
 }
@@ -31,6 +37,10 @@ package "Data Tier" {
 
 ' Connections
 SPA ..> RestAPI : "HTTPS\n(JSON)"
+note right of SPA
+  Чат: polling 5 с (розмова), 30 с (список)
+  ADR-005
+end note
 RestAPI - Router
 
 Router --> AuthService
@@ -39,6 +49,8 @@ Router --> ModerationService
 Router --> ComplaintService
 Router --> FeedbackService
 Router --> ActivityLogService
+Router --> ReviewService
+Router --> ConversationService
 
 AuthService --> DAL
 AuthService ..> Entra : "OIDC Authorization Code\nHTTPS"
@@ -51,6 +63,11 @@ ComplaintService --> ActivityLogService : "Record Submit/Resolution"
 FeedbackService --> DAL
 FeedbackService --> ActivityLogService : "Record Submit/Resolution"
 ActivityLogService --> DAL
+ListingService ..> ReviewService : "seller_rating\n(batch aggregate)"
+ReviewService --> DAL
+ReviewService --> ActivityLogService : "Record REVIEW_SET/REMOVED/HIDDEN"
+ConversationService --> DAL
+ConversationService --> ActivityLogService : "Record CONVERSATION_STARTED"
 
 DAL ..> DB : "TCP/IP\n(SQL)"
 
