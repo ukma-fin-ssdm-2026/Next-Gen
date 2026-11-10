@@ -4,6 +4,11 @@ title Baraholka NaUKMA - Data Model
 hide methods
 hide stereotypes
 
+legend right
+  Жовтим позначено заплановані сутності
+  (ADR-004, ADR-005); реалізація триває.
+endlegend
+
 entity "User" as user {
   * user_id : UUID <<PK>>
   --
@@ -116,26 +121,71 @@ entity "ActivityEvent" as activity {
   * created_at : datetime
 }
 
+entity "SellerReview" as review <<planned>> #FFF4D6;line:D9A441 {
+  * review_id : UUID <<PK>>
+  --
+  * seller_id : UUID <<FK>>
+  * author_id : UUID <<FK>>
+  listing_id : UUID <<FK, nullable>>
+  * rating : smallint
+  * status : enum
+  hidden_reason : text <<nullable>>
+  hidden_by : UUID <<FK, nullable>>
+  hidden_at : datetime <<nullable>>
+  * created_at : datetime
+  * updated_at : datetime
+}
+
+entity "Conversation" as conversation <<planned>> #FFF4D6;line:D9A441 {
+  * conversation_id : UUID <<PK>>
+  --
+  * user_low_id : UUID <<FK>>
+  * user_high_id : UUID <<FK>>
+  * created_at : datetime
+  * last_message_at : datetime
+  low_last_read_at : datetime <<nullable>>
+  high_last_read_at : datetime <<nullable>>
+}
+
+entity "Message" as message <<planned>> #FFF4D6;line:D9A441 {
+  * message_id : UUID <<PK>>
+  --
+  * conversation_id : UUID <<FK>>
+  * sender_id : UUID <<FK>>
+  listing_id : UUID <<FK, nullable>>
+  * body : text <<personal data>>
+  * created_at : datetime
+}
+
 user ||--o{ listing : creates
 category ||--o{ listing : categorizes
-suggestion o|--o{ listing : suggested for
+suggestion |o--o{ listing : suggested for
 user ||--o{ suggestion : proposes
-user o|--o{ suggestion : reviews
-category o|--o| suggestion : created from
+user |o--o{ suggestion : reviews
+category |o--o| suggestion : created from
 listing ||--|{ image : contains
 user ||--o{ moderation : performs
-user o|--o{ moderation : target user
-listing o|--o{ moderation : target listing
-suggestion o|--o{ moderation : target suggestion
+user |o--o{ moderation : target user
+listing |o--o{ moderation : target listing
+suggestion |o--o{ moderation : target suggestion
 user ||--o{ favorite : adds
 listing ||--o{ favorite : is_favorited
 user ||--o{ complaint : reports
-user o|--o{ complaint : resolves
+user |o--o{ complaint : resolves
 listing ||--o{ complaint : receives
 user ||--o{ feedback : submits
-user o|--o{ feedback : resolves
+user |o--o{ feedback : resolves
 user ||--o{ activity : performs
-listing o|..o{ activity : referenced by
+listing |o..o{ activity : referenced by
+user ||--o{ review : "is rated (seller)"
+user ||--o{ review : "rates (author)"
+user |o--o{ review : hides
+listing |o--o{ review : context
+user ||--o{ conversation : "participates (low)"
+user ||--o{ conversation : "participates (high)"
+conversation ||--|{ message : contains
+user ||--o{ message : sends
+listing |o--o{ message : mentioned in
 
 note right of user
   role: USER | ADMIN
@@ -174,6 +224,31 @@ note right of activity
   Immutable audit event (FR-018)
   listing_id is a logical reference without FK
   INDEX (actor_role, created_at)
+end note
+
+note right of review
+  status: VISIBLE | HIDDEN
+  rating: 1..5 (CHECK)
+  UNIQUE (author_id, seller_id)
+  CHECK (author_id <> seller_id)
+  INDEX (seller_id, status)
+  ADR-004
+end note
+
+note right of conversation
+  CHECK (user_low_id < user_high_id)
+  UNIQUE (user_low_id, user_high_id)
+  INDEX (user_low_id, last_message_at)
+  INDEX (user_high_id, last_message_at)
+  ADR-005
+end note
+
+note right of message
+  body: 1-1000 chars, immutable
+  listing_id: optional context,
+  ON DELETE SET NULL
+  INDEX (conversation_id, created_at)
+  ADR-005
 end note
 
 @enduml
