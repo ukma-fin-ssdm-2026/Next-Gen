@@ -921,3 +921,10 @@ footer { background: linear-gradient(120deg, #16213f 0%, #1f3169 100%); border-t
   .hero-scene { display: none; }
   .hero { background: linear-gradient(180deg, #bcd6f7 0%, #d6e5fa 45%, #f3e2dd 82%, #f8d6c8 100%); }
 }
+/* Широка картка пошуку, зсунута ліворуч */
+@media (min-width: 1300px) {
+  .hero { padding-right: clamp(22px, calc(var(--hero-art-w) * 0.8), 360px); grid-template-columns: minmax(0, 1fr) minmax(380px, 540px); }
+  .hero h1 { font-size: clamp(34px, 3.5vw, 50px); }
+  .hero .button { padding: 16px 24px; font-size: 14px; }
+  .hero .button-primary { padding: 16px 26px; }
+}
