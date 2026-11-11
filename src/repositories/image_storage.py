@@ -762,7 +762,11 @@ class InMemoryImageStorage(BaseImageStorage):
         return key in self._blobs
 
     def _read_blob(self, key: str) -> bytes:
-        return self._blobs[key]
+        try:
+            return self._blobs[key]
+        except KeyError:
+            # Блоб видалили між перевіркою й читанням — це «немає файлу», не збій.
+            raise InvalidListingImageError(f"Файл {key} не знайдено") from None
 
     def _delete_blob(self, key: str) -> None:
         self._blobs.pop(key, None)

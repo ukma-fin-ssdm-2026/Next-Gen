@@ -40,6 +40,7 @@ from src.api.routers import (
     users,
 )
 from src.db.engine import validate_database_settings
+from src.domain.exceptions import InvalidListingImageError
 from src.repositories.image_storage import STORAGE_KEY_PATTERN, ImageStorage
 
 
@@ -69,6 +70,9 @@ logger = logging.getLogger(__name__)
 # (pool_pre_ping), коли PostgreSQL знову доступний.
 DB_UNAVAILABLE_DETAIL = "База даних тимчасово недоступна. Спробуйте за кілька секунд."
 DB_RETRY_AFTER_SECONDS = 5
+# REL-02: збій сховища фото — швидка відмова 503, а не хибний 404.
+IMAGE_STORAGE_UNAVAILABLE_DETAIL = "Сховище фото тимчасово недоступне."
+IMAGE_STORAGE_RETRY_AFTER_SECONDS = 30
 DB_UNAVAILABLE_RESPONSE = {
     "description": "База даних тимчасово недоступна (REL-03); повторіть запит пізніше",
     "headers": {
@@ -247,8 +251,25 @@ def get_uploaded_image(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     try:
         content = storage.read_image(storage_key)
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    except (InvalidListingImageError, FileNotFoundError):
+        # Штатна ситуація: файлу немає (або його видалили між перевіркою й читанням).
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from None
+    except OSError as exc:
+        # REL-02: збій тома (права доступу, помилка диска) — не «фото немає».
+        logger.error(
+            "Сховище фото недоступне під час читання %s: %s",
+            storage_key,
+            type(exc).__name__,
+            exc_info=exc,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"detail": IMAGE_STORAGE_UNAVAILABLE_DETAIL},
+            headers={
+                "Retry-After": str(IMAGE_STORAGE_RETRY_AFTER_SECONDS),
+                "Cache-Control": "no-store",
+            },
+        )
     return Response(
         content=content,
         media_type="image/webp",
