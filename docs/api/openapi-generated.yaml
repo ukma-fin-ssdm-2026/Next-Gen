@@ -2346,6 +2346,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+  /health/ready:
+    get:
+      tags:
+      - System
+      summary: Перевірка готовності API та сховища даних
+      description: Readiness probe перевіряє активне сховище даних. На відміну від
+        liveness endpoint `/health`, він повертає 503, якщо PostgreSQL недоступний.
+      operationId: readiness_check_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+        '503':
+          description: PostgreSQL тимчасово недоступний
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
 components:
   schemas:
     ApiValidationErrorResponse:
@@ -3498,6 +3519,27 @@ components:
       - user_id
       - display_name
       title: PublicProfileResponse
+    ReadinessResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+          description: Готовність API обслуговувати запити
+        database:
+          type: string
+          title: Database
+          description: Стан активного сховища даних
+        timestamp:
+          type: string
+          format: date-time
+          title: Timestamp
+          description: Час серверної перевірки
+      type: object
+      required:
+      - status
+      - database
+      - timestamp
+      title: ReadinessResponse
     SellerContactResponse:
       properties:
         listing_id:

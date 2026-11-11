@@ -1,16 +1,19 @@
 """Точка входу FastAPI: маршрутизація та службові ендпоінти."""
 
+import logging
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
 from fastapi import Depends, FastAPI, HTTPException, Response, status
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import SQLAlchemyError
 
 from src import __version__
-from src.api.deps import get_image_storage
+from src.api.deps import get_database_readiness_probe, get_image_storage
 from src.api.routers import (
     activity,
     auth,
@@ -25,6 +28,8 @@ from src.api.routers import (
     users,
 )
 from src.repositories.image_storage import STORAGE_KEY_PATTERN, ImageStorage
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Baraholka NaUKMA API",
@@ -103,6 +108,12 @@ class HealthResponse(BaseModel):
     timestamp: datetime = Field(..., description="Час серверної перевірки")
 
 
+class ReadinessResponse(BaseModel):
+    status: str = Field(..., description="Готовність API обслуговувати запити")
+    database: str = Field(..., description="Стан активного сховища даних")
+    timestamp: datetime = Field(..., description="Час серверної перевірки")
+
+
 @app.get(
     "/health",
     response_model=HealthResponse,
@@ -121,6 +132,47 @@ def health_check() -> dict:
         "app": "Baraholka NaUKMA API",
         "version": __version__,
         "timestamp": datetime.now(timezone.utc),
+    }
+
+
+@app.get(
+    "/health/ready",
+    response_model=ReadinessResponse,
+    responses={
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "model": ReadinessResponse,
+            "description": "PostgreSQL тимчасово недоступний",
+        }
+    },
+    summary="Перевірка готовності API та сховища даних",
+    description=(
+        "Readiness probe перевіряє активне сховище даних. На відміну від "
+        "liveness endpoint `/health`, він повертає 503, якщо PostgreSQL "
+        "недоступний."
+    ),
+    tags=["System"],
+)
+def readiness_check(
+    probe: Callable[[], str] = Depends(get_database_readiness_probe),
+) -> dict | JSONResponse:
+    """Повертає 200 лише коли API та активне сховище готові до роботи."""
+    timestamp = datetime.now(timezone.utc)
+    try:
+        database_status = probe()
+    except (SQLAlchemyError, OSError):
+        logger.warning("Database readiness probe failed", exc_info=True)
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "unavailable",
+                "database": "unavailable",
+                "timestamp": timestamp.isoformat(),
+            },
+        )
+    return {
+        "status": "ready",
+        "database": database_status,
+        "timestamp": timestamp,
     }
 
 

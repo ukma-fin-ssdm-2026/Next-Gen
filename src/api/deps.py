@@ -6,6 +6,7 @@ PostgreSQL-адаптери підключаються через DATABASE_URL (
 """
 
 import os
+from collections.abc import Callable
 from typing import Annotated
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
@@ -100,6 +101,28 @@ def get_db_session():
 
 
 DbSession = Annotated[Session | None, Depends(get_db_session)]
+
+
+def _probe_postgres() -> str:
+    """Виконує мінімальний запит до PostgreSQL для readiness-перевірки."""
+    from sqlalchemy import text
+
+    from src.db.engine import get_engine
+
+    with get_engine().connect() as connection:
+        connection.execute(text("SELECT 1")).scalar_one()
+    return "ok"
+
+
+def get_database_readiness_probe() -> Callable[[], str]:
+    """Повертає probe активного сховища даних.
+
+    In-memory fallback не має зовнішньої залежності, тому готовий одразу.
+    У production з ``DATABASE_URL`` probe виконує реальний ``SELECT 1``.
+    """
+    if not _USE_POSTGRES:
+        return lambda: "in-memory"
+    return _probe_postgres
 
 
 # ---------------------------------------------------------------------------
