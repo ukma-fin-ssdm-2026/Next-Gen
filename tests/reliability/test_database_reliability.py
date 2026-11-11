@@ -133,3 +133,57 @@ def test_catalog_recovers_when_database_is_back() -> None:
 
     app.dependency_overrides.pop(deps.get_db_session)
     assert client.get("/api/v1/listings").status_code == 200
+
+
+def test_openapi_declares_503_only_where_database_is_used() -> None:
+    """[TP-037] [REL-001]
+    Контракт: 503 з Retry-After є в операціях, що відкривають сесію БД, і відсутній
+    там, де БД не використовується (/health, вихід із системи).
+    """
+    paths = app.openapi()["paths"]
+
+    catalog_503 = paths["/api/v1/listings"]["get"]["responses"]["503"]
+    assert "Retry-After" in catalog_503["headers"]
+    example = catalog_503["content"]["application/json"]["example"]
+    assert example == {"detail": DB_UNAVAILABLE_DETAIL}
+    assert "503" in paths["/api/v1/favorites"]["get"]["responses"]
+
+    assert "503" not in paths["/health"]["get"]["responses"]
+    assert "503" not in paths["/api/v1/auth/logout"]["post"]["responses"]
+
+    login_503 = paths["/api/v1/auth/login"]["get"]["responses"]["503"]
+    assert "Entra ID not configured" in login_503["description"]
+    assert "база даних" in login_503["description"]
+
+
+@pytest.mark.parametrize("raw", ["0", "abc"])
+def test_startup_fails_fast_on_invalid_timeout_when_database_is_configured(
+    monkeypatch, raw
+) -> None:
+    """[TP-037] [REL-001]
+    З DATABASE_URL некоректний тайм-аут зупиняє старт застосунку ще до першого
+    запиту, а не дає 500 на першому зверненні до БД.
+    """
+    monkeypatch.setenv("DATABASE_URL", URL)
+    monkeypatch.setenv("DB_CONNECT_TIMEOUT_SECONDS", raw)
+
+    with pytest.raises(RuntimeError, match="DB_CONNECT_TIMEOUT_SECONDS"):
+        with TestClient(app):
+            pass
+
+
+@pytest.mark.parametrize(
+    ("database_url", "timeout"), [(URL, "5"), ("", "0")], ids=["valid", "in-memory"]
+)
+def test_startup_succeeds_with_valid_timeouts_or_without_database(
+    monkeypatch, database_url, timeout
+) -> None:
+    """[TP-037] [REL-001]
+    Коректні тайм-аути не заважають старту, а без DATABASE_URL (in-memory) вони
+    не перевіряються; старт не підключається до БД.
+    """
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("DB_CONNECT_TIMEOUT_SECONDS", timeout)
+
+    with TestClient(app) as client:
+        assert client.get("/health").status_code == 200
