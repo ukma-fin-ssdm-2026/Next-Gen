@@ -21,11 +21,16 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 from src import __version__
-from src.api.deps import get_db_session, get_image_storage
+from src.api.deps import (
+    get_database_readiness_probe,
+    get_db_session,
+    get_image_storage,
+)
 from src.api.routers import (
     activity,
     auth,
@@ -234,6 +239,12 @@ class HealthResponse(BaseModel):
     timestamp: datetime = Field(..., description="Час серверної перевірки")
 
 
+class ReadinessResponse(BaseModel):
+    status: str = Field(..., description="Готовність API обслуговувати запити")
+    database: str = Field(..., description="Стан активного сховища даних")
+    timestamp: datetime = Field(..., description="Час серверної перевірки")
+
+
 @app.get(
     "/health",
     response_model=HealthResponse,
@@ -252,6 +263,47 @@ def health_check() -> dict:
         "app": "Baraholka NaUKMA API",
         "version": __version__,
         "timestamp": datetime.now(timezone.utc),
+    }
+
+
+@app.get(
+    "/health/ready",
+    response_model=ReadinessResponse,
+    responses={
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "model": ReadinessResponse,
+            "description": "PostgreSQL тимчасово недоступний",
+        }
+    },
+    summary="Перевірка готовності API та сховища даних",
+    description=(
+        "Readiness probe перевіряє активне сховище даних. На відміну від "
+        "liveness endpoint `/health`, він повертає 503, якщо PostgreSQL "
+        "недоступний."
+    ),
+    tags=["System"],
+)
+def readiness_check(
+    probe: Callable[[], str] = Depends(get_database_readiness_probe),
+) -> dict | JSONResponse:
+    """Повертає 200 лише коли API та активне сховище готові до роботи."""
+    timestamp = datetime.now(timezone.utc)
+    try:
+        database_status = probe()
+    except (SQLAlchemyError, OSError):
+        logger.warning("Database readiness probe failed", exc_info=True)
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "unavailable",
+                "database": "unavailable",
+                "timestamp": timestamp.isoformat(),
+            },
+        )
+    return {
+        "status": "ready",
+        "database": database_status,
+        "timestamp": timestamp,
     }
 
 
