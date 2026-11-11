@@ -401,3 +401,20 @@ pytest -q tests/reliability/
   - `test_entra_begin_retries_with_exponential_backoff_and_full_jitter_are_bounded` — доводить, що при постійному таймауті виконується рівно `3` спроби (`double.begin_calls == 3`), між ними виконуються `2` паузи в межах full jitter (`0.0 <= sleep_0 <= 0.2`, `0.0 <= sleep_1 <= 0.4`), а після 3-ї спроби спрацьовує `EntraOidcError`.
   - `test_entra_begin_recovers_on_transient_failure_before_max_attempts` — доводить, що при тимчасовому збої на 1-й і 2-й спробах третя спроба успішно завершує ініціалізацію потоку входу.
 - **Пояснення у відео:** демонструється та пояснюється у відеозвіті Євгенія Остапенка (`Labs/Lab09/video_Ostapenko.txt`).
+
+### Бонус 2: Health check зовнішньої залежності (+0,25 бала)
+
+- **Endpoint:** `GET /health/ready` ([`src/api/main.py`](../../src/api/main.py)) перевіряє активне сховище. Для production PostgreSQL probe ([`src/api/deps.py`](../../src/api/deps.py)) виконує `SELECT 1`; для in-memory режиму без зовнішньої залежності повертає `in-memory`.
+- **Безпечна реакція:** при відмові повертається `503` із узагальненим тілом (`status: unavailable`, `database: unavailable`) без SQL, параметрів підключення чи stack trace; деталі лишаються в серверному журналі (`Database readiness probe failed`). Завдяки `connect_timeout` з REL-03 перевірка завершується швидко, а не висить.
+- **Розмежування:** `GET /health` лишається liveness probe процесу й доступний навіть під час падіння БД, щоб оркестратор не плутав недоступність БД із падінням API.
+- **Докази:** [`tests/reliability/test_health_reliability.py`](../../tests/reliability/test_health_reliability.py): `test_readiness_reports_ready_when_database_responds` (нормальний сценарій), `test_readiness_fault_injection_returns_safe_503` (ін'єкція збою: `OperationalError` дає «нездоровий» статус `503`, у відповіді немає SQL і пароля, збій записано в лог), `test_liveness_remains_available_during_database_failure` (liveness `200` під час збою БД).
+- **PR і прогін:** [PR #290](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/290) «Lab09/failure analysis healthcheck»; [успішний прогін CI #534](https://github.com/ukma-fin-ssdm-2026/Next-Gen/actions/runs/43063475892) (Success).
+- **Пояснення у відео:** Артем демонструє `/health` і `/health/ready`, ін'єкцію відмови PostgreSQL та безпечну `503` у `Labs/Lab09/video_Solodkyi.txt`.
+
+### Бонус 3: Тести надійності як обов'язкова перевірка PR (+0,25 бала)
+
+- **Окремий крок у CI:** у [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) додано окремий job `Reliability tests`. Він запускає `pytest -q tests/reliability/ -v --tb=short` на кожному PR і push у `main` незалежно від решти перевірок. Тести з реальним PostgreSQL (`statement_timeout`) і далі виконуються в job `postgres-migration`, а в цьому job вони пропускаються за відсутності `DATABASE_URL`.
+- **Обов'язкова перевірка гілки `main`:** у ruleset [`main-protection`](https://github.com/ukma-fin-ssdm-2026/Next-Gen/rules/23585644) у розділі *Required status checks* тепер три перевірки: `test`, `SonarCloud Code Analysis` і `Reliability tests` (GitHub Actions). PR, у якому тести надійності не проходять або не запускаються, не можна злити в `main`.
+- **PR із зміною:** [PR #291](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/291) «Add reliability tests to CI as bonus».
+- **Успішний прогін:** [CI run #535 (Success)](https://github.com/ukma-fin-ssdm-2026/Next-Gen/actions/runs/43066213220), у ньому job [`Reliability tests`](https://github.com/ukma-fin-ssdm-2026/Next-Gen/actions/runs/43066213220/job/130681744396) завершився успішно (1 хв 11 с) разом із `test` та `Alembic migration check (PostgreSQL 16)`.
+- **Пояснення у відео:** Артем пояснює налаштування job, ruleset і прогін у `Labs/Lab09/video_Solodkyi.txt`.
