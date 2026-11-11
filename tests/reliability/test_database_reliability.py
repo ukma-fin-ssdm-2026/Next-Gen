@@ -12,9 +12,12 @@
 """
 
 import logging
+import os
+import time
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
@@ -23,6 +26,11 @@ from src.api.main import DB_RETRY_AFTER_SECONDS, DB_UNAVAILABLE_DETAIL, app
 from src.db import engine as db_engine
 
 URL = "postgresql+psycopg2://user:secret@db.invalid:5432/baraholka"
+
+requires_postgres = pytest.mark.skipif(
+    not os.getenv("DATABASE_URL", "").startswith("postgresql"),
+    reason="Потрібен PostgreSQL (DATABASE_URL); у CI це job postgres-migration.",
+)
 
 
 @pytest.fixture(autouse=True)
@@ -64,9 +72,12 @@ def test_timeout_env_rejects_non_positive_or_non_integer(monkeypatch, raw) -> No
         )
 
 
-def test_engine_is_built_with_connect_and_pool_timeouts(monkeypatch) -> None:
+def test_engine_is_built_with_connect_pool_and_query_timeouts(monkeypatch) -> None:
     """[TP-037] [REL-001]
-    Engine створюється з `connect_timeout` для драйвера і `pool_timeout` для пулу.
+    Engine обмежує підключення (`connect_timeout`), очікування пулу
+    (`pool_timeout`) і вже відкрите з'єднання: `statement_timeout` для запиту,
+    TCP keepalive і `tcp_user_timeout` для обірваної мережі; параметри SQL не
+    потрапляють у текст винятків і логи (`hide_parameters`).
     """
     captured: dict = {}
 
@@ -77,12 +88,21 @@ def test_engine_is_built_with_connect_and_pool_timeouts(monkeypatch) -> None:
 
     monkeypatch.setattr(db_engine, "create_engine", fake_create_engine)
 
-    db_engine.build_engine(URL, connect_timeout=4, pool_timeout=9)
+    db_engine.build_engine(URL, connect_timeout=4, pool_timeout=9, statement_timeout=7)
 
     assert captured["url"] == URL
-    assert captured["connect_args"] == {"connect_timeout": 4}
+    assert captured["connect_args"] == {
+        "connect_timeout": 4,
+        "options": "-c statement_timeout=7000",
+        "keepalives": 1,
+        "keepalives_idle": db_engine.DB_KEEPALIVES_IDLE_SECONDS,
+        "keepalives_interval": db_engine.DB_KEEPALIVES_INTERVAL_SECONDS,
+        "keepalives_count": db_engine.DB_KEEPALIVES_COUNT,
+        "tcp_user_timeout": 7000,
+    }
     assert captured["pool_timeout"] == 9
     assert captured["pool_pre_ping"] is True
+    assert captured["hide_parameters"] is True
 
 
 def _unavailable_session(exc: Exception):
@@ -119,6 +139,64 @@ def test_unavailable_database_returns_503_without_internal_details(exc, caplog) 
     assert "timeout expired" not in response.text
     assert "QueuePool" not in response.text
     assert any("/api/v1/listings" in record.getMessage() for record in caplog.records)
+
+
+class _HangingSession:
+    """Дублер сесії: з'єднання вже видано з пулу, але запит обривається тайм-аутом."""
+
+    def __getattr__(self, name):
+        def fail(*args, **kwargs):
+            raise OperationalError(
+                "SELECT listings.id FROM listings",
+                {"q": "secret-search"},
+                Exception("canceling statement due to statement timeout"),
+            )
+
+        return fail
+
+
+def test_in_flight_query_timeout_returns_503(caplog) -> None:
+    """[TP-037] [REL-001]
+    Ін'єкція збою під час уже відкритого з'єднання: запит каталогу обірвано
+    тайм-аутом (statement_timeout / мережа). API відповідає 503, а не висить чи 500.
+    """
+
+    def in_flight_failure():
+        yield _HangingSession()
+
+    app.dependency_overrides[deps.get_db_session] = in_flight_failure
+
+    with caplog.at_level(logging.ERROR, logger="src.api.main"):
+        response = TestClient(app).get("/api/v1/listings")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": DB_UNAVAILABLE_DETAIL}
+    assert "statement timeout" not in response.text
+    assert "secret-search" not in response.text
+
+
+@requires_postgres
+def test_postgres_cancels_query_that_exceeds_statement_timeout() -> None:
+    """[TP-037] [REL-001]
+    Реальний PostgreSQL: engine з `statement_timeout=1` обриває `pg_sleep(5)`
+    приблизно за секунду через OperationalError (його API перетворює на 503).
+    Підключення з усіма параметрами з'єднання підтверджує, що libpq їх приймає.
+    """
+    engine = db_engine.build_engine(
+        db_engine.get_database_url(),
+        connect_timeout=5,
+        pool_timeout=10,
+        statement_timeout=1,
+    )
+    try:
+        with engine.connect() as connection:
+            assert connection.execute(text("SHOW statement_timeout")).scalar() == "1s"
+            started = time.monotonic()
+            with pytest.raises(OperationalError, match="statement timeout"):
+                connection.execute(text("SELECT pg_sleep(5)"))
+            assert time.monotonic() - started < 3
+    finally:
+        engine.dispose()
 
 
 def test_catalog_recovers_when_database_is_back() -> None:
@@ -158,18 +236,26 @@ def test_openapi_declares_503_only_where_database_is_used() -> None:
         assert "Retry-After" in auth_503["headers"]
 
 
+@pytest.mark.parametrize(
+    "variable",
+    [
+        "DB_CONNECT_TIMEOUT_SECONDS",
+        "DB_POOL_TIMEOUT_SECONDS",
+        "DB_STATEMENT_TIMEOUT_SECONDS",
+    ],
+)
 @pytest.mark.parametrize("raw", ["0", "abc"])
 def test_startup_fails_fast_on_invalid_timeout_when_database_is_configured(
-    monkeypatch, raw
+    monkeypatch, variable, raw
 ) -> None:
     """[TP-037] [REL-001]
     З DATABASE_URL некоректний тайм-аут зупиняє старт застосунку ще до першого
     запиту, а не дає 500 на першому зверненні до БД.
     """
     monkeypatch.setenv("DATABASE_URL", URL)
-    monkeypatch.setenv("DB_CONNECT_TIMEOUT_SECONDS", raw)
+    monkeypatch.setenv(variable, raw)
 
-    with pytest.raises(RuntimeError, match="DB_CONNECT_TIMEOUT_SECONDS"):
+    with pytest.raises(RuntimeError, match=variable):
         with TestClient(app):
             pass
 
