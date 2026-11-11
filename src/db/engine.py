@@ -8,10 +8,16 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 # REL-03: без тайм-аутів запит при недоступному PostgreSQL висів до системного
-# TCP-таймауту (~120 с) і тримав потік. Тепер підключення і очікування вільного
-# з'єднання в пулі обмежені, а API відповідає 503 (див. src/api/main.py).
+# TCP-таймауту (~120 с) і тримав потік. Тепер обмежені підключення, очікування
+# вільного з'єднання в пулі і робота вже відкритого з'єднання (запит і мережа),
+# а API відповідає 503 (див. src/api/main.py).
 DEFAULT_DB_CONNECT_TIMEOUT_SECONDS = 5
 DEFAULT_DB_POOL_TIMEOUT_SECONDS = 10
+DEFAULT_DB_STATEMENT_TIMEOUT_SECONDS = 10
+# Мертве з'єднання в пулі (обрив мережі) виявляється через TCP keepalive.
+DB_KEEPALIVES_IDLE_SECONDS = 10
+DB_KEEPALIVES_INTERVAL_SECONDS = 5
+DB_KEEPALIVES_COUNT = 3
 
 _engine = None
 _SessionLocal = None
@@ -69,17 +75,43 @@ def validate_database_settings() -> None:
         "DB_CONNECT_TIMEOUT_SECONDS", DEFAULT_DB_CONNECT_TIMEOUT_SECONDS
     )
     read_timeout_seconds("DB_POOL_TIMEOUT_SECONDS", DEFAULT_DB_POOL_TIMEOUT_SECONDS)
+    read_timeout_seconds(
+        "DB_STATEMENT_TIMEOUT_SECONDS", DEFAULT_DB_STATEMENT_TIMEOUT_SECONDS
+    )
 
 
-def build_engine(url: str, *, connect_timeout: int, pool_timeout: int) -> Engine:
-    """Створює Engine з обмеженим часом підключення та очікування пулу."""
+def build_engine(
+    url: str, *, connect_timeout: int, pool_timeout: int, statement_timeout: int
+) -> Engine:
+    """Створює Engine, у якого обмежений час кожного етапу роботи з БД.
+
+    - `connect_timeout`: встановлення нового з'єднання;
+    - `pool_timeout`: очікування вільного з'єднання в пулі;
+    - `statement_timeout`: виконання запиту на сервері (зокрема очікування
+      блокування), PostgreSQL сам скасовує запит;
+    - keepalive і `tcp_user_timeout`: обрив мережі на вже відкритому з'єднанні,
+      коли сервер не відповідає взагалі й скасувати запит нікому.
+
+    `hide_parameters` прибирає значення параметрів SQL з тексту винятків, щоб
+    вони не потрапляли в лог обробника 503.
+    """
+    statement_timeout_ms = statement_timeout * 1000
     return create_engine(
         url,
         pool_pre_ping=True,
         pool_size=5,
         max_overflow=10,
         pool_timeout=pool_timeout,
-        connect_args={"connect_timeout": connect_timeout},
+        hide_parameters=True,
+        connect_args={
+            "connect_timeout": connect_timeout,
+            "options": f"-c statement_timeout={statement_timeout_ms}",
+            "keepalives": 1,
+            "keepalives_idle": DB_KEEPALIVES_IDLE_SECONDS,
+            "keepalives_interval": DB_KEEPALIVES_INTERVAL_SECONDS,
+            "keepalives_count": DB_KEEPALIVES_COUNT,
+            "tcp_user_timeout": statement_timeout_ms,
+        },
         echo=os.getenv("SQL_ECHO", "false").strip().lower() in {"1", "true", "yes"},
     )
 
@@ -95,6 +127,9 @@ def get_engine():
             ),
             pool_timeout=read_timeout_seconds(
                 "DB_POOL_TIMEOUT_SECONDS", DEFAULT_DB_POOL_TIMEOUT_SECONDS
+            ),
+            statement_timeout=read_timeout_seconds(
+                "DB_STATEMENT_TIMEOUT_SECONDS", DEFAULT_DB_STATEMENT_TIMEOUT_SECONDS
             ),
         )
 

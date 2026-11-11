@@ -86,7 +86,11 @@ DB_UNAVAILABLE_RESPONSE = {
 async def database_unavailable_handler(
     request: Request, exc: Exception
 ) -> JSONResponse:
-    """Перетворює збій підключення до БД або вичерпаний пул на HTTP 503."""
+    """Перетворює недоступність БД на HTTP 503.
+
+    Сюди потрапляють тайм-аут чи обрив з'єднання, скасований за
+    `statement_timeout` запит (OperationalError) і вичерпаний пул (TimeoutError).
+    """
     logger.error(
         "База даних недоступна під час %s %s: %s",
         request.method,
