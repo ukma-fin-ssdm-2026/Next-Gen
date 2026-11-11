@@ -96,6 +96,7 @@
   - Захист від виснаження сховища незавершеними завантаженнями (`TM-08`): кожне staged-завантаження прив'язується до `current_user.user_id` (інший користувач не може прикріпити чужий `storage_key`), діють TTL (30 хвилин) з автоматичним очищенням незавершених файлів, квота незавершених завантажень (до 20 фото на користувача) та rate limit (до 10 запитів на хвилину на користувача).
   - При оновленні фотографій оголошення (`PATCH /api/v1/listings/{id}`) замінені й більше не використовувані файли автоматично видаляються з диска.
   - Файли зберігаються через адаптер `LocalImageStorage` (підключений у production DI за замовчуванням через `get_image_storage_dir()`) у зовнішньому Docker volume, змонтованому поза writable layer API-контейнера. Контракт `ImageStorage` абстрагований для безшовної майбутньої заміни на S3-сумісне сховище.
+- **Віддача фото:** `GET /uploads/{storage_key}` (службовий маршрут поза OpenAPI) повертає `200 image/webp` з `Cache-Control: public, max-age=86400, immutable`; `404 Not Found` для некоректного ключа чи відсутнього файлу; `503 Service Unavailable` з `Retry-After: 30` і `Cache-Control: no-store`, якщо том зі фото недоступний (немає прав, помилка диска; збій записується в лог, REL-02). Інші непередбачені помилки дають `500` і не маскуються під `404`.
 
 ---
 
@@ -103,37 +104,37 @@
 
 | Метод | URL | Опис | Успішний статус | Статуси помилок |
 |---|---|---|---|---|
-| `POST` | `/api/v1/listings/images` | Завантажити фотографії оголошення (multipart/form-data, 1..10 файлів) | 201 Created | 401 Unauthorized, 403 Forbidden, 422 Unprocessable Entity, 429 Too Many Requests |
-| `GET` | `/api/v1/listings` | Отримати список оголошень (з пагінацією, фільтрацією та сортуванням) | 200 OK | 422 Unprocessable Entity |
-| `GET` | `/api/v1/listings/my` | Отримати історію власних оголошень продавця (активні та зняті, `FR-005`) | 200 OK | 401 Unauthorized, 403 Forbidden, 422 |
-| `POST` | `/api/v1/listings` | Створити нове оголошення (підтримує `suggested_category_name`, `FR-002`, `FR-015`) | 201 Created | 400 Bad Request, 401 Unauthorized, 403 Forbidden, 409 Conflict, 422, 429 Too Many Requests |
-| `GET` | `/api/v1/listings/{id}` | Отримати деталі конкретного оголошення за ID (без контактів) | 200 OK | 404 Not Found |
-| `PATCH` | `/api/v1/listings/{id}` | Частково оновити дані оголошення | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
-| `DELETE` | `/api/v1/listings/{id}` | Видалити оголошення | 204 No Content | 401 Unauthorized, 403 Forbidden, 404 Not Found |
-| `GET` | `/api/v1/favorites` | Отримати власне обране (активні оголошення без контактів, `FR-009`) | 200 OK | 401 Unauthorized, 403 Forbidden (заблокований) |
-| `POST` | `/api/v1/favorites/{listing_id}` | Додати активне оголошення в обране (без дублікатів) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
-| `DELETE` | `/api/v1/favorites/{listing_id}` | Прибрати оголошення з власного обраного | 204 No Content | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
-| `GET` | `/api/v1/listings/{listing_id}/contact` | Отримати контакт продавця активного оголошення (лише з серверною сесією, `FR-010`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
-| `POST` | `/api/v1/admin/users/{user_id}/block` | Заблокувати користувача з причиною 5–500 символів; сесії відкликаються, дія записується в журнал (Адміністратор, `FR-013`) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict (себе, адміністратор, вже заблоковано), 422 |
-| `POST` | `/api/v1/admin/users/{user_id}/unblock` | Розблокувати користувача з причиною (Адміністратор, `FR-013`) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict (не заблоковано), 422 |
-| `POST` | `/api/v1/admin/users/block-by-email` | Заблокувати користувача за адресою `@ukma.edu.ua` (тіло `{email, reason}`; адреса не потрапляє в URL; лише для тих, хто вже входив; ті самі правила, що й для блокування за ID, `FR-013`) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found (адреси немає в системі), 409 Conflict, 422 |
-| `POST` | `/api/v1/admin/users/unblock-by-email` | Розблокувати користувача за адресою `@ukma.edu.ua` (тіло `{email, reason}`, `FR-013`) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict (не заблоковано), 422 |
-| `POST` | `/api/v1/admin/listings/{listing_id}/withdraw` | Зняти чуже оголошення з публікації з причиною (Адміністратор, `FR-011`) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
-| `GET` | `/api/v1/categories` | Отримати список активних категорій для фільтрації каталогу (`FR-012`) | 200 OK | - |
-| `GET` | `/api/v1/categories/{id}` | Отримати дані конкретної категорії за ID (`FR-012`) | 200 OK | 404 Not Found, 422 |
-| `POST` | `/api/v1/categories` | Створити нову категорію (Адміністратор, `FR-012`) | 201 Created | 401 Unauthorized, 403 Forbidden, 409 Conflict, 422 |
-| `PATCH` | `/api/v1/categories/{id}` | Оновити або деактивувати категорію (Адміністратор, `FR-012`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict, 422 |
-| `POST` | `/api/v1/category-suggestions` | Створити пропозицію нової категорії (автентифікований користувач, до 3 `PENDING`, `FR-015`) | 201 Created | 401 Unauthorized, 403 Forbidden, 409 Conflict, 422, 429 Too Many Requests |
-| `GET` | `/api/v1/category-suggestions?status=PENDING` | Черга пропозицій категорій з `listings_count` (Адміністратор, `FR-015`) | 200 OK | 401 Unauthorized, 403 Forbidden, 422 |
-| `POST` | `/api/v1/category-suggestions/{id}/approve` | Схвалити пропозицію, створити категорію й перенести активні оголошення з «Інше» (Адміністратор, `FR-015`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict, 422 |
-| `POST` | `/api/v1/category-suggestions/{id}/reject` | Відхилити пропозицію з обов'язковою причиною 5–500 символів (Адміністратор, `FR-015`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict, 422 |
+| `POST` | `/api/v1/listings/images` | Завантажити фотографії оголошення (multipart/form-data, 1..10 файлів) | 201 Created | 401 Unauthorized, 403 Forbidden, 422 Unprocessable Entity, 429 Too Many Requests, 503 Service Unavailable |
+| `GET` | `/api/v1/listings` | Отримати список оголошень (з пагінацією, фільтрацією та сортуванням) | 200 OK | 422 Unprocessable Entity, 503 Service Unavailable |
+| `GET` | `/api/v1/listings/my` | Отримати історію власних оголошень продавця (активні та зняті, `FR-005`) | 200 OK | 401 Unauthorized, 403 Forbidden, 422, 503 Service Unavailable |
+| `POST` | `/api/v1/listings` | Створити нове оголошення (підтримує `suggested_category_name`, `FR-002`, `FR-015`) | 201 Created | 400 Bad Request, 401 Unauthorized, 403 Forbidden, 409 Conflict, 422, 429 Too Many Requests, 503 Service Unavailable |
+| `GET` | `/api/v1/listings/{id}` | Отримати деталі конкретного оголошення за ID (без контактів) | 200 OK | 404 Not Found, 503 Service Unavailable |
+| `PATCH` | `/api/v1/listings/{id}` | Частково оновити дані оголошення | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422, 503 Service Unavailable |
+| `DELETE` | `/api/v1/listings/{id}` | Видалити оголошення | 204 No Content | 401 Unauthorized, 403 Forbidden, 404 Not Found, 503 Service Unavailable |
+| `GET` | `/api/v1/favorites` | Отримати власне обране (активні оголошення без контактів, `FR-009`) | 200 OK | 401 Unauthorized, 403 Forbidden (заблокований), 503 Service Unavailable |
+| `POST` | `/api/v1/favorites/{listing_id}` | Додати активне оголошення в обране (без дублікатів) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422, 503 Service Unavailable |
+| `DELETE` | `/api/v1/favorites/{listing_id}` | Прибрати оголошення з власного обраного | 204 No Content | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422, 503 Service Unavailable |
+| `GET` | `/api/v1/listings/{listing_id}/contact` | Отримати контакт продавця активного оголошення (лише з серверною сесією, `FR-010`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422, 503 Service Unavailable |
+| `POST` | `/api/v1/admin/users/{user_id}/block` | Заблокувати користувача з причиною 5–500 символів; сесії відкликаються, дія записується в журнал (Адміністратор, `FR-013`) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict (себе, адміністратор, вже заблоковано), 422, 503 Service Unavailable |
+| `POST` | `/api/v1/admin/users/{user_id}/unblock` | Розблокувати користувача з причиною (Адміністратор, `FR-013`) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict (не заблоковано), 422, 503 Service Unavailable |
+| `POST` | `/api/v1/admin/users/block-by-email` | Заблокувати користувача за адресою `@ukma.edu.ua` (тіло `{email, reason}`; адреса не потрапляє в URL; лише для тих, хто вже входив; ті самі правила, що й для блокування за ID, `FR-013`) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found (адреси немає в системі), 409 Conflict, 422, 503 Service Unavailable |
+| `POST` | `/api/v1/admin/users/unblock-by-email` | Розблокувати користувача за адресою `@ukma.edu.ua` (тіло `{email, reason}`, `FR-013`) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict (не заблоковано), 422, 503 Service Unavailable |
+| `POST` | `/api/v1/admin/listings/{listing_id}/withdraw` | Зняти чуже оголошення з публікації з причиною (Адміністратор, `FR-011`) | 201 Created | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422, 503 Service Unavailable |
+| `GET` | `/api/v1/categories` | Отримати список активних категорій для фільтрації каталогу (`FR-012`) | 200 OK | 503 Service Unavailable |
+| `GET` | `/api/v1/categories/{id}` | Отримати дані конкретної категорії за ID (`FR-012`) | 200 OK | 404 Not Found, 422, 503 Service Unavailable |
+| `POST` | `/api/v1/categories` | Створити нову категорію (Адміністратор, `FR-012`) | 201 Created | 401 Unauthorized, 403 Forbidden, 409 Conflict, 422, 503 Service Unavailable |
+| `PATCH` | `/api/v1/categories/{id}` | Оновити або деактивувати категорію (Адміністратор, `FR-012`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict, 422, 503 Service Unavailable |
+| `POST` | `/api/v1/category-suggestions` | Створити пропозицію нової категорії (автентифікований користувач, до 3 `PENDING`, `FR-015`) | 201 Created | 401 Unauthorized, 403 Forbidden, 409 Conflict, 422, 429 Too Many Requests, 503 Service Unavailable |
+| `GET` | `/api/v1/category-suggestions?status=PENDING` | Черга пропозицій категорій з `listings_count` (Адміністратор, `FR-015`) | 200 OK | 401 Unauthorized, 403 Forbidden, 422, 503 Service Unavailable |
+| `POST` | `/api/v1/category-suggestions/{id}/approve` | Схвалити пропозицію, створити категорію й перенести активні оголошення з «Інше» (Адміністратор, `FR-015`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict, 422, 503 Service Unavailable |
+| `POST` | `/api/v1/category-suggestions/{id}/reject` | Відхилити пропозицію з обов'язковою причиною 5–500 символів (Адміністратор, `FR-015`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict, 422, 503 Service Unavailable |
 | `GET` | `/api/v1/auth/login` | Розпочати Microsoft Entra ID Authorization Code Flow; опційний `next` зберігає внутрішній маршрут для повернення після входу | 307 Temporary Redirect | 422 Unprocessable Entity, 502 Bad Gateway, 503 Service Unavailable |
-| `GET` | `/api/v1/auth/callback` | Перевірити callback та створити локальну сесію | 303 See Other | 400 Bad Request, 401 Unauthorized, 403 Forbidden |
-| `GET` | `/api/v1/auth/me` | Отримати поточного користувача | 200 OK | 401 Unauthorized, 403 Forbidden |
-| `PATCH` | `/api/v1/auth/me` | Змінити власне ім'я та/або контакти за замовчуванням; передані поля оновлюються, `contact: null` очищає (`FR-014`) | 200 OK | 401 Unauthorized, 403 Forbidden, 422 |
-| `PUT` | `/api/v1/auth/me/avatar` | Завантажити або замінити аватарку, `multipart/form-data`, поле `file` (JPEG, PNG, WebP, HEIC/HEIF до 10 МБ; нормалізується до WebP, метадані видаляються) (`FR-014`) | 200 OK | 401 Unauthorized, 403 Forbidden, 422 |
-| `DELETE` | `/api/v1/auth/me/avatar` | Видалити аватарку (`FR-014`) | 200 OK | 401 Unauthorized, 403 Forbidden |
-| `GET` | `/api/v1/users/{user_id}` | Публічний профіль для автентифікованих: лише `user_id`, `display_name`, `avatar_url`; без email, ролі й контактів (`FR-014`, `SEC-002`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 |
+| `GET` | `/api/v1/auth/callback` | Перевірити callback та створити локальну сесію | 303 See Other | 400 Bad Request, 401 Unauthorized, 403 Forbidden, 503 Service Unavailable |
+| `GET` | `/api/v1/auth/me` | Отримати поточного користувача | 200 OK | 401 Unauthorized, 403 Forbidden, 503 Service Unavailable |
+| `PATCH` | `/api/v1/auth/me` | Змінити власне ім'я та/або контакти за замовчуванням; передані поля оновлюються, `contact: null` очищає (`FR-014`) | 200 OK | 401 Unauthorized, 403 Forbidden, 422, 503 Service Unavailable |
+| `PUT` | `/api/v1/auth/me/avatar` | Завантажити або замінити аватарку, `multipart/form-data`, поле `file` (JPEG, PNG, WebP, HEIC/HEIF до 10 МБ; нормалізується до WebP, метадані видаляються) (`FR-014`) | 200 OK | 401 Unauthorized, 403 Forbidden, 422, 503 Service Unavailable |
+| `DELETE` | `/api/v1/auth/me/avatar` | Видалити аватарку (`FR-014`) | 200 OK | 401 Unauthorized, 403 Forbidden, 503 Service Unavailable |
+| `GET` | `/api/v1/users/{user_id}` | Публічний профіль для автентифікованих: лише `user_id`, `display_name`, `avatar_url`; без email, ролі й контактів (`FR-014`, `SEC-002`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422, 503 Service Unavailable |
 | `POST` | `/api/v1/auth/logout` | Завершити локальну сесію | 204 No Content | — |
 
 ---
@@ -171,6 +172,14 @@
 }
 ```
 
+Якщо PostgreSQL недоступний (тайм-аут підключення, вичерпаний пул з'єднань, запит перевищив `statement_timeout` або обірвалось уже відкрите з'єднання), кожна операція, що звертається до БД, повертає `503 Service Unavailable` із заголовком `Retry-After: 5` і тілом без внутрішніх деталей (REL-03, `docs/reliability/reliability-report.md`). Тому `503` вказано в таблиці ендпоінтів для всіх операцій, крім `POST /api/v1/auth/logout` і `/health`, які БД не використовують:
+
+```json
+{
+  "detail": "База даних тимчасово недоступна. Спробуйте за кілька секунд."
+}
+```
+
 ---
 > ### Нотатка «Використання ШІ»
 > - **Інструменти:** Gemini, OpenAI Codex.
@@ -178,3 +187,5 @@
 > - **Що згенеровано:** Опис розділів 2.7 і 2.10 (завантаження та нормалізація фотографій, захист від decompression bomb, видалення метаданих, thumbnail, UUID ключі, TTL/квоти staged-завантажень, очищення при PATCH, квота 3 `PENDING`-пропозицій з відповіддю HTTP 429), оновлення таблиці полів і ендпоінтів (`/api/v1/category-suggestions`).
 > - **Що перевірено / відкинуто вручну:** Опис звірено з кодом `ImageStorage`, `LocalImageStorage`, `CategorySuggestionService`, роутерами `POST /api/v1/listings/images`, `/api/v1/category-suggestions`, `/api/v1/listings` та згенерованим `openapi-generated.yaml`.
 > - **Доповнення (Артем Солодкий, FR-001, FR-013, FR-014):** Claude (Anthropic) допоміг сформулювати зміни: Додано endpoints профілю (`PATCH /auth/me`, `PUT`/`DELETE /auth/me/avatar`, `GET /users/{id}`) і блокування (`POST /admin/users/{id}/block`, `/unblock`). Додано блокування за email (`POST /admin/users/block-by-email`, `/unblock-by-email`; адреса в тілі запиту). Звірено вручну з кодом, тестами та згенерованим OpenAPI; повний набір тестів, black, flake8 і перевірку простежуваності запущено.
+> - **Доповнення (Богдан Солонина, REL-02):** Claude (Anthropic) допоміг описати коди відповіді `GET /uploads/{storage_key}`; звірено з кодом `get_uploaded_image` і тестами `tests/reliability/test_image_read_reliability.py`.
+> - **Доповнення (Богдан Солонина, REL-03):** Claude (Anthropic) допоміг описати відповідь `503 Service Unavailable` при недоступній БД. Перелік ендпоінтів із `503` звірено зі згенерованим `openapi-generated.yaml`, де `503` додається автоматично лише операціям, що відкривають сесію БД.

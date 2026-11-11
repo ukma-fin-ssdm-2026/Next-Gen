@@ -130,7 +130,7 @@ def scan_tests_ast(tests_dir: Path) -> dict[str, list[str]]:
     """Сканує AST тестових файлів і повертає мапу {case_id: [functions]}."""
     case_to_functions: dict[str, list[str]] = {}
 
-    for py_file in tests_dir.glob("test_*.py"):
+    for py_file in tests_dir.rglob("test_*.py"):
         try:
             tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
         except Exception:
@@ -161,7 +161,7 @@ def scan_all_test_functions(tests_dir: Path) -> list[dict[str, object]]:
     """Сканує AST кожної тестової функції у tests/test_*.py."""
     functions_info: list[dict[str, object]] = []
 
-    for py_file in sorted(tests_dir.glob("test_*.py")):
+    for py_file in sorted(tests_dir.rglob("test_*.py")):
         if py_file.name == "test_traceability.py":
             continue
         try:
@@ -199,7 +199,7 @@ def scan_tests_requirements_ast(tests_dir: Path) -> dict[str, list[str]]:
     """Сканує AST і повертає мапу {requirement_id: [function_names]}."""
     req_to_functions: dict[str, list[str]] = {}
 
-    for py_file in tests_dir.glob("test_*.py"):
+    for py_file in tests_dir.rglob("test_*.py"):
         if py_file.name == "test_traceability.py":
             continue
         try:
