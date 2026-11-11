@@ -1299,6 +1299,12 @@ paths:
         '503':
           description: Entra ID not configured; або база даних тимчасово недоступна
             (REL-03)
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 5
           content:
             application/json:
               schema:
@@ -1363,6 +1369,12 @@ paths:
         '503':
           description: Entra ID not configured; або база даних тимчасово недоступна
             (REL-03)
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 5
           content:
             application/json:
               schema:
@@ -1412,6 +1424,12 @@ paths:
         '503':
           description: Entra ID not configured; або база даних тимчасово недоступна
             (REL-03)
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 5
           content:
             application/json:
               schema:

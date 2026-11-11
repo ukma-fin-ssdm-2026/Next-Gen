@@ -126,10 +126,15 @@ def _declare_database_unavailable(router: APIRouter) -> None:
             )
         else:
             # Ендпоінт уже повертає 503 з іншої причини (Entra не налаштовано).
+            # Retry-After додається лише у відповідь про недоступну БД.
             route.responses[status.HTTP_503_SERVICE_UNAVAILABLE] = {
                 **existing,
                 "description": f"{existing['description']}; "
                 "або база даних тимчасово недоступна (REL-03)",
+                "headers": {
+                    **existing.get("headers", {}),
+                    **DB_UNAVAILABLE_RESPONSE["headers"],
+                },
             }
 
 
