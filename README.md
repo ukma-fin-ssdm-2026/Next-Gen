@@ -159,7 +159,7 @@ Baraholka NaUKMA — вебзастосунок для обміну речами
 | [Lab 6](Labs/Lab06/) (`Labs/Lab06/`) | [відео](Labs/Lab06/video_Cherniavskyi.txt) · [TDD](Labs/Lab06/videoTDD_Cherniavskyi.txt) | [відео](Labs/Lab06/video_Ostapenko.txt) | [відео](Labs/Lab06/video_Solodkyi.txt) | [відео](Labs/Lab06/video_Solonyna.txt) |
 | [Lab 7](Labs/Lab07/) (`Labs/Lab07/`) | [відео](Labs/Lab07/video_Cherniavskyi.txt) | [відео](Labs/Lab07/video_Ostapenko.txt) | [відео](Labs/Lab07/video_Solodkyi.txt) | [відео](Labs/Lab07/video_Solonyna.txt) |
 | [Lab 8](Labs/Lab08/) (`Labs/Lab08/`) | [відео](Labs/Lab08/video_Cherniavskyi.txt) | [відео](Labs/Lab08/video_Ostapenko.txt) | — | [відео](Labs/Lab08/video_Solonyna.txt) |
-| [Lab 9](Labs/Lab09/) (`Labs/Lab09/`) | — | [відео](Labs/Lab09/video_Ostapenko.txt) | [відео](Labs/Lab09/video_Solodkyi.txt) | [відео](Labs/Lab09/video_Solonyna.txt) |
+| [Lab 9](Labs/Lab09/) (`Labs/Lab09/`) | [відео](Labs/Lab09/video_Cherniavskyi.txt) | [відео](Labs/Lab09/video_Ostapenko.txt) | [відео](Labs/Lab09/video_Solodkyi.txt) | [відео](Labs/Lab09/video_Solonyna.txt) |
 
 ## Швидкий запуск та перевірки якості коду
 
