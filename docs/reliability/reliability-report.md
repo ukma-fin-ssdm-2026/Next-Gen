@@ -239,7 +239,7 @@ async def database_unavailable_handler(request: Request, exc: Exception) -> JSON
     )
 ```
 
-**Застосовані патерни:** тайм-аут на зовнішню операцію (`connect_timeout` драйвера і `pool_timeout` пулу), захисна перевірка конфігурації на старті (`read_timeout_seconds`), вузьке перехоплення (`OperationalError` і `TimeoutError` пулу, а не `Exception`), логування збою, безпечне повідомлення користувачу без внутрішніх деталей. Тайм-аути налаштовуються змінними `DB_CONNECT_TIMEOUT_SECONDS` і `DB_POOL_TIMEOUT_SECONDS` (`.env.example`).
+**Застосовані патерни:** тайм-аут на зовнішню операцію (`connect_timeout` драйвера і `pool_timeout` пулу), захисна перевірка конфігурації на старті (`read_timeout_seconds`), вузьке перехоплення (`OperationalError` і `TimeoutError` пулу, а не `Exception`), логування збою, безпечне повідомлення користувачу без внутрішніх деталей. Тайм-аути налаштовуються змінними `DB_CONNECT_TIMEOUT_SECONDS` і `DB_POOL_TIMEOUT_SECONDS` (`.env.example`). Engine створюється ліниво, тому значення перевіряє ще й `validate_database_settings()` у `lifespan` FastAPI: з некоректним тайм-аутом застосунок не стартує, а не віддає `500` на першому запиті до БД. Відповідь `503` задекларована в OpenAPI (`docs/api/openapi-generated.yaml`) і в `docs/api/api-design.md` лише для операцій, що відкривають сесію БД.
 
 ---
 
@@ -291,6 +291,7 @@ async def database_unavailable_handler(request: Request, exc: Exception) -> JSON
 | **REL-03: конфігурація engine** | `test_engine_is_built_with_connect_and_pool_timeouts` | Engine створюється з `connect_args={"connect_timeout": ...}`, `pool_timeout` і `pool_pre_ping=True`. | `PASSED` |
 | **REL-03: ін'єкція збою** | `test_unavailable_database_returns_503_without_internal_details` | Тестовий дублер залежності `get_db_session` імітує недоступний PostgreSQL (`OperationalError`) і вичерпаний пул (`TimeoutError`). `GET /api/v1/listings` повертає `503` з `Retry-After`, текст без внутрішніх деталей, збій потрапляє в лог (`caplog`). | `PASSED` (2 кейси) |
 | **REL-03: відновлення** | `test_catalog_recovers_when_database_is_back` | Після збою той самий запит повертає `200`, щойно залежність знову доступна, без перезапуску застосунку. | `PASSED` |
+| **REL-03: старт і контракт API** | `test_startup_fails_fast_on_invalid_timeout_when_database_is_configured`, `test_startup_succeeds_with_valid_timeouts_or_without_database`, `test_openapi_declares_503_only_where_database_is_used` | З `DATABASE_URL` некоректний тайм-аут зупиняє старт до першого запиту; коректний або in-memory режим стартує. OpenAPI має `503` з `Retry-After` для операцій із БД і не має його в `/health` та `POST /api/v1/auth/logout`. | `PASSED` (5 кейсів) |
 
 Команда запуску:
 ```bash
