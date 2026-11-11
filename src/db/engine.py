@@ -56,6 +56,21 @@ def read_timeout_seconds(name: str, default: int) -> int:
     return value
 
 
+def validate_database_settings() -> None:
+    """Перевіряє тайм-аути БД під час старту застосунку, до прийому запитів.
+
+    Engine створюється ліниво, тому без цієї перевірки помилка в змінній
+    з'явилася б лише на першому запиті до БД. Без DATABASE_URL (in-memory)
+    тайм-аути не використовуються і не перевіряються.
+    """
+    if not os.getenv("DATABASE_URL", "").strip():
+        return
+    read_timeout_seconds(
+        "DB_CONNECT_TIMEOUT_SECONDS", DEFAULT_DB_CONNECT_TIMEOUT_SECONDS
+    )
+    read_timeout_seconds("DB_POOL_TIMEOUT_SECONDS", DEFAULT_DB_POOL_TIMEOUT_SECONDS)
+
+
 def build_engine(url: str, *, connect_timeout: int, pool_timeout: int) -> Engine:
     """Створює Engine з обмеженим часом підключення та очікування пулу."""
     return create_engine(
