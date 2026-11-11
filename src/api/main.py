@@ -1,13 +1,16 @@
 """Точка входу FastAPI: маршрутизація та службові ендпоінти."""
 
+import logging
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
-from fastapi import Depends, FastAPI, HTTPException, Response, status
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 from src import __version__
 from src.api.deps import get_image_storage
@@ -36,6 +39,35 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+logger = logging.getLogger(__name__)
+
+# REL-03: швидка відмова при недоступній БД. Клієнт отримує 503 з Retry-After
+# замість зависання чи 500 з внутрішніми деталями; пул сам перепідключається
+# (pool_pre_ping), коли PostgreSQL знову доступний.
+DB_UNAVAILABLE_DETAIL = "База даних тимчасово недоступна. Спробуйте за кілька секунд."
+DB_RETRY_AFTER_SECONDS = 5
+
+
+@app.exception_handler(OperationalError)
+@app.exception_handler(PoolTimeoutError)
+async def database_unavailable_handler(
+    request: Request, exc: Exception
+) -> JSONResponse:
+    """Перетворює збій підключення до БД або вичерпаний пул на HTTP 503."""
+    logger.error(
+        "База даних недоступна під час %s %s: %s",
+        request.method,
+        request.url.path,
+        type(exc).__name__,
+        exc_info=exc,
+    )
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": DB_UNAVAILABLE_DETAIL},
+        headers={"Retry-After": str(DB_RETRY_AFTER_SECONDS)},
+    )
+
 
 app.include_router(listings.router, prefix="/api/v1")
 app.include_router(contacts.router, prefix="/api/v1")
