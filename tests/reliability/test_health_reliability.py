@@ -17,7 +17,7 @@ def _client_with_probe(probe: Callable[[], str]) -> TestClient:
 
 
 def test_readiness_reports_ready_when_database_responds() -> None:
-    """[REL-001] REL-08: успішний probe підтверджує готовність залежності."""
+    """[FR-006] REL-08: успішний probe підтверджує готовність залежності."""
     client = _client_with_probe(lambda: "ok")
     try:
         response = client.get("/health/ready")
@@ -32,7 +32,7 @@ def test_readiness_reports_ready_when_database_responds() -> None:
 def test_readiness_fault_injection_returns_safe_503(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """[REL-001] REL-08: збій PostgreSQL дає безпечну 503 без витоку деталей."""
+    """[FR-006] REL-08: збій PostgreSQL дає безпечну 503 без витоку деталей."""
 
     def failed_probe() -> str:
         raise OperationalError(
@@ -57,7 +57,7 @@ def test_readiness_fault_injection_returns_safe_503(
 
 
 def test_liveness_remains_available_during_database_failure() -> None:
-    """[REL-001] REL-08: падіння залежності не означає падіння процесу API."""
+    """[FR-006] REL-08: падіння залежності не означає падіння процесу API."""
 
     def failed_probe() -> str:
         raise OperationalError("SELECT 1", {}, OSError("database unavailable"))
