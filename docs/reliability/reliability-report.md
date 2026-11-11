@@ -215,14 +215,26 @@ def read_timeout_seconds(name: str, default: int) -> int:
         raise RuntimeError(f"{name} має бути більшим за 0, отримано {value}")
     return value
 
-def build_engine(url: str, *, connect_timeout: int, pool_timeout: int) -> Engine:
+def build_engine(
+    url: str, *, connect_timeout: int, pool_timeout: int, statement_timeout: int
+) -> Engine:
+    statement_timeout_ms = statement_timeout * 1000
     return create_engine(
         url,
         pool_pre_ping=True,
         pool_size=5,
         max_overflow=10,
         pool_timeout=pool_timeout,
-        connect_args={"connect_timeout": connect_timeout},
+        hide_parameters=True,
+        connect_args={
+            "connect_timeout": connect_timeout,
+            "options": f"-c statement_timeout={statement_timeout_ms}",
+            "keepalives": 1,
+            "keepalives_idle": DB_KEEPALIVES_IDLE_SECONDS,
+            "keepalives_interval": DB_KEEPALIVES_INTERVAL_SECONDS,
+            "keepalives_count": DB_KEEPALIVES_COUNT,
+            "tcp_user_timeout": statement_timeout_ms,
+        },
         echo=...,
     )
 
@@ -239,7 +251,7 @@ async def database_unavailable_handler(request: Request, exc: Exception) -> JSON
     )
 ```
 
-**Застосовані патерни:** тайм-аут на зовнішню операцію (`connect_timeout` драйвера і `pool_timeout` пулу), захисна перевірка конфігурації на старті (`read_timeout_seconds`), вузьке перехоплення (`OperationalError` і `TimeoutError` пулу, а не `Exception`), логування збою, безпечне повідомлення користувачу без внутрішніх деталей. Тайм-аути налаштовуються змінними `DB_CONNECT_TIMEOUT_SECONDS` і `DB_POOL_TIMEOUT_SECONDS` (`.env.example`). Engine створюється ліниво, тому значення перевіряє ще й `validate_database_settings()` у `lifespan` FastAPI: з некоректним тайм-аутом застосунок не стартує, а не віддає `500` на першому запиті до БД. Відповідь `503` задекларована в OpenAPI (`docs/api/openapi-generated.yaml`) і в `docs/api/api-design.md` лише для операцій, що відкривають сесію БД.
+**Застосовані патерни:** тайм-аут на кожен етап роботи з БД: `connect_timeout` (нове з'єднання), `pool_timeout` (очікування вільного з'єднання), `statement_timeout` (запит на вже виданому з'єднанні, PostgreSQL сам його скасовує) і TCP keepalive з `tcp_user_timeout` (обрив мережі, коли сервер не відповідає взагалі); захисна перевірка конфігурації на старті (`read_timeout_seconds`), вузьке перехоплення (`OperationalError` і `TimeoutError` пулу, а не `Exception`), логування збою, безпечне повідомлення користувачу без внутрішніх деталей. Тайм-аути налаштовуються змінними `DB_CONNECT_TIMEOUT_SECONDS`, `DB_POOL_TIMEOUT_SECONDS` і `DB_STATEMENT_TIMEOUT_SECONDS` (`.env.example`; 5, 10 і 10 с). `hide_parameters=True` прибирає значення параметрів SQL з тексту винятків, тож дані користувачів не потрапляють у лог обробника `503`. Engine створюється ліниво, тому значення перевіряє ще й `validate_database_settings()` у `lifespan` FastAPI: з некоректним тайм-аутом застосунок не стартує, а не віддає `500` на першому запиті до БД. Відповідь `503` задекларована в OpenAPI (`docs/api/openapi-generated.yaml`) і в `docs/api/api-design.md` лише для операцій, що відкривають сесію БД.
 
 ---
 
@@ -270,7 +282,7 @@ async def database_unavailable_handler(request: Request, exc: Exception) -> JSON
 |---|---|---|---|---|
 | **REL-01** (Entra OIDC) | **Швидка відмова (Fail Fast) після обмежених повторів** | Автентифікація є критичною межею безпеки (`FR-001`, `SEC-001`). Повернення «резервного» чи анонімного профілю при збої Entra ID неприпустиме, бо порушує контроль доступу. Після 3 швидких спроб для ідемпотентного `begin()` система контрольовано перериває запит. | На `/api/v1/auth/login` — контрольована відповідь `HTTP 502 Bad Gateway` з повідомленням *«Сервіс автентифікації Microsoft тимчасово недоступний»* (без крашу `500`). Інші публічні сторінки маркетплейсу працюють штатно. | **Автоматичне відновлення при повторній спробі (Bounded Retry + Stateless Recovery):** короткочасний мережевий збій долається автоматично під час 3 спроб з full jitter; при тривалому падінні Microsoft наступний натиск «Увійти» після підняття сервісу працює без ручного втручання. |
 | **REL-02** (Читання фото з диска) | **Швидка відмова (Fail Fast) з розмежуванням 404/500** | Відсутність файлу (`InvalidListingImageError`) — штатна ситуація (`404`), а аварія диска (`OSError`/`PermissionError`) — інфраструктурний збій, який не можна маскувати під `404`. | При відсутності фото — `404 Not Found` (фронтенд підставляє іконку-заглушку товару). При аварії диска — контрольований `500` і запис у серверний лог помилок. | **Локалізована деградація + втручання оператора:** каталог оголошень і тексти продовжують працювати; після відновлення прав доступу або примонтування тома роздача фото відновлюється автоматично. |
-| **REL-03** (Таймаут підключення до БД) | **Швидка відмова (Fail Fast)** | При недоступності PostgreSQL очікування протягом 120 с вичерпує всі потоки сервера. Обмеження `connect_timeout=5` швидко звільняє потік і сигналізує про проблему. | Не довше ніж за `connect_timeout` (5 с) або `pool_timeout` (10 с) API повертає `503 Service Unavailable` з заголовком `Retry-After: 5` і повідомленням *«База даних тимчасово недоступна. Спробуйте за кілька секунд.»* замість зависання сторінки чи `500`; причина збою записується в серверний лог. | **Автоматичне перепідключення пулу (`pool_pre_ping=True`):** коли база даних піднімається, SQLAlchemy автоматично перевіряє життєздатність з'єднання перед видачею з пулу і відновлює роботу без перезапуску контейнера API. |
+| **REL-03** (Таймаут підключення до БД) | **Швидка відмова (Fail Fast)** | При недоступності PostgreSQL очікування протягом 120 с вичерпує всі потоки сервера. Обмеження `connect_timeout=5` швидко звільняє потік і сигналізує про проблему. | Не довше ніж за `connect_timeout` (5 с), `pool_timeout` (10 с) або `statement_timeout` (10 с) API повертає `503 Service Unavailable` з заголовком `Retry-After: 5` і повідомленням *«База даних тимчасово недоступна. Спробуйте за кілька секунд.»* замість зависання сторінки чи `500`; причина збою записується в серверний лог. | **Автоматичне перепідключення пулу (`pool_pre_ping=True`):** коли база даних піднімається, SQLAlchemy автоматично перевіряє життєздатність з'єднання перед видачею з пулу і відновлює роботу без перезапуску контейнера API. |
 | **REL-04** (Обмеження вибірки каталогу) | **Безпечна відмова / Контрольована деградація (Fail Safe bound)** | Замість завантаження необмеженої кількості рядків, що веде до `Out-Of-Memory`, безпечніше обмежити верхню межу вибірки (`LIMIT`) і повернути найновіші активні оголошення. | Користувач бачить перші сторінки найактуальніших оголошень та використовує пошук/фільтри за категоріями. | **Штатна робота в межах квоти пам'яті:** процес бекенда залишається стабільним при будь-якому розмірі таблиці в БД. |
 | **REL-05** (Пробільні поля `title`/`contact` в оголошеннях) | **Швидка відмова (Fail Fast)** | Рядки, що складаються лише з пробілів (`"   "`), мають відхилятися на вхідній межі (`422`) та в доменній сутності `Listing`, щоб у базу даних не потрапляли порожні оголошення чи контакти. | Клієнт отримує чітку помилку валідації (`422 Unprocessable Content`) із поясненням, що назва та контакти не можуть складатися лише з пробілів. | **Виправлення вводу клієнтом:** продавець вводить змістовну назву оголошення та реальні контактні дані й повторно надсилає запит. |
 | **REL-06** (Логування при видаленні блобів) | **Безпечна відмова (Fail Safe) з логуванням** | Помилка видалення старого файлу зображення під час очищення не повинна ламати основну бізнес-операцію користувача (видалення чи оновлення оголошення), але мусить залишати слід у логах. | Основна операція користувача завершується успішно; користувач не бачить збою. | **Фонове/ручне очищення:** оператор бачить `WARNING` у логах із ключем незношеного блоба і може усунути проблему з правами або очистити диск. |
@@ -291,6 +303,7 @@ async def database_unavailable_handler(request: Request, exc: Exception) -> JSON
 | **REL-03: конфігурація engine** | `test_engine_is_built_with_connect_and_pool_timeouts` | Engine створюється з `connect_args={"connect_timeout": ...}`, `pool_timeout` і `pool_pre_ping=True`. | `PASSED` |
 | **REL-03: ін'єкція збою** | `test_unavailable_database_returns_503_without_internal_details` | Тестовий дублер залежності `get_db_session` імітує недоступний PostgreSQL (`OperationalError`) і вичерпаний пул (`TimeoutError`). `GET /api/v1/listings` повертає `503` з `Retry-After`, текст без внутрішніх деталей, збій потрапляє в лог (`caplog`). | `PASSED` (2 кейси) |
 | **REL-03: відновлення** | `test_catalog_recovers_when_database_is_back` | Після збою той самий запит повертає `200`, щойно залежність знову доступна, без перезапуску застосунку. | `PASSED` |
+| **REL-03: збій на відкритому з'єднанні** | `test_in_flight_query_timeout_returns_503`, `test_postgres_cancels_query_that_exceeds_statement_timeout` | Дублер сесії обриває вже розпочатий запит каталогу (`OperationalError` тайм-ауту): API повертає `503` без тексту помилки й параметрів запиту. На реальному PostgreSQL (job `postgres-migration` у CI) engine з `statement_timeout=1` обриває `SELECT pg_sleep(5)` з `OperationalError` менш ніж за 3 с. | `PASSED` (PostgreSQL-тест — у CI) |
 | **REL-03: старт і контракт API** | `test_startup_fails_fast_on_invalid_timeout_when_database_is_configured`, `test_startup_succeeds_with_valid_timeouts_or_without_database`, `test_openapi_declares_503_only_where_database_is_used` | З `DATABASE_URL` некоректний тайм-аут зупиняє старт до першого запиту; коректний або in-memory режим стартує. OpenAPI має `503` з `Retry-After` для операцій із БД і не має його в `/health` та `POST /api/v1/auth/logout`. | `PASSED` (5 кейсів) |
 
 Команда запуску:
@@ -305,7 +318,7 @@ pytest -q tests/reliability/
 На момент формування цього звіту:
 1. **Виправлено та покрито тестами надійності:**
    - **REL-01** (`src/integrations/entra.py` — тайм-аут клієнта MSAL, обмежені повтори з експоненційним відступом і full jitter, захисні перевірки, перехоплення мережевих збоїв та логування).
-   - **REL-03** (`src/db/engine.py`, `src/api/main.py` — `connect_timeout` і `pool_timeout` для PostgreSQL, перевірка конфігурації тайм-аутів, HTTP 503 з `Retry-After` і логуванням при недоступній БД; `tests/reliability/test_database_reliability.py`).
+   - **REL-03** (`src/db/engine.py`, `src/api/main.py` — `connect_timeout`, `pool_timeout`, `statement_timeout` і TCP keepalive для PostgreSQL, перевірка конфігурації тайм-аутів, HTTP 503 з `Retry-After` і логуванням при недоступній БД; `tests/reliability/test_database_reliability.py`).
 2. **Передано в роботу учасникам команди для індивідуальних виправлень Етапу 3 та відеозвітів:**
    - **REL-02** (`src/api/main.py` — розділення клієнтської помилки `404` та системної відмови читання диска з логуванням).
    - **REL-04** (`src/repositories/postgres_listings.py` — обмеження верхньої межі вибірки каталогу).
