@@ -45,7 +45,9 @@ def test_storage_failure_returns_503_and_is_logged(
 ) -> None:
     """[TP-038] [REL-001] [FR-002]
     Ін'єкція збою: читання файлу з тома падає з OSError. Відповідь — 503 з
-    Retry-After і no-store (не 404 і не кешується), без шляхів на диску; збій у лозі.
+    Retry-After і no-store (не 404 і не кешується), без шляхів на диску. У лозі є
+    збій зі шляхом файлу з винятку, але немає значення з URL (захист від log
+    injection).
     """
 
     def failing_read(self):
@@ -60,7 +62,10 @@ def test_storage_failure_returns_503_and_is_logged(
     assert response.headers["Retry-After"] == str(IMAGE_STORAGE_RETRY_AFTER_SECONDS)
     assert response.headers["Cache-Control"] == "no-store"
     assert "/var/lib/uploads" not in response.text
-    assert any(KEY in record.getMessage() for record in caplog.records)
+    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert errors and errors[0].exc_info is not None
+    assert "/var/lib/uploads/x" in caplog.text
+    assert all(KEY not in record.getMessage() for record in caplog.records)
 
 
 def test_missing_file_and_invalid_key_stay_404(storage, tmp_path: Path) -> None:

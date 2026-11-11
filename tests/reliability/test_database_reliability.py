@@ -199,6 +199,24 @@ def test_postgres_cancels_query_that_exceeds_statement_timeout() -> None:
         engine.dispose()
 
 
+def test_db_failure_log_uses_route_template_not_raw_url(caplog) -> None:
+    """[TP-037] [REL-001]
+    Захист від log injection: у лог обробника 503 потрапляє шаблон маршруту, а не
+    шлях із запиту, тож закодований перенос рядка не підробить запис журналу.
+    """
+    app.dependency_overrides[deps.get_db_session] = _unavailable_session(
+        OperationalError("SELECT 1", {}, Exception("connection refused"))
+    )
+
+    with caplog.at_level(logging.ERROR, logger="src.api.main"):
+        response = TestClient(app).get("/api/v1/listings/x%0AFAKE-LOG-ENTRY")
+
+    assert response.status_code == 503
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("/api/v1/listings/{listing_id}" in message for message in messages)
+    assert all("FAKE-LOG-ENTRY" not in message for message in messages)
+
+
 def test_catalog_recovers_when_database_is_back() -> None:
     """[TP-037] [REL-001]
     Відновлення: після збою той самий запит проходить без перезапуску застосунку.
