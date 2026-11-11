@@ -1,13 +1,1 @@
-Loom: TODO — додати посилання після запису
-
-Роль: Failure Analyst
-Особиста знахідка: REL-08 — liveness endpoint не перевіряв PostgreSQL.
-
-У відео показати:
-1. Ланцюг fault → error → failure та високу критичність REL-08.
-2. GET /health як liveness процесу.
-3. GET /health/ready як readiness із перевіркою PostgreSQL.
-4. Fault-injection тест: при відмові БД readiness повертає безпечну 503,
-   а liveness залишається доступним.
-5. Відновлення: після повернення БД наступна readiness-перевірка знову дає 200.
-6. Бонус 2 — health check зовнішньої залежності.
+https://www.loom.com/share/67ed6dfaa84d494992009d780b9d89c3
