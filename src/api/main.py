@@ -65,6 +65,21 @@ app = FastAPI(
 
 logger = logging.getLogger(__name__)
 
+API_PREFIX = "/api/v1"
+
+
+def _route_template(request: Request) -> str:
+    """Шаблон маршруту запиту (без значень із URL) для безпечного логування."""
+    route = request.scope.get("route")
+    template = getattr(route, "path", None)
+    if template is None:
+        return "невідомий маршрут"
+    # Роутери API підключено з префіксом, а scope зберігає шлях без нього.
+    if request.scope.get("path", "").startswith(API_PREFIX + "/"):
+        return API_PREFIX + template
+    return template
+
+
 # REL-03: швидка відмова при недоступній БД. Клієнт отримує 503 з Retry-After
 # замість зависання чи 500 з внутрішніми деталями; пул сам перепідключається
 # (pool_pre_ping), коли PostgreSQL знову доступний.
@@ -95,10 +110,13 @@ async def database_unavailable_handler(
     Сюди потрапляють тайм-аут чи обрив з'єднання, скасований за
     `statement_timeout` запит (OperationalError) і вичерпаний пул (TimeoutError).
     """
+    # У лог пишемо шаблон маршруту (`/api/v1/listings/{listing_id}`), а не шлях
+    # із запиту: розкодований URL може містити перенос рядка (log injection).
+    route_path = _route_template(request)
     logger.error(
         "База даних недоступна під час %s %s: %s",
         request.method,
-        request.url.path,
+        route_path,
         type(exc).__name__,
         exc_info=exc,
     )
@@ -160,7 +178,7 @@ for _router in (
     activity.router,
 ):
     _declare_database_unavailable(_router)
-    app.include_router(_router, prefix="/api/v1")
+    app.include_router(_router, prefix=API_PREFIX)
 
 
 def _custom_openapi() -> dict:
@@ -256,9 +274,10 @@ def get_uploaded_image(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from None
     except OSError as exc:
         # REL-02: збій тома (права доступу, помилка диска) — не «фото немає».
+        # Значення з URL у лог не пишемо (log injection); шлях до файлу видно
+        # з самого винятку в exc_info.
         logger.error(
-            "Сховище фото недоступне під час читання %s: %s",
-            storage_key,
+            "Сховище фото недоступне під час читання файлу: %s",
             type(exc).__name__,
             exc_info=exc,
         )
