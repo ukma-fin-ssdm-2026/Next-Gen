@@ -151,9 +151,11 @@ def test_openapi_declares_503_only_where_database_is_used() -> None:
     assert "503" not in paths["/health"]["get"]["responses"]
     assert "503" not in paths["/api/v1/auth/logout"]["post"]["responses"]
 
-    login_503 = paths["/api/v1/auth/login"]["get"]["responses"]["503"]
-    assert "Entra ID not configured" in login_503["description"]
-    assert "база даних" in login_503["description"]
+    for auth_path in ("/api/v1/auth/login", "/api/v1/auth/callback", "/api/v1/auth/me"):
+        auth_503 = paths[auth_path]["get"]["responses"]["503"]
+        assert "Entra ID not configured" in auth_503["description"]
+        assert "база даних" in auth_503["description"]
+        assert "Retry-After" in auth_503["headers"]
 
 
 @pytest.mark.parametrize("raw", ["0", "abc"])
