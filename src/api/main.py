@@ -1,16 +1,31 @@
 """Точка входу FastAPI: маршрутизація та службові ендпоінти."""
 
+import logging
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
-from fastapi import Depends, FastAPI, HTTPException, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import FileResponse
+from fastapi.dependencies.models import Dependant
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 from src import __version__
-from src.api.deps import get_image_storage
+from src.api.deps import get_db_session, get_image_storage
 from src.api.routers import (
     activity,
     auth,
@@ -24,7 +39,16 @@ from src.api.routers import (
     moderation,
     users,
 )
+from src.db.engine import validate_database_settings
 from src.repositories.image_storage import STORAGE_KEY_PATTERN, ImageStorage
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Перевіряє налаштування БД до прийому запитів (REL-03, fail fast)."""
+    validate_database_settings()
+    yield
+
 
 app = FastAPI(
     title="Baraholka NaUKMA API",
@@ -35,19 +59,104 @@ app = FastAPI(
     version=__version__,
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
-app.include_router(listings.router, prefix="/api/v1")
-app.include_router(contacts.router, prefix="/api/v1")
-app.include_router(favorites.router, prefix="/api/v1")
-app.include_router(categories.router, prefix="/api/v1")
-app.include_router(category_suggestions.router, prefix="/api/v1")
-app.include_router(auth.router, prefix="/api/v1")
-app.include_router(moderation.router, prefix="/api/v1")
-app.include_router(users.router, prefix="/api/v1")
-app.include_router(complaints.router, prefix="/api/v1")
-app.include_router(feedback.router, prefix="/api/v1")
-app.include_router(activity.router, prefix="/api/v1")
+logger = logging.getLogger(__name__)
+
+# REL-03: швидка відмова при недоступній БД. Клієнт отримує 503 з Retry-After
+# замість зависання чи 500 з внутрішніми деталями; пул сам перепідключається
+# (pool_pre_ping), коли PostgreSQL знову доступний.
+DB_UNAVAILABLE_DETAIL = "База даних тимчасово недоступна. Спробуйте за кілька секунд."
+DB_RETRY_AFTER_SECONDS = 5
+DB_UNAVAILABLE_RESPONSE = {
+    "description": "База даних тимчасово недоступна (REL-03); повторіть запит пізніше",
+    "headers": {
+        "Retry-After": {
+            "description": "Через скільки секунд варто повторити запит",
+            "schema": {"type": "integer", "example": DB_RETRY_AFTER_SECONDS},
+        }
+    },
+    "content": {"application/json": {"example": {"detail": DB_UNAVAILABLE_DETAIL}}},
+}
+
+
+@app.exception_handler(OperationalError)
+@app.exception_handler(PoolTimeoutError)
+async def database_unavailable_handler(
+    request: Request, exc: Exception
+) -> JSONResponse:
+    """Перетворює недоступність БД на HTTP 503.
+
+    Сюди потрапляють тайм-аут чи обрив з'єднання, скасований за
+    `statement_timeout` запит (OperationalError) і вичерпаний пул (TimeoutError).
+    """
+    logger.error(
+        "База даних недоступна під час %s %s: %s",
+        request.method,
+        request.url.path,
+        type(exc).__name__,
+        exc_info=exc,
+    )
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": DB_UNAVAILABLE_DETAIL},
+        headers={"Retry-After": str(DB_RETRY_AFTER_SECONDS)},
+    )
+
+
+def _depends_on(dependant: Dependant, target: Callable) -> bool:
+    """Чи є `target` серед залежностей ендпоінту (на будь-якій глибині)."""
+    return any(
+        sub.call is target or _depends_on(sub, target) for sub in dependant.dependencies
+    )
+
+
+def _declare_database_unavailable(router: APIRouter) -> None:
+    """Додає 503 лише операціям, які відкривають сесію БД (REL-03).
+
+    Тобто 503 бачать у контракті тільки ендпоінти, що справді можуть його
+    повернути; /health, /uploads і SPA його не отримують.
+    """
+    for route in router.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        if not _depends_on(route.dependant, get_db_session):
+            continue
+        existing = route.responses.get(status.HTTP_503_SERVICE_UNAVAILABLE)
+        if existing is None:
+            route.responses[status.HTTP_503_SERVICE_UNAVAILABLE] = (
+                DB_UNAVAILABLE_RESPONSE
+            )
+        else:
+            # Ендпоінт уже повертає 503 з іншої причини (Entra не налаштовано).
+            # Retry-After додається лише у відповідь про недоступну БД.
+            route.responses[status.HTTP_503_SERVICE_UNAVAILABLE] = {
+                **existing,
+                "description": f"{existing['description']}; "
+                "або база даних тимчасово недоступна (REL-03)",
+                "headers": {
+                    **existing.get("headers", {}),
+                    **DB_UNAVAILABLE_RESPONSE["headers"],
+                },
+            }
+
+
+for _router in (
+    listings.router,
+    contacts.router,
+    favorites.router,
+    categories.router,
+    category_suggestions.router,
+    auth.router,
+    moderation.router,
+    users.router,
+    complaints.router,
+    feedback.router,
+    activity.router,
+):
+    _declare_database_unavailable(_router)
+    app.include_router(_router, prefix="/api/v1")
 
 
 def _custom_openapi() -> dict:
