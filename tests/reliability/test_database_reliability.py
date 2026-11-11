@@ -46,7 +46,7 @@ def _clear_overrides():
 def test_timeout_env_accepts_default_and_positive_values(
     monkeypatch, raw, expected
 ) -> None:
-    """[TP-037] [REL-001]
+    """[TP-037] [FR-006]
     Порожня змінна дає значення за замовчуванням, додатне ціле читається як є.
     """
     monkeypatch.setenv("DB_CONNECT_TIMEOUT_SECONDS", raw)
@@ -61,7 +61,7 @@ def test_timeout_env_accepts_default_and_positive_values(
 
 @pytest.mark.parametrize("raw", ["0", "-5", "abc", "1.5"])
 def test_timeout_env_rejects_non_positive_or_non_integer(monkeypatch, raw) -> None:
-    """[TP-037] [REL-001]
+    """[TP-037] [FR-006]
     Граничні значення (0, від'ємне, нечислове, дробове) зупиняють старт із
     зрозумілою помилкою, а не вимикають тайм-аут непомітно.
     """
@@ -73,7 +73,7 @@ def test_timeout_env_rejects_non_positive_or_non_integer(monkeypatch, raw) -> No
 
 
 def test_engine_is_built_with_connect_pool_and_query_timeouts(monkeypatch) -> None:
-    """[TP-037] [REL-001]
+    """[TP-037] [FR-006]
     Engine обмежує підключення (`connect_timeout`), очікування пулу
     (`pool_timeout`) і вже відкрите з'єднання: `statement_timeout` для запиту,
     TCP keepalive і `tcp_user_timeout` для обірваної мережі; параметри SQL не
@@ -124,7 +124,7 @@ def _unavailable_session(exc: Exception):
     ids=["connect-timeout", "pool-exhausted"],
 )
 def test_unavailable_database_returns_503_without_internal_details(exc, caplog) -> None:
-    """[TP-037] [REL-001]
+    """[TP-037] [FR-006]
     Ін'єкція збою: сесія БД недоступна. Каталог відповідає 503 з Retry-After і
     зрозумілим повідомленням, внутрішні деталі не витікають, збій записано в лог.
     """
@@ -156,7 +156,7 @@ class _HangingSession:
 
 
 def test_in_flight_query_timeout_returns_503(caplog) -> None:
-    """[TP-037] [REL-001]
+    """[TP-037] [FR-006]
     Ін'єкція збою під час уже відкритого з'єднання: запит каталогу обірвано
     тайм-аутом (statement_timeout / мережа). API відповідає 503, а не висить чи 500.
     """
@@ -177,7 +177,7 @@ def test_in_flight_query_timeout_returns_503(caplog) -> None:
 
 @requires_postgres
 def test_postgres_cancels_query_that_exceeds_statement_timeout() -> None:
-    """[TP-037] [REL-001]
+    """[TP-037] [FR-006]
     Реальний PostgreSQL: engine з `statement_timeout=1` обриває `pg_sleep(5)`
     приблизно за секунду через OperationalError (його API перетворює на 503).
     Підключення з усіма параметрами з'єднання підтверджує, що libpq їх приймає.
@@ -200,7 +200,7 @@ def test_postgres_cancels_query_that_exceeds_statement_timeout() -> None:
 
 
 def test_db_failure_log_uses_route_template_not_raw_url(caplog) -> None:
-    """[TP-037] [REL-001]
+    """[TP-037] [FR-006]
     Захист від log injection: у лог обробника 503 потрапляє шаблон маршруту, а не
     шлях із запиту, тож закодований перенос рядка не підробить запис журналу.
     """
@@ -218,7 +218,7 @@ def test_db_failure_log_uses_route_template_not_raw_url(caplog) -> None:
 
 
 def test_catalog_recovers_when_database_is_back() -> None:
-    """[TP-037] [REL-001]
+    """[TP-037] [FR-006]
     Відновлення: після збою той самий запит проходить без перезапуску застосунку.
     """
     app.dependency_overrides[deps.get_db_session] = _unavailable_session(
@@ -232,7 +232,7 @@ def test_catalog_recovers_when_database_is_back() -> None:
 
 
 def test_openapi_declares_503_only_where_database_is_used() -> None:
-    """[TP-037] [REL-001]
+    """[TP-037] [FR-006]
     Контракт: 503 з Retry-After є в операціях, що відкривають сесію БД, і відсутній
     там, де БД не використовується (/health, вихід із системи).
     """
@@ -266,7 +266,7 @@ def test_openapi_declares_503_only_where_database_is_used() -> None:
 def test_startup_fails_fast_on_invalid_timeout_when_database_is_configured(
     monkeypatch, variable, raw
 ) -> None:
-    """[TP-037] [REL-001]
+    """[TP-037] [FR-006]
     З DATABASE_URL некоректний тайм-аут зупиняє старт застосунку ще до першого
     запиту, а не дає 500 на першому зверненні до БД.
     """
@@ -284,7 +284,7 @@ def test_startup_fails_fast_on_invalid_timeout_when_database_is_configured(
 def test_startup_succeeds_with_valid_timeouts_or_without_database(
     monkeypatch, database_url, timeout
 ) -> None:
-    """[TP-037] [REL-001]
+    """[TP-037] [FR-006]
     Коректні тайм-аути не заважають старту, а без DATABASE_URL (in-memory) вони
     не перевіряються; старт не підключається до БД.
     """
