@@ -43,7 +43,7 @@ def storage(tmp_path: Path):
 def test_storage_failure_returns_503_and_is_logged(
     storage, monkeypatch, caplog, fault
 ) -> None:
-    """[TP-038] [REL-001] [FR-002]
+    """[TP-038] [FR-002]
     Ін'єкція збою: читання файлу з тома падає з OSError. Відповідь — 503 з
     Retry-After і no-store (не 404 і не кешується), без шляхів на диску. У лозі є
     збій зі шляхом файлу з винятку, але немає значення з URL (захист від log
@@ -69,7 +69,7 @@ def test_storage_failure_returns_503_and_is_logged(
 
 
 def test_missing_file_and_invalid_key_stay_404(storage, tmp_path: Path) -> None:
-    """[TP-038] [REL-001] [FR-002]
+    """[TP-038] [FR-002]
     Граничні випадки: невідомий ключ, некоректний ключ і файл, видалений між
     перевіркою та читанням, — це штатний 404, а не збій сховища.
     """
@@ -92,7 +92,7 @@ def test_missing_file_and_invalid_key_stay_404(storage, tmp_path: Path) -> None:
 
 
 def test_existing_image_is_served_with_immutable_cache(storage) -> None:
-    """[TP-038] [REL-001] [FR-002]
+    """[TP-038] [FR-002]
     Штатний шлях не змінився: наявне фото віддається 200 image/webp з довгим кешем.
     """
     response = TestClient(app).get(f"/uploads/{KEY}")
@@ -104,7 +104,7 @@ def test_existing_image_is_served_with_immutable_cache(storage) -> None:
 
 
 def test_unexpected_error_is_not_masked_as_404(storage, monkeypatch) -> None:
-    """[TP-038] [REL-001] [FR-002]
+    """[TP-038] [FR-002]
     Помилка в коді (не OSError) більше не ховається під 404: клієнт бачить 500,
     а виняток доходить до серверного логування.
     """
@@ -120,7 +120,7 @@ def test_unexpected_error_is_not_masked_as_404(storage, monkeypatch) -> None:
 
 
 def test_in_memory_blob_removed_concurrently_is_404(monkeypatch) -> None:
-    """[TP-038] [REL-001] [FR-002]
+    """[TP-038] [FR-002]
     In-memory сховище: блоб зник між перевіркою та читанням — це 404, а не 500
     через KeyError.
     """
