@@ -56,6 +56,7 @@ import {
   FeedbackPage,
 } from "./SupportPanels";
 import { AdminReviewsPanel, MyRatingCard, SellerRatingBlock } from "./SellerRating";
+import { ChatPage, ContactSellerDialog, MessageIcon, useUnreadCount } from "./Chat";
 import { Pagination, usePaged } from "./Pagination";
 import type {
   BlockedStatus,
@@ -336,6 +337,8 @@ function App() {
         <Route path="/listings/new" element={<CreateListingPage user={user} authChecked={authChecked} categories={categories} onError={setError} onNotice={setNotice} />} />
         <Route path="/listings/:listingId/edit" element={<EditListingPage user={user} authChecked={authChecked} categories={categories} onError={setError} onNotice={setNotice} />} />
         <Route path="/sellers/:userId" element={<SellerPage user={user} authChecked={authChecked} categoryNames={categoryNames} favorites={favorites} busy={busy} onFavorite={(id) => void toggleFavorite(id)} onError={setError} onNotice={setNotice} />} />
+        <Route path="/messages" element={authChecked && !user ? <SignInRequired title="Повідомлення доступні після входу" /> : <ChatPage onError={setError} />} />
+        <Route path="/messages/:conversationId" element={authChecked && !user ? <SignInRequired title="Повідомлення доступні після входу" /> : <ChatPage onError={setError} />} />
         <Route path="/my" element={<MyListingsPage user={user} authChecked={authChecked} categoryNames={categoryNames} onError={setError} onNotice={setNotice} />} />
         <Route
           path="/listings/:listingId"
@@ -449,7 +452,7 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
   const [menuOpen, setMenuOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const onFormPage = /^\/(listings\/new|listings\/[^/]+\/edit|profile)\/?$/.test(location.pathname);
+  const onFormPage = /^\/(listings\/new|listings\/[^/]+\/edit|profile|messages(\/[^/]+)?)\/?$/.test(location.pathname);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
   useEffect(() => { setMenuOpen(false); setHidden(false); }, [location.pathname]);
@@ -485,6 +488,8 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
   }, [menuOpen]);
 
   const favoritesLabel = favoritesCount > 0 ? `Обране, збережено: ${favoritesCount}` : "Обране";
+  const unreadMessages = useUnreadCount(authChecked ? user : null);
+  const messagesLabel = unreadMessages > 0 ? `Повідомлення, непрочитаних: ${unreadMessages}` : "Повідомлення";
   const onCreatePage = location.pathname === "/listings/new";
 
   return (
@@ -498,6 +503,12 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
           <nav className="topnav" aria-label="Основна навігація">
             <NavLink to="/listings" end>Оголошення</NavLink>
           </nav>
+          {authChecked && user && (
+            <NavLink className="icon-button msg-button" to="/messages" aria-label={messagesLabel} title="Повідомлення">
+              <MessageIcon />
+              {unreadMessages > 0 && <span className="badge" aria-hidden="true">{unreadMessages > 99 ? "99+" : unreadMessages}</span>}
+            </NavLink>
+          )}
           {authChecked && user && (
             <NavLink className="icon-button fav-button" to="/favorites" aria-label={favoritesLabel} title="Обране">
               <HeartIcon />
@@ -554,6 +565,7 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
           <NavLink to="/listings" end>Оголошення</NavLink>
           <NavLink to="/listings/new">Створити оголошення</NavLink>
           {user && <NavLink to="/my">Мої оголошення</NavLink>}
+          {user && <NavLink to="/messages">Повідомлення{unreadMessages > 0 ? ` (${unreadMessages})` : ""}</NavLink>}
           {user && <NavLink to="/favorites">Обране{favoritesCount > 0 ? ` (${favoritesCount})` : ""}</NavLink>}
           {user && <NavLink to="/profile">Профіль</NavLink>}
           {user?.role === "ADMIN" && <NavLink to="/admin">Адмін-панель</NavLink>}
@@ -1565,6 +1577,7 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
   const [blockOpen, setBlockOpen] = useState(false);
   const [blockReason, setBlockReason] = useState("");
   const [complaintOpen, setComplaintOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
   const userId = user?.user_id ?? null;
 
   useEffect(() => {
@@ -1656,6 +1669,7 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
                 </>
               ) : (
                 <>
+                  {user && <button className="button button-primary" type="button" disabled={busy} onClick={() => setContactOpen(true)}>Написати продавцю</button>}
                   <button className="button button-light" disabled={busy} onClick={() => onFavorite(listing.id)}>{favorites.has(listing.id) ? "♥ В обраному" : "♡ Додати в обране"}</button>
                   {user ? (
                     <button className="button button-text report-button" type="button" disabled={busy} onClick={() => setComplaintOpen(true)}>Поскаржитись на оголошення</button>
@@ -1728,6 +1742,7 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
           </dl>
         </section>
       </div>
+      {contactOpen && <ContactSellerDialog listingId={listing.id} sellerName={sellerName} onClose={() => setContactOpen(false)} onError={onError} />}
       {complaintOpen && (
         <ComplaintDialog
           listingId={listing.id}

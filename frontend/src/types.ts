@@ -204,3 +204,53 @@ export interface AdminSellerReview extends OwnSellerReview {
   deleted_at: string | null;
   author_stats: { total_count: number; recent_count: number; recent_one_star_count: number };
 }
+
+export interface ChatListingCard {
+  listing_id: string;
+  available: boolean;
+  title: string | null;
+  price: number | null;
+  image_url: string | null;
+}
+
+export interface ChatMessage {
+  message_id: string;
+  conversation_id: string;
+  sender_id: string;
+  body: string;
+  created_at: string;
+  is_own: boolean;
+  listing: ChatListingCard | null;
+}
+
+export interface ChatParticipant {
+  user_id: string;
+  display_name: string;
+  avatar_url: string | null;
+}
+
+export interface ChatConversation {
+  conversation_id: string;
+  other: ChatParticipant;
+  last_message: ChatMessage | null;
+  last_message_at: string;
+  unread_count: number;
+}
+
+export interface ChatConversationPage {
+  items: ChatConversation[];
+  next_cursor: string | null;
+}
+
+export interface ChatMessagePage {
+  items: ChatMessage[];
+  before_cursor: string | null;
+  after_cursor: string | null;
+  has_more: boolean;
+}
+
+export interface ChatStartResult {
+  conversation_id: string;
+  message: ChatMessage;
+  created: boolean;
+}

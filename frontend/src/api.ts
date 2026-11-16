@@ -18,6 +18,10 @@ import type {
   ListingWithContact,
   ModerationAction,
   AdminSellerReview,
+  ChatConversationPage,
+  ChatMessage,
+  ChatMessagePage,
+  ChatStartResult,
   OwnSellerReview,
   PublicProfile,
   SellerContact,
@@ -352,4 +356,38 @@ export async function getSellerListings(sellerId: string, limit = 24, skip = 0):
   );
   const total = Number(response.headers.get("X-Total-Count"));
   return { items: response.data, total: Number.isFinite(total) && total >= 0 ? total : response.data.length };
+}
+
+// --- Чат між користувачами (ADR-005) ---
+
+export function startConversation(listingId: string, body: string): Promise<ChatStartResult> {
+  return apiFetch<ChatStartResult>(`/listings/${segment(listingId)}/conversation`, { method: "POST", body: JSON.stringify({ body }) });
+}
+
+export function getConversations(cursor?: string | null, limit = 30): Promise<ChatConversationPage> {
+  const query = `limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+  return apiFetch<ChatConversationPage>(`/conversations?${query}`);
+}
+
+export async function getUnreadCount(): Promise<number> {
+  return (await apiFetch<{ unread_count: number }>("/conversations/unread-count")).unread_count;
+}
+
+/** Без курсора — останні повідомлення; `before` гортає історію, `after` — опитування нових. */
+export function getMessages(
+  conversationId: string,
+  options: { before?: string | null; after?: string | null; limit?: number } = {},
+): Promise<ChatMessagePage> {
+  const pairs: string[] = [`limit=${options.limit ?? 50}`];
+  if (options.before) pairs.push(`before=${encodeURIComponent(options.before)}`);
+  else if (options.after) pairs.push(`after=${encodeURIComponent(options.after)}`);
+  return apiFetch<ChatMessagePage>(`/conversations/${segment(conversationId)}/messages?${pairs.join("&")}`);
+}
+
+export function sendChatMessage(conversationId: string, body: string): Promise<ChatMessage> {
+  return apiFetch<ChatMessage>(`/conversations/${segment(conversationId)}/messages`, { method: "POST", body: JSON.stringify({ body }) });
+}
+
+export function markConversationRead(conversationId: string): Promise<void> {
+  return apiFetch<void>(`/conversations/${segment(conversationId)}/read`, { method: "POST" });
 }

@@ -65,3 +65,20 @@ test("seller listings request filters by normalized seller id and reads the tota
   assert.deepEqual(page, { items: [], total: 0 });
   await assert.rejects(() => getSellerListings("../x"), /Некоректний ідентифікатор/);
 });
+
+test("chat requests keep UUID path segments and opaque cursors encoded", async () => {
+  const { getMessages, sendChatMessage, startConversation, markConversationRead, getConversations } = await import("../src/api.ts");
+  const calls = mockFetch(200, { items: [], next_cursor: null, before_cursor: null, after_cursor: null, has_more: false });
+  await getMessages(SELLER, { after: "a+b/c=" });
+  assert.equal(calls[0].url.pathname, "/api/v1/conversations/3fa85f64-5717-4562-b3fc-2c963f66afa6/messages");
+  assert.equal(calls[0].url.searchParams.get("after"), "a+b/c=");
+  assert.equal(calls[0].url.searchParams.get("before"), null);
+  await getConversations("x y");
+  assert.equal(calls[1].url.searchParams.get("cursor"), "x y");
+  await startConversation(LISTING, "Привіт");
+  assert.equal(calls[2].url.pathname, "/api/v1/listings/7c9e6679-7425-40de-944b-e07fc1f90ae7/conversation");
+  assert.deepEqual(JSON.parse(calls[2].init.body), { body: "Привіт" });
+  await sendChatMessage(SELLER, "Текст");
+  assert.equal(calls[3].init.method, "POST");
+  assert.throws(() => markConversationRead("../x"), /Некоректний ідентифікатор/);
+});
