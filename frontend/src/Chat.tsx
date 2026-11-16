@@ -220,7 +220,14 @@ function Thread({ conversation, onError, onNotice }: { conversation: ChatConvers
     setMessages((current) => {
       const known = new Set(current.map((item) => item.message_id));
       const fresh = incoming.filter((item) => !known.has(item.message_id));
-      return fresh.length ? [...current, ...fresh] : current;
+      if (!fresh.length) return current;
+      // Порядок як на бекенді: (created_at, message_id), а не порядок надходження.
+      return [...current, ...fresh].sort(
+        (a, b) =>
+          Date.parse(a.created_at) - Date.parse(b.created_at)
+          || a.created_at.localeCompare(b.created_at)
+          || a.message_id.localeCompare(b.message_id),
+      );
     });
   }, []);
 

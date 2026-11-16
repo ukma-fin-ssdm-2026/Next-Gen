@@ -29,12 +29,23 @@ from src.services.message_reports import MessageReportService, MessageReportView
 
 router = APIRouter(tags=["Chat reports"])
 
-_ERRORS = {
+_UNAUTHORIZED = {
     401: {"model": ErrorResponse, "description": "Немає валідної сесії"},
+}
+_FORBIDDEN = {
     403: {"model": ErrorResponse, "description": "Немає прав"},
+}
+_NOT_FOUND = {
     404: {"model": ErrorResponse, "description": "Не знайдено"},
+}
+_CONFLICT = {
     409: {"model": ErrorResponse, "description": "Конфлікт"},
 }
+
+# Лише відповіді, які кожен маршрут справді може повернути.
+_REPORT_ERRORS = {**_UNAUTHORIZED, **_FORBIDDEN, **_NOT_FOUND, **_CONFLICT}
+_LIST_ERRORS = {**_UNAUTHORIZED, **_FORBIDDEN}
+_RESOLVE_ERRORS = {**_UNAUTHORIZED, **_FORBIDDEN, **_NOT_FOUND, **_CONFLICT}
 
 
 class MessageReportCreateRequest(BaseModel):
@@ -119,7 +130,7 @@ def _http_error(exc: Exception) -> HTTPException:
         "від користувача на повідомлення; не-учасник і невідоме повідомлення "
         "дають однакову 404."
     ),
-    responses=_ERRORS,
+    responses=_REPORT_ERRORS,
 )
 def report_message(
     conversation_id: UUID,
@@ -147,7 +158,7 @@ def report_message(
     response_model=list[MessageReportResponse],
     summary="Список скарг на повідомлення (адміністратор)",
     description="Відкриті скарги першими; необов'язковий фільтр `status`.",
-    responses=_ERRORS,
+    responses=_LIST_ERRORS,
 )
 def list_message_reports(
     response: Response,
@@ -168,7 +179,7 @@ def list_message_reports(
     response_model=MessageReportResponse,
     summary="Розглянути скаргу на повідомлення (адміністратор)",
     description="Позначає скаргу RESOLVED або DISMISSED із необов'язковою приміткою.",
-    responses=_ERRORS,
+    responses=_RESOLVE_ERRORS,
 )
 def resolve_message_report(
     report_id: UUID,
