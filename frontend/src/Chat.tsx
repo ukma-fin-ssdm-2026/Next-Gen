@@ -1,4 +1,5 @@
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ApiError,
@@ -320,7 +321,26 @@ function Thread({ conversation, onError, onNotice }: { conversation: ChatConvers
   const composer = useRef<HTMLTextAreaElement>(null);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [reporting, setReporting] = useState<ChatMessage | null>(null);
-  useEffect(() => { setReplyTo(null); setReporting(null); }, [conversationId]);
+  const [menu, setMenu] = useState<{ message: ChatMessage; x: number; y: number } | null>(null);
+  useEffect(() => { setReplyTo(null); setReporting(null); setMenu(null); }, [conversationId]);
+
+  // Меню повідомлення (ПКМ, довге натискання або «⋯») закривається кліком повз, Esc, прокруткою чи зміною розміру.
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const onKey = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") close(); };
+    window.addEventListener("resize", close);
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("resize", close); window.removeEventListener("keydown", onKey); };
+  }, [menu]);
+
+  function openMenu(message: ChatMessage, x: number, y: number) {
+    setMenu({ message, x, y });
+  }
+
+  async function copyText(message: ChatMessage) {
+    try { await navigator.clipboard.writeText(message.body); } catch { onError("Не вдалося скопіювати текст"); }
+  }
 
   function startReply(message: ChatMessage) {
     setReplyTo(message);
@@ -373,7 +393,14 @@ function Thread({ conversation, onError, onNotice }: { conversation: ChatConvers
           return (
             <div key={message.message_id} id={`msg-${message.message_id}`} className="chat-row">
               {showDay && <div className="chat-day"><span>{dayLabel(message.created_at)}</span></div>}
-              <div className={`chat-bubble ${message.is_own ? "is-own" : "is-their"}`}>
+              <div
+                className={`chat-bubble ${message.is_own ? "is-own" : "is-their"}`}
+                onContextMenu={(event) => {
+                  if (window.getSelection()?.toString()) return; // лишаємо рідне меню для виділеного тексту
+                  event.preventDefault();
+                  openMenu(message, event.clientX, event.clientY);
+                }}
+              >
                 {message.reply_to && (
                   <button type="button" className="chat-quote" onClick={() => jumpTo(message.reply_to!.message_id)}>
                     <strong>{message.reply_to.is_own ? "Ви" : conversation.other.display_name}</strong>
@@ -384,7 +411,7 @@ function Thread({ conversation, onError, onNotice }: { conversation: ChatConvers
                 <p>{message.body}</p>
                 <div className="chat-meta">
                   <button type="button" className="chat-reply-btn" onClick={() => startReply(message)} aria-label="Відповісти на повідомлення">Відповісти</button>
-                  {!message.is_own && <button type="button" className="chat-reply-btn" onClick={() => setReporting(message)} aria-label="Поскаржитись на повідомлення">Поскаржитись</button>}
+                  <button type="button" className="chat-reply-btn chat-more-btn" aria-label="Дії з повідомленням" aria-haspopup="menu" onClick={(event) => { const box = event.currentTarget.getBoundingClientRect(); openMenu(message, box.right, box.bottom); }}>⋯</button>
                   <time dateTime={message.created_at}>{new Date(message.created_at).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</time>
                 </div>
               </div>
@@ -392,14 +419,26 @@ function Thread({ conversation, onError, onNotice }: { conversation: ChatConvers
           );
         })}
       </div>
-      {reporting && conversationId && (
+      {menu && createPortal(
+        <>
+          <div className="chat-menu-backdrop" onClick={() => setMenu(null)} onContextMenu={(event) => { event.preventDefault(); setMenu(null); }} />
+          <div className="chat-menu" role="menu" style={{ left: Math.max(8, Math.min(menu.x, window.innerWidth - 208)), top: Math.max(8, Math.min(menu.y, window.innerHeight - 156)) }}>
+            <button type="button" role="menuitem" onClick={() => { startReply(menu.message); setMenu(null); }}>Відповісти</button>
+            <button type="button" role="menuitem" onClick={() => { void copyText(menu.message); setMenu(null); }}>Копіювати текст</button>
+            {!menu.message.is_own && <button type="button" role="menuitem" className="is-danger" onClick={() => { setReporting(menu.message); setMenu(null); }}>Поскаржитись</button>}
+          </div>
+        </>,
+        document.body,
+      )}
+      {reporting && conversationId && createPortal(
         <MessageReportDialog
           conversationId={conversationId}
           messageId={reporting.message_id}
           onClose={() => setReporting(null)}
           onDone={() => { setReporting(null); onNotice("Скаргу надіслано адміністраторам"); }}
           onError={onError}
-        />
+        />,
+        document.body,
       )}
       {replyTo && (
         <div className="chat-reply-bar">
