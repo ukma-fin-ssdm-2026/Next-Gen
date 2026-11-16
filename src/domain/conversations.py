@@ -29,9 +29,13 @@ DEFAULT_CHAT_MESSAGE_RATE_PER_MINUTE = 30
 DEFAULT_CHAT_CONVERSATION_STARTS_PER_DAY = 10
 DEFAULT_CHAT_RETENTION_DAYS = 365
 
-# Невидимі символи керування напрямком тексту (Unicode Cf). Дозволяють
-# візуально підмінити текст повідомлення, тому відхиляються разом із Cc.
-BIDI_CONTROL_CHARACTERS = frozenset("؜‎‏‪‫‬‭‮⁦⁧⁨⁩")
+# Невидимі символи керування напрямком тексту (Unicode Cf): ALM, LRM, RLM,
+# LRE–RLO і LRI–PDI. Дозволяють візуально підмінити текст повідомлення, тому
+# відхиляються разом із Cc. Задані кодами, щоб їх не було у вихідному коді.
+BIDI_CONTROL_CHARACTERS = frozenset(
+    chr(code)
+    for code in (0x061C, 0x200E, 0x200F, *range(0x202A, 0x202F), *range(0x2066, 0x206A))
+)
 
 # Курсор — base64url від "ISO-час|UUID"; довший рядок свідомо не розбираємо.
 CURSOR_MAX_LENGTH = 128

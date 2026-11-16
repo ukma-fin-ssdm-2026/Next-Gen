@@ -34,6 +34,11 @@ from src.repositories.conversations import InMemoryConversationRepository
 
 T0 = datetime(2026, 11, 16, 12, 0, tzinfo=timezone.utc)
 
+# Невидимі символи задаємо кодами, щоб їх не було у вихідному коді.
+ZERO_WIDTH_JOINER = chr(0x200D)
+RIGHT_TO_LEFT_OVERRIDE = chr(0x202E)
+FAMILY_EMOJI = "Сім'я 👨" + ZERO_WIDTH_JOINER + "👩" + ZERO_WIDTH_JOINER + "👧"
+
 # Два UUID з відомим порядком: LOW < HIGH.
 LOW_ID = UUID("00000000-0000-4000-8000-000000000001")
 HIGH_ID = UUID("ffffffff-ffff-4fff-bfff-ffffffffffff")
@@ -68,7 +73,7 @@ def test_conversation_with_self_is_forbidden() -> None:
         ("я" * MESSAGE_BODY_MAX_LENGTH, "я" * MESSAGE_BODY_MAX_LENGTH),
         ("<script>alert(1)</script>", "<script>alert(1)</script>"),
         ("'; DROP TABLE messages; --", "'; DROP TABLE messages; --"),
-        ("Сім'я 👨‍👩‍👧", "Сім'я 👨‍👩‍👧"),
+        (FAMILY_EMOJI, FAMILY_EMOJI),
     ],
     ids=["trim", "min", "max", "xss-as-text", "sql-as-text", "emoji-zwj"],
 )
@@ -90,7 +95,7 @@ def test_message_body_accepts_valid_text(raw: str, expected: str) -> None:
         "таб\tтут",
         "нуль\x00байт",
         "del\x7f",
-        "підміна ‮тексту",
+        "підміна " + RIGHT_TO_LEFT_OVERRIDE + "тексту",
         None,
     ],
     ids=["empty", "spaces", "too-long", "newline", "tab", "nul", "del", "bidi", "none"],
@@ -216,6 +221,15 @@ def test_chat_settings_defaults_and_env(monkeypatch) -> None:
             ChatSettings.from_env()
 
 
+def _oid(n: int) -> UUID:
+    """UUID із відомим порядком і літерою в hex.
+
+    SQLite зберігає UUID як 32 hex-символи; рядок лише з цифр отримав би
+    числовий тип, тому префікс «a» тримає значення текстом і зберігає порядок.
+    """
+    return UUID(f"a{n:031x}")
+
+
 # ---------------------------------------------------------------------------
 # Контракт сховища розмов
 # ---------------------------------------------------------------------------
@@ -292,7 +306,7 @@ class ConversationRepositoryContract:
         a, b = new_user(), new_user()
         conversation, _ = self._start(repo, a, b)
         same = T0 + timedelta(minutes=1)
-        ids = [UUID(int=i) for i in (3, 1, 2)]
+        ids = [_oid(i) for i in (3, 1, 2)]
         for message_id in ids:
             self._send(repo, conversation, b, same, message_id=message_id)
         items = repo.list_messages(conversation.conversation_id, limit=10)
@@ -302,8 +316,8 @@ class ConversationRepositoryContract:
         before = repo.list_messages(
             conversation.conversation_id, limit=10, before=middle
         )
-        assert [m.message_id for m in after] == [UUID(int=3)]
-        assert [m.message_id for m in before] == [items[0].message_id, UUID(int=1)]
+        assert [m.message_id for m in after] == [_oid(3)]
+        assert [m.message_id for m in before] == [items[0].message_id, _oid(1)]
 
     def test_list_messages_pages_with_limit(self, repo, new_user):
         """[TP-051]
@@ -353,15 +367,35 @@ class ConversationRepositoryContract:
         conversation, _ = self._start(repo, a, b)
         cid = conversation.conversation_id
         same = T0 + timedelta(minutes=1)
-        first = self._send(repo, conversation, a, same, message_id=UUID(int=10))
-        self._send(repo, conversation, a, same, message_id=UUID(int=20))
+        first = self._send(repo, conversation, a, same, message_id=_oid(10))
+        self._send(repo, conversation, a, same, message_id=_oid(20))
         assert repo.unread_count(cid, a) == 0
         assert repo.unread_count(cid, b) == 3
         assert repo.mark_read(cid, b, first.key)
         assert repo.unread_count(cid, b) == 1
-        assert not repo.mark_read(cid, b, (T0, UUID(int=0)))
+        assert not repo.mark_read(cid, b, (T0, _oid(0)))
         assert repo.unread_count(cid, b) == 1
         assert repo.unread_count(cid, new_user()) == 0
+
+    def test_mark_read_tracks_each_participant_separately(self, repo, new_user):
+        """[TP-051]
+        Позначка прочитаного зберігається окремо для учасника low і high;
+        для неіснуючої розмови вона не ставиться, а два курсори разом — помилка.
+        """
+        a, b = new_user(), new_user()
+        conversation, _ = self._start(repo, a, b)
+        cid = conversation.conversation_id
+        reply = self._send(repo, conversation, b, T0 + timedelta(minutes=1))
+        low, high = conversation.participants
+        assert repo.mark_read(cid, low, reply.key)
+        assert repo.mark_read(cid, high, reply.key)
+        stored = repo.get(cid)
+        assert stored.read_marker(low) == reply.key
+        assert stored.read_marker(high) == reply.key
+        assert repo.unread_count(cid, a) == 0 and repo.unread_count(cid, b) == 0
+        assert not repo.mark_read(uuid4(), a, reply.key)
+        with pytest.raises(ValueError):
+            repo.list_messages(cid, limit=1, after=reply.key, before=reply.key)
 
     def test_total_unread_sums_all_conversations(self, repo, new_user):
         """[TP-051]
@@ -427,18 +461,12 @@ class TestInMemoryConversationRepository(ConversationRepositoryContract):
     def new_user(self):
         return uuid4
 
-    def test_in_memory_rejects_both_cursors_and_unknown_conversation(self, repo):
+    def test_in_memory_rejects_message_for_unknown_conversation(self, repo):
         """[TP-051]
-        after і before разом — помилка; повідомлення до неіснуючої розмови не
-        додається.
+        Повідомлення до неіснуючої розмови не додається; limit=0 дає порожній список.
         """
-        with pytest.raises(ValueError):
-            repo.list_messages(
-                uuid4(), limit=1, after=(T0, uuid4()), before=(T0, uuid4())
-            )
         with pytest.raises(KeyError):
             repo.add_message(
                 Message(conversation_id=uuid4(), sender_id=LOW_ID, body="x")
             )
         assert repo.list_messages(uuid4(), limit=0) == []
-        assert not repo.mark_read(uuid4(), LOW_ID, (T0, uuid4()))
