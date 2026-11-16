@@ -895,7 +895,9 @@ footer { background: linear-gradient(120deg, #16213f 0%, #1f3169 100%); border-t
   gap: clamp(32px, 4.5vw, 72px);
 }
 .hero::before, .hero::after { display: none; }
-.app-shell:has(.hero) .topbar { position: absolute; left: 0; right: 0; background: transparent; border-bottom: 0; backdrop-filter: none; box-shadow: none; }
+.app-shell:has(.hero) .topbar { position: fixed; top: 0; left: 0; right: 0; background: transparent; border-bottom: 0; backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none; transition: transform 240ms ease, background 200ms ease; }
+/* Після прокрутки шапка головної стає «склом», як на інших сторінках, і ховається/показується разом із прокруткою */
+.app-shell:has(.hero) .topbar.topbar-scrolled { background: rgba(244, 247, 254, 0.7); backdrop-filter: blur(18px) saturate(1.35); -webkit-backdrop-filter: blur(18px) saturate(1.35); border-bottom: 1px solid rgba(255, 255, 255, 0.75); box-shadow: 0 12px 30px -24px rgba(44, 95, 184, 0.6); }
 /* Кнопки в шапці головної зберігають той самий ефект (градієнт, світіння), що й на інших сторінках */
 .hero-copy { max-width: 680px; }
 .hero .eyebrow { color: #2a52a8; font-size: 14px; letter-spacing: 0.03em; font-weight: 800; }
