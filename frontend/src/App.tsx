@@ -2219,7 +2219,8 @@ function CategorySelect({ categories, value, onChange, placeholder, allLabel, ot
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [open]);
 
-  const selectedName = categories.find((category) => category.id === value)?.name ?? (value === "" ? "" : value);
+  // Категорії, якої немає серед активних (її вимкнули), як і на сторінці оголошення, показуємо як «Інше», а не сирий ідентифікатор.
+  const selectedName = categories.find((category) => category.id === value)?.name ?? (value === "" ? "" : "Інше");
 
   function choose(id: string) {
     onChange(id);
