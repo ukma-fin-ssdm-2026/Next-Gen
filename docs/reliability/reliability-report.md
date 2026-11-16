@@ -294,7 +294,7 @@ except OSError as exc:
 
 ---
 
-### 2.4. REL-08: Окремий readiness probe PostgreSQL (`src/api/main.py`, `src/api/deps.py`, `compose.yaml`)
+### 2.4. REL-08: Окремий readiness probe PostgreSQL (`src/api/main.py`, `src/api/deps.py`)
 
 **Автор аналізу, виправлення та тестів:** Артем Солодкий.
 
@@ -358,17 +358,8 @@ def readiness_check(
         "timestamp": timestamp,
     }
 ```
-```yaml
-# compose.yaml (сервіс api)
-healthcheck:
-  test:
-    - CMD
-    - python
-    - -c
-    - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)
-```
 
-`/health` лишився liveness probe, а `/health/ready` виконує мінімальний `SELECT 1` через активний SQLAlchemy engine. У разі `SQLAlchemyError` або `OSError` endpoint діє за принципом fail-safe для readiness-проби: повертає `503 Service Unavailable`, безпечні поля `status/database=unavailable` та пише технічну причину лише в серверний лог. У режимі локального in-memory fallback зовнішньої залежності немає, тому probe повертає `database=in-memory`. Endpoint підключено до Docker `healthcheck` сервісу `api` у `compose.yaml`.
+`/health` лишився liveness probe, а `/health/ready` виконує мінімальний `SELECT 1` через активний SQLAlchemy engine. У разі `SQLAlchemyError` або `OSError` endpoint діє за принципом fail-safe для readiness-проби: повертає `503 Service Unavailable`, безпечні поля `status/database=unavailable` та пише технічну причину лише в серверний лог. У режимі локального in-memory fallback зовнішньої залежності немає, тому probe повертає `database=in-memory`.
 
 Це також виконує **Бонус 2 — health check зовнішньої залежності**.
 
@@ -391,7 +382,7 @@ healthcheck:
 5. **Структуроване логування збоїв без витоку чутливих деталей (Diagnostic Logging):**
    - При виникненні мережевого збою або тайм-ауту подія фіксується у серверному журналі через `logger.warning(...)` із технічною причиною збою для операторів, тоді як користувачеві повертається безпечне локалізоване повідомлення без внутрішніх стектрейсів.
 6. **Розділення Liveness і Readiness (Dependency Health Check):**
-   - `/health` відповідає лише на питання, чи живий процес API; `/health/ready` перевіряє PostgreSQL і повертає `503`, якщо залежність недоступна. Docker `healthcheck` для сервісу `api` у `compose.yaml` переведено на `/health/ready` (Traefik-балансування кількох реплік лишається поза поточним одноконтейнерним розгортанням; див. розділ 6).
+   - `/health` відповідає лише на питання, чи живий процес API; `/health/ready` перевіряє PostgreSQL і повертає `503`, якщо залежність недоступна. Контейнерний `healthcheck` у `compose.yaml` навмисно залишається на liveness `/health`, оскільки Docker-провайдер Traefik напряму використовує статус `health` контейнера при виборі бекендів: переведення єдиного контейнера на `/health/ready` вимкнуло б роздачу SPA та `/uploads`, які працюють без БД; автоматичну маршрутизацію за readiness відкладено до розділення БД-незалежного контенту або горизонтального масштабування (див. розділ 6).
 
 ---
 
@@ -407,7 +398,7 @@ healthcheck:
 | **REL-04** (`[План / Backlog — ще не реалізовано в коді]`: обмеження вибірки каталогу) | **План: Безпечна відмова / Контрольована деградація (Fail Safe bound)** | Замість поточного завантаження всіх записів через `list_all()`, що потенційно веде до `Out-Of-Memory`, заплановано перенести фільтрацію, сортування і `LIMIT/OFFSET` на рівень SQL у `PostgresListingRepository`. | *Поточний стан у коді:* `list_all()` досі вибирає всі записи без `LIMIT`. *За планом:* користувач отримуватиме перші сторінки актуальних оголошень у межах квоти `LIMIT`. | *За планом:* процес бекенда залишатиметься в межах квоти пам'яті при будь-якому розмірі таблиці в БД. |
 | **REL-05** (`[План / Backlog — ще не реалізовано в коді]`: пробільні поля `title`/`contact`) | **План: Швидка відмова (Fail Fast)** | Заплановано відхиляти рядки лише з пробілів (`"   "`) на вхідній межі (`422`) і в `__post_init__` сутності `Listing`, щоб у БД не потрапляли порожні оголошення чи контакти. | *Поточний стан у коді:* рядки з 3+ пробілів досі проходять `min_length=3`. *За планом:* клієнт отримуватиме `422 Unprocessable Content` із повідомленням про невалідність поля. | *За планом:* продавець виправлятиме введення і повторно надсилатиме коректний запит. |
 | **REL-06** (`[План / Backlog — ще не реалізовано в коді]`: логування при видаленні блобів) | **План: Безпечна відмова (Fail Safe) з логуванням** | Помилка видалення старого файлу зображення під час очищення не повинна зривати основну операцію користувача, але заплановано замінити `pass` у `_safe_delete_blob` на запис у лог. | *Поточний стан у коді:* збій мовчки ігнорується (`pass`), а бізнес-операція завершується успішно. *За планом:* бізнес-операція так само завершуватиметься успішно, не приховуючи проблему від оператора. | *За планом:* оператор бачитиме `WARNING` у логах із ключем невидаленого блоба та зможе очистити диск чи виправити права. |
-| **REL-08** (Readiness PostgreSQL) | **Безпечна відмова для readiness-проби (Fail Safe)** | Не можна заявляти готовність інстансу без критичної залежності. Водночас liveness має лишатися `200`, щоб оркестратор не плутав недоступність БД із падінням процесу. | Моніторинг і Docker `healthcheck` (`compose.yaml`) отримують `503` від `/health/ready`; відповідь не містить SQL, паролів чи stack trace. `/health` продовжує повертати `200`. | Після відновлення PostgreSQL наступний probe автоматично повертає `200`, і Docker `healthcheck` повертає контейнеру статус `healthy`. |
+| **REL-08** (Readiness PostgreSQL) | **Безпечна відмова для readiness-проби (Fail Safe)** | Не можна заявляти готовність інстансу без критичної залежності. Водночас liveness має лишатися `200`, щоб оркестратор не плутав недоступність БД із падінням процесу. | Моніторинг або оператор отримує `503` від `/health/ready` (Docker `healthcheck` у `compose.yaml` залишається на liveness `/health`, щоб Traefik не вимикав роздачу SPA та `/uploads` з єдиного контейнера); відповідь не містить SQL, паролів чи stack trace. `/health` продовжує повертати `200`. | Після відновлення PostgreSQL наступний probe автоматично повертає `200`, і проба знову показує готовність. |
 
 ---
 
@@ -447,13 +438,13 @@ pytest -q tests/reliability/
    - **REL-01** (`src/integrations/entra.py` — тайм-аут клієнта MSAL, обмежені повтори з експоненційним відступом і full jitter, захисні перевірки, перехоплення мережевих збоїв та логування).
    - **REL-02** (`src/api/main.py`, `src/repositories/image_storage.py` — вузькі catch-блоки замість `except Exception`: відсутній файл `404`, збій тома `503` з `Retry-After`, `no-store` і логуванням; `tests/reliability/test_image_read_reliability.py`).
    - **REL-03** (`src/db/engine.py`, `src/api/main.py` — `connect_timeout`, `pool_timeout`, `statement_timeout` і TCP keepalive для PostgreSQL, перевірка конфігурації тайм-аутів, HTTP 503 з `Retry-After` і логуванням при недоступній БД; `tests/reliability/test_database_reliability.py`).
-   - **REL-08** (`/health/ready` — перевірка PostgreSQL, контрольована `503`, логування, fault-injection тести та підключення до `healthcheck` у `compose.yaml`).
+   - **REL-08** (`/health/ready` — перевірка PostgreSQL, контрольована `503`, логування та fault-injection тести).
 2. **Задокументовано у відкритому беклозі (Open Risks / Backlog):**
    - **REL-04** (`src/repositories/postgres_listings.py`, `src/services/listings.py` — перенесення фільтрації, сортування, підрахунку `X-Total-Count` і пагінації `LIMIT/OFFSET` на рівень SQL; **причина відкладення:** виправлення потребує синхронної зміни спільного контракту `ListingRepository` між `PostgresListingRepository` та `InMemoryListingRepository`, тому в межах Етапу 3 Лаб 9 команда зосередилася на 4 ізольованих висококритичних точках відмови `REL-01`, `REL-02`, `REL-03`, `REL-08`, а `REL-04` залишила у беклозі).
    - **REL-05** (`src/api/schemas/listings.py`, `src/domain/listings.py` — нормалізація `.strip()` і guard-перевірки на пробільні рядки `title` і `contact`).
    - **REL-06** (`src/repositories/image_storage.py` — додавання `logger.warning` у `_safe_delete_blob`).
    - **REL-07** (`src/services/auth_sessions.py` — періодичне очищення прострочених записів у `InMemoryOidcFlowStore`).
-   - **REL-08, маршрутизація Traefik** (Docker `healthcheck` у `compose.yaml` уже використовує `/health/ready`; автоматичне балансування між кількома репліками через healthcheck у Traefik доцільно підключати разом із горизонтальним масштабуванням, щоб єдиний інстанс не припиняв віддачу SPA та `/uploads` під час коротких рестартів БД).
+   - **REL-08, продовження** (`compose.yaml` — підключення `/health/ready` до маршрутизації: Docker `healthcheck` у `compose.yaml` залишається на liveness `/health`, оскільки Docker-провайдер Traefik напряму використовує статус `health` контейнера при виявленні бекендів; переведення єдиного контейнера `api` на `/health/ready` без окремої маршрутизації статики вимкнуло б також SPA та `/uploads`, які працюють без PostgreSQL, тому підключення варто робити разом із відокремленою подачею статичного контенту або кількома репліками на staging).
 
 ---
 
