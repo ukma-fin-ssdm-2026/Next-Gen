@@ -883,35 +883,57 @@ footer { background: linear-gradient(120deg, #16213f 0%, #1f3169 100%); border-t
 
 /* ===== Головна: повторює референс (небо, хмари, скляна картка) ===== */
 .hero-scene { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
-.hero { background: #cfe3fb; min-height: clamp(620px, 88vh, 760px); padding-top: 130px; padding-bottom: 80px; }
+.hero {
+  background: #cfe3fb;
+  min-height: clamp(620px, 88vh, 760px);
+  padding: 130px clamp(22px, 5vw, 76px) 80px;
+  padding-right: clamp(28px, 11vw, 175px);
+  grid-template-columns: minmax(0, 1.08fr) minmax(460px, 560px);
+  justify-content: space-between;
+  align-items: center;
+  gap: clamp(32px, 4.5vw, 72px);
+}
 .hero::before, .hero::after { display: none; }
 .app-shell:has(.hero) .topbar { position: absolute; left: 0; right: 0; background: transparent; border-bottom: 0; backdrop-filter: none; box-shadow: none; }
 .app-shell:has(.hero) .topbar .button-primary { background: #ee6b5c; box-shadow: none; }
 .app-shell:has(.hero) .topbar .button-ghost { background: #fff; border-color: transparent; color: var(--ink); }
+.hero-copy { max-width: 680px; }
 .hero .eyebrow { color: #2a52a8; font-size: 14px; letter-spacing: 0.03em; font-weight: 800; }
 .hero .eyebrow::before, .hero .panel-eyebrow::before { display: none; }
-.hero h1 { font-size: clamp(36px, 3.9vw, 56px); line-height: 1.06; letter-spacing: -0.035em; font-weight: 800; color: #14214f; max-width: 640px; margin-top: 18px; }
-.hero-copy > p { color: #1f2d5c; font-size: clamp(16px, 1.35vw, 19px); }
+.hero h1 { font-size: clamp(42px, 4.3vw, 62px); line-height: 1.04; letter-spacing: -0.035em; font-weight: 800; color: #14214f; max-width: 680px; margin-top: 18px; }
+.hero-copy > p { color: #1f2d5c; font-size: clamp(16.5px, 1.35vw, 19.5px); max-width: 580px; }
 .hero .button-primary { background: #ee6b5c; box-shadow: none; padding: 18px 32px; }
 .hero .button-primary:hover:not(:disabled) { background: #e85a4a; filter: none; box-shadow: none; }
 .hero .button-light { background: transparent; border: 1.5px solid #14214f; box-shadow: none; color: #14214f; }
 .hero .button-light:hover:not(:disabled) { background: rgba(255, 255, 255, 0.7); }
 .hero .trust-row { font-size: 11.5px; color: #3a4a7a; }
-.hero-panel { background: rgba(255, 255, 255, 0.58); border: 1px solid rgba(255, 255, 255, 0.7); backdrop-filter: blur(18px) saturate(1.1); border-radius: 26px; box-shadow: 0 24px 60px -24px rgba(30, 60, 130, 0.35); padding: 28px 30px; }
+.hero-panel {
+  width: 100%;
+  max-width: 560px;
+  justify-self: end;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(18px) saturate(1.1);
+  border-radius: 26px;
+  box-shadow: 0 24px 60px -24px rgba(30, 60, 130, 0.35);
+  padding: 32px 34px;
+}
 .hero-panel .panel-eyebrow { color: #14214f; font-size: 14px; letter-spacing: 0; text-transform: none; font-weight: 700; }
 .hero-panel h2 { color: #14214f; font-size: clamp(26px, 2.5vw, 34px); margin: 6px 0 18px; }
-.quick-search { background: rgba(255, 255, 255, 0.92); border: 0; border-radius: 14px; box-shadow: 0 2px 10px rgba(30, 60, 130, 0.08); }
-.quick-search .button { border-radius: 10px; padding: 12px 18px; background: #ee6b5c; }
-.hero .chip { background: rgba(255, 255, 255, 0.55); border: 1px solid rgba(255, 255, 255, 0.9); color: #14214f; font-size: 12px; }
+.quick-search { background: rgba(255, 255, 255, 0.92); border: 0; border-radius: 16px; padding: 7px; box-shadow: 0 2px 10px rgba(30, 60, 130, 0.08); }
+.quick-search input { height: 48px; font-size: 15px; }
+.quick-search .button { border-radius: 12px; padding: 13px 22px; font-size: 14.5px; background: #ee6b5c; }
+.hero .chip { background: rgba(255, 255, 255, 0.55); border: 1px solid rgba(255, 255, 255, 0.9); color: #14214f; padding: 8px 14px; font-size: 13px; }
 .hero .stats { border-top: 0; padding-top: 6px; margin-top: 22px; }
 .hero .stats dd { color: #2b1f8a; font-size: clamp(26px, 2.8vw, 40px); }
 .hero .stats dt { color: #3a4a7a; font-size: 12px; font-weight: 600; }
 .hero-art { right: -9%; bottom: 0; opacity: 0.95; }
-@media (max-width: 1120px) {
-  .hero { padding-top: 110px; }
-}
 .hero-building { position: absolute; z-index: 0; right: -17vw; bottom: 0; height: min(76%, 600px); width: auto; max-width: none; pointer-events: none; user-select: none; -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14%); mask-image: linear-gradient(to right, transparent 0, #000 14%); }
-@media (max-width: 1120px) { .hero-building { display: none; } }
+@media (max-width: 1120px) {
+  .hero { grid-template-columns: minmax(0, 1fr); padding: 110px clamp(22px, 5vw, 72px) 64px; gap: 36px; min-height: auto; }
+  .hero-panel { justify-self: start; max-width: 640px; }
+  .hero-building { display: none; }
+}
 
 .hero::after { display: block; content: ""; position: absolute; z-index: 1; left: 0; right: 0; bottom: 0; width: auto; height: 120px; border-radius: 0; background: linear-gradient(to bottom, rgba(251, 238, 233, 0), #fbeee9); pointer-events: none; }
 .recent-section { border: 0; background: linear-gradient(180deg, #fbeee9 0, rgba(251, 238, 233, 0.7) 90px, rgba(251, 238, 233, 0.32) 220px, rgba(251, 238, 233, 0.1) 360px, rgba(251, 238, 233, 0) 480px), linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0)); }
@@ -920,14 +942,6 @@ footer { background: linear-gradient(120deg, #16213f 0%, #1f3169 100%); border-t
 @media (max-width: 720px) {
   .hero-scene { display: none; }
   .hero { background: linear-gradient(180deg, #bcd6f7 0%, #d6e5fa 45%, #f3e2dd 82%, #f8d6c8 100%); }
-}
-/* Широка картка пошуку, зсунута ліворуч */
-@media (min-width: 1300px) {
-  .hero { padding-right: clamp(22px, calc(var(--hero-art-w) * 0.95), 440px); grid-template-columns: minmax(0, 1fr) minmax(380px, 520px); }
-  .hero h1 { font-size: clamp(34px, 3.1vw, 46px); }
-  .hero .button { padding: 15px 20px; font-size: 13.5px; }
-  .hero .button-primary { padding: 15px 22px; }
-  .hero-actions { flex-wrap: nowrap; gap: 10px; }
 }
 /* Випадні списки не мають ховатися під картками: панелі з розмиттям створюють власний шар */
 .filters, .form-block { position: relative; z-index: 6; }
