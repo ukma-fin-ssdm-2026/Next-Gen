@@ -38,6 +38,7 @@ from src.api.routers import (
     category_suggestions,
     complaints,
     contacts,
+    conversations,
     favorites,
     feedback,
     listings,
@@ -181,6 +182,7 @@ def _declare_database_unavailable(router: APIRouter) -> None:
 for _router in (
     listings.router,
     contacts.router,
+    conversations.router,
     favorites.router,
     categories.router,
     category_suggestions.router,
