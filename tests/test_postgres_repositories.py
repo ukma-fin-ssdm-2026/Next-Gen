@@ -1,25 +1,31 @@
 """Інтеграційні тести PostgreSQL-адаптерів (ADR-002).
 
-Тести використовують SQLite (in-process, without real PostgreSQL) через
-SQLAlchemy, щоб не вимагати запущеного контейнера в CI.
+Більшість тестів використовують SQLite через SQLAlchemy. Тести, які
+перевіряють PostgreSQL DDL і конкурентний доступ, потребують DATABASE_URL.
 Усі критерії прийняття перевіряються на рівні репозиторіїв.
 """
 
 import os
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import datetime, timezone
+from threading import Barrier
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, delete, func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, sessionmaker
 
-from src.db.models import Base
+from src.db.models import Base, SellerReviewRow, UserRow
 from src.domain.categories import Category
 from src.domain.category_suggestions import CategorySuggestion, CategorySuggestionStatus
+from src.domain.exceptions import SellerReviewRateLimitError
 from src.domain.favorites import Favorite
 from src.domain.listings import Listing, ListingCondition, ListingImage, ListingStatus
 from src.domain.moderation import ModerationAction, ModerationActionType
-from src.domain.users import User, UserRole
+from src.domain.seller_reviews import REVIEW_WINDOW, SellerReview, SellerReviewStatus
+from src.domain.users import CurrentUser, User, UserRole, utc_now
 from src.repositories.postgres_categories import PostgresCategoryRepository
 from src.repositories.postgres_favorites_moderation import (
     PostgresFavoriteRepository,
@@ -29,7 +35,10 @@ from src.repositories.postgres_category_suggestions import (
     PostgresCategorySuggestionRepository,
 )
 from src.repositories.postgres_listings import PostgresListingRepository
+from src.repositories.postgres_seller_reviews import PostgresSellerReviewRepository
+from src.repositories.postgres_support import PostgresActivityRepository
 from src.repositories.postgres_users import PostgresUserRepository
+from src.services.seller_reviews import SellerReviewService
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -731,7 +740,7 @@ def test_all_tables_created(engine):
 
 
 def test_alembic_migration_round_trip(monkeypatch):
-    """[FR-001] [FR-002] [TP-030] Alembic round-trip: upgrade → downgrade → upgrade.
+    """[FR-001] [FR-002] [TP-030] [TP-044] Alembic round-trip на чистій SQLite.
 
     Перевіряє, що міграція може бути застосована до порожньої бази,
     повністю відкочена та повторно застосована без помилок.
@@ -767,12 +776,25 @@ def test_alembic_migration_round_trip(monkeypatch):
             "listing_images",
             "favorites",
             "moderation_actions",
+            "seller_reviews",
             "conversations",
             "messages",
         }
         assert (
             expected <= tables_after_upgrade
         ), f"Відсутні таблиці після upgrade head: {expected - tables_after_upgrade}"
+
+        # Окремо перевіряємо межу нової міграції перед повним відкатом.
+        command.downgrade(cfg, "0004_condition_for_parts")
+        with eng.connect() as connection:
+            inspector = inspect(connection)
+            assert not inspector.has_table("seller_reviews")
+            activity_indexes = inspector.get_indexes("activity_events")
+            assert "ix_activity_events_actor_action_created" not in {
+                index["name"] for index in activity_indexes
+            }
+        eng.dispose()
+        command.upgrade(cfg, "head")
 
         # Крок 2: повний відкат
         command.downgrade(cfg, "base")
@@ -1365,6 +1387,198 @@ class TestPostgresSupportRepositories:
         assert listed[0].blocked_at is not None
 
 
+@pytest.fixture
+def seller_reviews_postgres():
+    """Тимчасові учасники на PostgreSQL із міграціями з CI job."""
+    database_url = os.getenv("DATABASE_URL", "")
+    if not database_url.startswith("postgresql"):
+        pytest.skip("Потрібен PostgreSQL; у CI це job postgres-migration.")
+
+    engine = create_engine(database_url)
+    author, seller, moderator = make_user(), make_user(), make_user(role=UserRole.ADMIN)
+    try:
+        with Session(engine) as session, session.begin():
+            users = PostgresUserRepository(session)
+            for user in (author, seller, moderator):
+                users.save(user)
+        yield engine, author, seller, moderator
+    finally:
+        with Session(engine) as session, session.begin():
+            session.execute(
+                delete(UserRow).where(
+                    UserRow.user_id.in_(
+                        [user.user_id for user in (author, seller, moderator)]
+                    )
+                )
+            )
+        engine.dispose()
+
+
+def _review_actor(user: User) -> CurrentUser:
+    return CurrentUser(
+        user_id=user.user_id,
+        tenant_id=user.tenant_id,
+        entra_object_id=user.entra_object_id,
+        email=user.email,
+        display_name=user.display_name,
+        role=user.role,
+    )
+
+
+def _pg_review_service(session: Session, events=None) -> SellerReviewService:
+    return SellerReviewService(
+        PostgresSellerReviewRepository(session),
+        PostgresUserRepository(session),
+        PostgresListingRepository(session),
+        events if events is not None else PostgresActivityRepository(session),
+        3,
+    )
+
+
+def test_postgres_seller_review_upsert_is_atomic(seller_reviews_postgres):
+    """[FR-019] [TP-043] Конкурентний ON CONFLICT повертає один стабільний ID."""
+    engine, author, seller, _ = seller_reviews_postgres
+    barrier = Barrier(5, timeout=15)
+
+    def upsert(rating):
+        candidate = SellerReview(seller.user_id, author.user_id, rating)
+        with Session(engine) as session, session.begin():
+            barrier.wait()
+            return PostgresSellerReviewRepository(session).upsert(candidate)
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        results = list(executor.map(upsert, range(1, 6)))
+
+    assert sum(created for _, created in results) == 1
+    assert len({review.review_id for review, _ in results}) == 1
+    assert len({review.created_at for review, _ in results}) == 1
+    with Session(engine) as session:
+        count = session.scalar(
+            select(func.count())
+            .select_from(SellerReviewRow)
+            .where(
+                SellerReviewRow.author_id == author.user_id,
+                SellerReviewRow.seller_id == seller.user_id,
+            )
+        )
+        assert count == 1
+
+
+def test_postgres_concurrent_review_mutations_respect_shared_quota(
+    seller_reviews_postgres,
+):
+    """[FR-019] [TP-043] 12 одночасних операцій дають 10 записів і 2 відмови."""
+    engine, author, seller, another_seller = seller_reviews_postgres
+    actor = _review_actor(author)
+    barrier = Barrier(12, timeout=15)
+
+    def set_review(index):
+        target = seller if index % 2 else another_seller
+        with Session(engine) as session:
+            barrier.wait()
+            try:
+                with session.begin():
+                    _pg_review_service(session).set_review(
+                        actor, target.user_id, 4, None
+                    )
+            except SellerReviewRateLimitError:
+                return False
+        return True
+
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        results = list(executor.map(set_review, range(12)))
+
+    assert sum(results) == 10
+    with Session(engine) as session:
+        events = PostgresActivityRepository(session)
+        assert (
+            events.count_review_mutations(author.user_id, utc_now() - REVIEW_WINDOW)
+            == 10
+        )
+
+
+def test_postgres_reviews_persist_moderation_and_roll_back_failed_audit(
+    seller_reviews_postgres, monkeypatch
+):
+    """[FR-019] [FR-020] [TP-043] Модерація зберігається, збій аудиту відкочує запис."""
+    engine, author, seller, moderator = seller_reviews_postgres
+    actor, admin = _review_actor(author), _review_actor(moderator)
+    with Session(engine) as session, session.begin():
+        events = PostgresActivityRepository(session)
+        add_event = events.add
+        monkeypatch.setattr(
+            events,
+            "add",
+            lambda event: add_event(replace(event, actor_id=uuid.uuid4())),
+        )
+        with pytest.raises(IntegrityError), session.begin_nested():
+            _pg_review_service(session, events).set_review(
+                actor, seller.user_id, 4, None
+            )
+
+        repo = PostgresSellerReviewRepository(session)
+        assert repo.find(author.user_id, seller.user_id) is None
+        service = _pg_review_service(session)
+        review, _ = service.set_review(actor, seller.user_id, 1, None)
+        service.moderate(admin, review.review_id, hide_reason="Підозріла оцінка")
+
+    with Session(engine) as session, session.begin():
+        service = _pg_review_service(session)
+        saved, stats = service.list_for_moderation(
+            admin, seller.user_id, author.user_id, 0, 50
+        )
+        assert len(saved) == 1
+        assert saved[0].status == SellerReviewStatus.HIDDEN
+        assert saved[0].hidden_by == moderator.user_id
+        assert saved[0].hidden_reason == "Підозріла оцінка"
+        assert stats[author.user_id].recent_one_star_count == 1
+        assert service.summary(seller.user_id).count == 0
+        updated, created = service.set_review(actor, seller.user_id, 4, None)
+        assert not created
+        assert updated.status == SellerReviewStatus.HIDDEN
+        assert (
+            service.moderate(admin, review.review_id, hide_reason=None).status
+            == SellerReviewStatus.VISIBLE
+        )
+        assert service.summary(seller.user_id).count == 1
+        service.remove_review(actor, seller.user_id)
+        assert service.summary(seller.user_id).count == 0
+
+
+def test_postgres_seller_review_api_persists_across_requests(
+    seller_reviews_postgres, monkeypatch
+):
+    """[FR-019] [TP-043] HTTP-запити читають оцінку з нової PostgreSQL-сесії."""
+    from fastapi.testclient import TestClient
+
+    from src.api.deps import get_db_session, require_current_user
+    from src.api.main import app
+
+    engine, author, seller, _ = seller_reviews_postgres
+
+    def request_session():
+        with Session(engine) as session, session.begin():
+            yield session
+
+    monkeypatch.setitem(app.dependency_overrides, get_db_session, request_session)
+    monkeypatch.setitem(
+        app.dependency_overrides, require_current_user, lambda: _review_actor(author)
+    )
+    path = f"/api/v1/users/{seller.user_id}"
+    with TestClient(app) as client:
+        first = client.put(f"{path}/review", json={"rating": 4})
+        second = client.put(f"{path}/review", json={"rating": 2})
+        assert (first.status_code, second.status_code) == (201, 200)
+        assert first.json()["review_id"] == second.json()["review_id"]
+        assert client.get(f"{path}/rating").json() == {
+            "average": None,
+            "count": 1,
+            "distribution": None,
+        }
+        assert client.delete(f"{path}/review").status_code == 204
+        assert client.get(f"{path}/rating").json()["count"] == 0
+
+
 # ---------------------------------------------------------------------------
 # Conversation / Message (ADR-005)
 # ---------------------------------------------------------------------------
@@ -1573,3 +1787,349 @@ def test_concurrent_get_or_create_does_not_duplicate_conversation(pg_engine):
     assert sorted(created for _, created in results) == [False, True]
     assert len({cid for cid, _ in results}) == 1
     assert count == 1
+
+
+def _sql_chat_service(session, settings, clock):
+    """ConversationService на SQLAlchemy-сховищах однієї сесії."""
+    from src.repositories.postgres_conversations import (
+        PostgresConversationRepository,
+    )
+    from src.repositories.postgres_support import PostgresActivityRepository
+    from src.services.activity import ActivityLogService
+    from src.services.conversations import ConversationService
+
+    users = PostgresUserRepository(session)
+    return ConversationService(
+        PostgresConversationRepository(session),
+        PostgresListingRepository(session),
+        users,
+        ActivityLogService(
+            PostgresActivityRepository(session),
+            users,
+            PostgresModerationActionRepository(session),
+        ),
+        settings,
+        clock=clock,
+    )
+
+
+def _chat_service_flow(session) -> None:
+    """Сценарій ConversationService на SQLAlchemy-сховищах однієї сесії."""
+    from datetime import timedelta
+
+    from src.domain.activity import ActivityType
+    from src.domain.conversations import ChatSettings
+    from src.domain.exceptions import ChatRateLimitError, ConversationNotFoundError
+    from src.repositories.postgres_support import PostgresActivityRepository
+
+    now = [T0]
+    users = PostgresUserRepository(session)
+    listings = PostgresListingRepository(session)
+    events = PostgresActivityRepository(session)
+    service = _sql_chat_service(
+        session,
+        ChatSettings(message_rate_per_minute=3, conversation_starts_per_day=1),
+        lambda: now[0],
+    )
+    seller, buyer, stranger = (
+        users.save(make_user(display_name=name)) for name in ("Sel", "Buy", "Str")
+    )
+    actor = {user.user_id: _current(user) for user in (seller, buyer, stranger)}
+    category = PostgresCategoryRepository(session).add(make_category())
+    listing = listings.add(make_listing(seller.user_id, category.id))
+    other = listings.add(make_listing(stranger.user_id, category.id))
+
+    started = service.start_from_listing(actor[buyer.user_id], listing.id, "Привіт")
+    now[0] += timedelta(seconds=1)
+    again = service.start_from_listing(actor[buyer.user_id], listing.id, "Ще?")
+    assert started.created and not again.created
+    assert again.conversation_id == started.conversation_id
+    with pytest.raises(ChatRateLimitError):
+        # Ліміт нових розмов (1 на добу) рахується в БД.
+        service.start_from_listing(actor[buyer.user_id], other.id, "Привіт")
+    now[0] += timedelta(seconds=1)
+    service.send_message(actor[buyer.user_id], started.conversation_id, "Третє")
+    with pytest.raises(ChatRateLimitError):
+        # Ліміт повідомлень (3 за хвилину) теж рахується в БД.
+        service.send_message(actor[buyer.user_id], started.conversation_id, "4")
+    with pytest.raises(ConversationNotFoundError):
+        service.list_messages(actor[stranger.user_id], started.conversation_id)
+
+    assert service.unread_count(actor[seller.user_id]) == 3
+    service.mark_read(actor[seller.user_id], started.conversation_id)
+    assert service.unread_count(actor[seller.user_id]) == 0
+    [summary] = service.list_conversations(actor[seller.user_id]).items
+    assert summary.other.display_name == "Buy"
+    assert summary.last_message.body == "Третє"
+    page = service.list_messages(actor[seller.user_id], started.conversation_id)
+    assert [m.body for m in page.items] == ["Привіт", "Ще?", "Третє"]
+    assert page.items[0].listing.title == listing.title
+    [logged] = [
+        event
+        for event in events.list_events(False)
+        if event.action_type == ActivityType.CONVERSATION_STARTED
+    ]
+    assert logged.listing_id == listing.id
+    assert "Привіт" not in logged.details
+
+
+def _current(user: User):
+    from src.domain.users import CurrentUser
+
+    return CurrentUser(
+        user_id=user.user_id,
+        tenant_id=user.tenant_id,
+        entra_object_id=user.entra_object_id,
+        email=user.email,
+        display_name=user.display_name,
+        role=user.role,
+    )
+
+
+def test_conversation_service_on_sqlalchemy_repositories(session):
+    """[TP-053]
+    ConversationService працює на SQLAlchemy-сховищах так само, як на in-memory:
+    одна розмова на пару, ліміти з БД, 404 для стороннього, прочитання, журнал.
+    """
+    _chat_service_flow(session)
+
+
+def test_conversation_factory_uses_sql_repository_with_session(session):
+    """[TP-054]
+    З сесією БД фабрика повертає SQLAlchemy-сховище розмов, а не in-memory.
+    """
+    from src.api import deps
+    from src.repositories.postgres_conversations import (
+        PostgresConversationRepository,
+    )
+
+    repo = deps.get_conversation_repository(session)
+    assert isinstance(repo, PostgresConversationRepository)
+    assert repo is not deps.get_conversation_repository(None)
+
+
+@requires_postgres
+def test_conversation_service_on_real_postgres(pg_session):
+    """[TP-053]
+    Той самий сценарій ConversationService на реальному PostgreSQL 16.
+    """
+    _chat_service_flow(pg_session)
+
+
+def _run_overlapping_sends(pg_engine, sends):
+    """Запускає відправлення в окремих транзакціях PostgreSQL з перекриттям.
+
+    `sends` — пари `(затримка старту, функція(session) -> результат)`. Кожна
+    транзакція тримається відкритою 0.3 с після відправлення, тож пізніша
+    мусить дочекатися commit попередньої. Повертає результати за порядком.
+    """
+    import threading
+    import time
+
+    results: list = [None] * len(sends)
+    start = threading.Barrier(len(sends))
+
+    def worker(index: int, delay: float, send) -> None:
+        with sessionmaker(bind=pg_engine)() as sess:
+            start.wait()
+            time.sleep(delay)
+            try:
+                results[index] = send(sess)
+                time.sleep(0.3)  # тримаємо транзакцію й блокування відкритими
+                sess.commit()
+            except Exception as exc:  # результат перевіряє сам тест
+                sess.rollback()
+                results[index] = exc
+
+    threads = [
+        threading.Thread(target=worker, args=(i, delay, send))
+        for i, (delay, send) in enumerate(sends)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+    return results
+
+
+def _committed_conversation(pg_engine):
+    """Двоє користувачів і розмова з першим повідомлення покупця о T0."""
+    from src.domain.conversations import Conversation, Message
+    from src.repositories.postgres_conversations import (
+        PostgresConversationRepository,
+    )
+
+    with sessionmaker(bind=pg_engine)() as setup:
+        users = PostgresUserRepository(setup)
+        seller, buyer = users.save(make_user()), users.save(make_user())
+        repo = PostgresConversationRepository(setup)
+        low, high = sorted([seller.user_id, buyer.user_id])
+        conversation, _ = repo.get_or_create(
+            Conversation(user_low_id=low, user_high_id=high, created_at=T0)
+        )
+        repo.add_message(
+            Message(
+                conversation_id=conversation.conversation_id,
+                sender_id=buyer.user_id,
+                body="Привіт",
+                created_at=T0,
+            )
+        )
+        setup.commit()
+    return seller, buyer, conversation.conversation_id
+
+
+def _delete_users(pg_engine, *users) -> None:
+    """Прибирає закомічені дані тесту (розмови й повідомлення — каскадом)."""
+    from sqlalchemy import delete
+
+    from src.db.models import UserRow
+
+    with sessionmaker(bind=pg_engine)() as check:
+        check.execute(
+            delete(UserRow).where(UserRow.user_id.in_([u.user_id for u in users]))
+        )
+        check.commit()
+
+
+@requires_postgres
+def test_parallel_sends_cannot_bypass_rate_limit_on_postgres(pg_engine):
+    """[TP-054]
+    Дві паралельні транзакції одного відправника: друга чекає на блокування
+    рядка користувача до commit першої й бачить її повідомлення в ліміті.
+    """
+    from datetime import timedelta
+
+    from sqlalchemy import func, select
+
+    from src.db.models import MessageRow
+    from src.domain.conversations import ChatSettings
+    from src.domain.exceptions import ChatRateLimitError
+
+    seller, buyer, conversation_id = _committed_conversation(pg_engine)
+    settings = ChatSettings(message_rate_per_minute=2)
+
+    def send(session):
+        service = _sql_chat_service(
+            session, settings, lambda: T0 + timedelta(seconds=10)
+        )
+        return service.send_message(_current(buyer), conversation_id, "Ще раз")
+
+    try:
+        first, second = _run_overlapping_sends(pg_engine, [(0.0, send), (0.1, send)])
+        with sessionmaker(bind=pg_engine)() as check:
+            sent = check.scalar(
+                select(func.count()).where(MessageRow.sender_id == buyer.user_id)
+            )
+    finally:
+        _delete_users(pg_engine, seller, buyer)
+
+    assert not isinstance(first, Exception)
+    assert isinstance(second, ChatRateLimitError)
+    assert sent == 2
+
+
+@requires_postgres
+def test_delayed_send_is_ordered_after_committed_message_on_postgres(pg_engine):
+    """[TP-053]
+    Запит, що взяв ранішу мітку часу, але дочекався блокування розмови,
+    отримує час строго після вже закоміченого повідомлення, тож не опиняється
+    позаду курсора `after`, який співрозмовник уже отримав.
+    """
+    from datetime import timedelta
+
+    from src.domain.conversations import ChatSettings
+
+    seller, buyer, conversation_id = _committed_conversation(pg_engine)
+
+    def send_at(user, seconds):
+        def send(session):
+            service = _sql_chat_service(
+                session, ChatSettings(), lambda: T0 + timedelta(seconds=seconds)
+            )
+            return service.send_message(_current(user), conversation_id, "Текст")
+
+        return send
+
+    try:
+        late, early = _run_overlapping_sends(
+            pg_engine, [(0.0, send_at(buyer, 20)), (0.1, send_at(seller, 10))]
+        )
+    finally:
+        _delete_users(pg_engine, seller, buyer)
+
+    assert late.created_at == T0 + timedelta(seconds=20)
+    assert early.created_at > late.created_at
+
+
+@pytest.mark.parametrize("existing", ["0005_seller_reviews", "0006_chat_tables"])
+def test_seller_review_migration_upgrades_existing_branch(
+    tmp_path, monkeypatch, existing
+):
+    """[FR-019] [TP-044] Від 0005 або 0006 можна дійти до єдиної голови."""
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import inspect
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    url = f"sqlite:///{tmp_path / 'chat.db'}"
+    cfg = Config()
+    cfg.set_main_option("script_location", "alembic")
+    cfg.set_main_option("sqlalchemy.url", url)
+    command.upgrade(cfg, existing)
+
+    engine = create_engine(url)
+    try:
+        with engine.connect() as connection:
+            inspector = inspect(connection)
+            assert inspector.has_table("messages") == (existing == "0006_chat_tables")
+            assert inspector.has_table("seller_reviews") == (
+                existing == "0005_seller_reviews"
+            )
+
+        command.upgrade(cfg, "head")
+        with engine.connect() as connection:
+            inspector = inspect(connection)
+            assert inspector.has_table("messages")
+            assert inspector.has_table("seller_reviews")
+            event_columns = inspector.get_columns("activity_events")
+            assert "moderation_reason" in {column["name"] for column in event_columns}
+    finally:
+        engine.dispose()
+
+
+def test_postgres_hidden_review_tombstone_and_complete_audit(seller_reviews_postgres):
+    """[FR-020] [TP-043] PostgreSQL утримує приховування та повну причину."""
+    engine, author, seller, moderator = seller_reviews_postgres
+    actor, admin = _review_actor(author), _review_actor(moderator)
+    reason = "а" * 499 + "!"
+    with Session(engine) as session, session.begin():
+        service = _pg_review_service(session)
+        review, _ = service.set_review(actor, seller.user_id, 1, None)
+        service.moderate(admin, review.review_id, hide_reason=reason)
+        service.remove_review(actor, seller.user_id)
+
+    with Session(engine) as session, session.begin():
+        service = _pg_review_service(session)
+        assert service.get_rating(seller.user_id, actor)[1] is None
+        recreated, created = service.set_review(actor, seller.user_id, 5, None)
+        assert not created
+        assert recreated.review_id == review.review_id
+        assert recreated.status == SellerReviewStatus.HIDDEN
+        assert recreated.deleted_at is None
+        assert service.summary(seller.user_id).count == 0
+        service.remove_review(actor, seller.user_id)
+        service.moderate(admin, review.review_id, hide_reason=None)
+
+    with Session(engine) as session, session.begin():
+        service = _pg_review_service(session)
+        assert service.get_rating(seller.user_id, actor)[1] is None
+        events = PostgresActivityRepository(session).list_events(admin_only=True)
+        (audit,) = [
+            event
+            for event in events
+            if event.actor_id == moderator.user_id
+            and event.moderation_reason is not None
+        ]
+        assert audit.moderation_reason == reason
+        assert service.set_review(actor, seller.user_id, 5, None)[1]

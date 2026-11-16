@@ -39,6 +39,19 @@ def get_image_storage_dir() -> Path:
     return (Path(tempfile.gettempdir()) / "baraholka-uploads").resolve()
 
 
+def get_review_min_count_to_display() -> int:
+    """Мінімальна кількість видимих оцінок для публікації середнього."""
+    name = "REVIEW_MIN_COUNT_TO_DISPLAY"
+    raw = os.getenv(name, "3").strip()
+    try:
+        count = int(raw)
+    except ValueError:
+        raise ConfigurationError(f"{name} має бути додатним цілим числом") from None
+    if count < 1:
+        raise ConfigurationError(f"{name} має бути додатним цілим числом")
+    return count
+
+
 def get_admin_emails() -> frozenset[str]:
     """Читає ADMIN_EMAILS: адреси @ukma.edu.ua через кому, пробіл чи крапку з комою.
 

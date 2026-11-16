@@ -445,6 +445,7 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const onFormPage = /^\/(listings\/new|listings\/[^/]+\/edit|profile)\/?$/.test(location.pathname);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
@@ -458,6 +459,7 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
       window.requestAnimationFrame(() => {
         const y = window.scrollY;
         const delta = y - lastY;
+        setScrolled(y > 8);
         if (y < 90) setHidden(false);
         else if (delta > 6) setHidden(true);
         else if (delta < -6) setHidden(false);
@@ -484,7 +486,7 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
 
   return (
     <>
-      <header className={`topbar${hidden && !menuOpen ? " topbar-hidden" : ""}`} onFocusCapture={() => setHidden(false)}>
+      <header className={`topbar${hidden && !menuOpen ? " topbar-hidden" : ""}${scrolled ? " topbar-scrolled" : ""}`} onFocusCapture={() => setHidden(false)}>
         <Link className="brand" to="/" aria-label="Барахолка НаУКМА, на головну">
           <span className="brand-mark">Б</span>
           <span><strong>Барахолка</strong><small>НаУКМА</small></span>

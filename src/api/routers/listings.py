@@ -19,16 +19,19 @@ from src.api.deps import (
     get_activity_service,
     get_image_storage,
     get_listing_service,
+    get_seller_review_service,
     require_current_user,
 )
 from src.api.schemas.listings import (
     ApiValidationErrorResponse,
     ErrorResponse,
     ListingCreate,
+    ListingDetailPublicResponse,
     ListingImageResponse,
     ListingPublicResponse,
     ListingResponse,
     ListingUpdate,
+    SellerRatingSummary,
     UploadedImageResponse,
 )
 from src.domain.activity import ActivityType
@@ -54,6 +57,7 @@ from src.repositories.image_storage import (
     ImageStorage,
 )
 from src.services.listings import ListingService
+from src.services.seller_reviews import SellerReviewService
 
 router = APIRouter(
     prefix="/listings",
@@ -411,9 +415,9 @@ def create_listing(
 
 @router.get(
     "/{listing_id}",
-    response_model=ListingPublicResponse,
+    response_model=ListingDetailPublicResponse,
     summary="Отримати оголошення за ID (публічне)",
-    description="Деталі активного оголошення без контактів.",
+    description="Деталі активного оголошення з рейтингом продавця, без контактів.",
     responses={
         404: {"model": ErrorResponse, "description": "Not Found"},
         422: {
@@ -425,12 +429,17 @@ def create_listing(
 def get_listing(
     listing_id: UUID,
     service: ListingService = Depends(get_listing_service),
-) -> ListingPublicResponse:
+    reviews: SellerReviewService = Depends(get_seller_review_service),
+) -> ListingDetailPublicResponse:
     try:
         listing = service.get_public(listing_id)
     except ListingNotFoundError as exc:
         _raise_domain(exc)
-    return _to_public(listing)
+    rating = reviews.summary(listing.user_id)
+    return ListingDetailPublicResponse(
+        **_to_public(listing).model_dump(),
+        seller_rating=SellerRatingSummary(average=rating.average, count=rating.count),
+    )
 
 
 @router.patch(

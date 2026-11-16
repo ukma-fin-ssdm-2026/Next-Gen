@@ -93,6 +93,9 @@ class ActivityLogService:
         return entries[skip : skip + limit]
 
     def _event_entry(self, event: ActivityEvent) -> LogEntry:
+        details = event.details
+        if event.moderation_reason is not None:
+            details = f"{details}; reason={event.moderation_reason}"
         return LogEntry(
             id=event.id,
             created_at=event.created_at,
@@ -102,7 +105,7 @@ class ActivityLogService:
             listing_id=event.listing_id,
             target_user_id=None,
             target_email=None,
-            details=event.details,
+            details=details,
         )
 
     def _email(self, user_id: UUID | None) -> str | None:
