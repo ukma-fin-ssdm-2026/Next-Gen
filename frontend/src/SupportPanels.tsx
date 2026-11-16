@@ -347,7 +347,7 @@ export function MessageReportsPanel({ onError, onNotice }: { onError: (m: string
 
   return (
     <section className="form-block">
-      <div className="form-block-head"><div><h2>Скарги на повідомлення</h2><p className="form-hint">Нові скарги першими. Текст повідомлення збережено на момент скарги. Заблокувати користувача можна у вкладці «Заблоковані».</p></div></div>
+      <div className="form-block-head"><div><h2>Скарги на повідомлення</h2><p className="form-hint">Нові скарги першими. Текст повідомлення збережено на момент скарги. Заблокувати користувача можна у вкладці «Модерація».</p></div></div>
       {items === null && <p className="form-hint">Завантажуємо…</p>}
       {items?.length === 0 && <p className="form-hint">Скарг поки немає.</p>}
       <ul className="suggestion-list">
