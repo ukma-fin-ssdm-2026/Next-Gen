@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { deleteSellerReview, getAdminReviews, getSellerRating, hideSellerReview, setSellerReview } from "../src/api.ts";
+import { deleteSellerReview, getAdminReviews, getSellerListings, getSellerRating, hideSellerReview, setSellerReview } from "../src/api.ts";
 
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
@@ -54,4 +54,14 @@ test("non-UUID identifiers never reach the network", () => {
   const calls = mockFetch();
   assert.throws(() => getSellerRating("../admin"), /Некоректний ідентифікатор/);
   assert.equal(calls.length, 0);
+});
+
+test("seller listings request filters by normalized seller id and reads the total", async () => {
+  const calls = mockFetch(200, []);
+  const page = await getSellerListings(SELLER, 24, 48);
+  assert.equal(calls[0].url.pathname, "/api/v1/listings");
+  assert.equal(calls[0].url.searchParams.get("seller_id"), "3fa85f64-5717-4562-b3fc-2c963f66afa6");
+  assert.equal(calls[0].url.searchParams.get("skip"), "48");
+  assert.deepEqual(page, { items: [], total: 0 });
+  await assert.rejects(() => getSellerListings("../x"), /Некоректний ідентифікатор/);
 });

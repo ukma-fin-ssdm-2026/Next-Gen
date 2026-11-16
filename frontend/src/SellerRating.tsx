@@ -167,7 +167,7 @@ export function MyRatingCard({ userId }: { userId: string }) {
   }, [userId]);
   return (
     <section className="form-block my-rating">
-      <div className="form-block-head"><div><h2>Мій рейтинг як продавця</h2><p className="form-hint">Оцінки від покупців. Середнє показується від {MIN_COUNT_TO_SHOW} оцінок.</p></div></div>
+      <div className="form-block-head"><div><h2>Мій рейтинг як продавця</h2><p className="form-hint">Оцінки від покупців. Середнє показується від {MIN_COUNT_TO_SHOW} оцінок.</p></div><Link className="button button-light" to={`/sellers/${userId}`}>Мій публічний профіль</Link></div>
       {failed && <p className="form-hint">Не вдалося завантажити рейтинг.</p>}
       {!failed && rating === null && <p className="form-hint">Завантажуємо…</p>}
       {rating && <RatingSummary rating={rating} size={22} />}
@@ -269,7 +269,7 @@ export function AdminReviewsPanel({ onError, onNotice }: { onError: (m: string) 
             <li key={review.review_id}>
               <div className="review-head">
                 <Stars value={review.rating} size={17} label={`${review.rating} з 5`} />
-                <strong>{nameOf(review.seller_id)}</strong>
+                <strong><Link className="seller-link" to={`/sellers/${review.seller_id}`}>{nameOf(review.seller_id)}</Link></strong>
                 <span className={`status-chip review-${state.tone}`}>{state.label}</span>
               </div>
               <p className="form-hint">

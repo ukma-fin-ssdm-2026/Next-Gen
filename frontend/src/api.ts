@@ -344,3 +344,12 @@ export function hideSellerReview(reviewId: string, reason: string): Promise<Admi
 export function restoreSellerReview(reviewId: string): Promise<AdminSellerReview> {
   return apiFetch<AdminSellerReview>(`/admin/reviews/${segment(reviewId)}/restore`, { method: "POST" });
 }
+
+/** Активні оголошення продавця для його публічного профілю (`GET /listings?seller_id=`). */
+export async function getSellerListings(sellerId: string, limit = 24, skip = 0): Promise<ListingPage> {
+  const response = await apiFetchWithHeaders<Listing[]>(
+    `/listings?seller_id=${encodeURIComponent(segment(sellerId))}&limit=${limit}&skip=${skip}&sort=newest`,
+  );
+  const total = Number(response.headers.get("X-Total-Count"));
+  return { items: response.data, total: Number.isFinite(total) && total >= 0 ? total : response.data.length };
+}

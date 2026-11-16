@@ -166,6 +166,17 @@ paths:
           default: newest
         description: 'Порядок: newest, oldest (за датою публікації), price_asc або
           price_desc (за ціною)'
+      - name: seller_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Лише активні оголошення цього продавця (публічний профіль)
+          title: Seller Id
+        description: Лише активні оголошення цього продавця (публічний профіль)
       responses:
         '200':
           description: Successful Response

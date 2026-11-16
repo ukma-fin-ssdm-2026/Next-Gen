@@ -27,6 +27,7 @@ import {
   getListings,
   getMyListings,
   getPublicProfile,
+  getSellerListings,
   getSellerContact,
   loginUrl,
   logout,
@@ -334,6 +335,7 @@ function App() {
         />
         <Route path="/listings/new" element={<CreateListingPage user={user} authChecked={authChecked} categories={categories} onError={setError} onNotice={setNotice} />} />
         <Route path="/listings/:listingId/edit" element={<EditListingPage user={user} authChecked={authChecked} categories={categories} onError={setError} onNotice={setNotice} />} />
+        <Route path="/sellers/:userId" element={<SellerPage user={user} authChecked={authChecked} categoryNames={categoryNames} favorites={favorites} busy={busy} onFavorite={(id) => void toggleFavorite(id)} onError={setError} onNotice={setNotice} />} />
         <Route path="/my" element={<MyListingsPage user={user} authChecked={authChecked} categoryNames={categoryNames} onError={setError} onNotice={setNotice} />} />
         <Route
           path="/listings/:listingId"
@@ -1676,7 +1678,7 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
                   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.2 3.6-7 8-7s8 2.8 8 7" /></svg>
                 </span>
               )}
-              <div><strong>{sellerName ?? "Продавець"}</strong><small>Вхід через корпоративну пошту</small></div>
+              <div><strong>{sellerName ? <Link className="seller-link" to={`/sellers/${listing.user_id}`}>{sellerName}</Link> : "Продавець"}</strong><small>Вхід через корпоративну пошту</small></div>
             </div>
             <SellerRatingBlock
               sellerId={listing.user_id}
@@ -1767,6 +1769,86 @@ function FavoritesPage({ user, authChecked, categoryNames, favorites, busy, onFa
         </>
       ) : (
         <div className="empty-state"><span>♡</span><h3>Тут поки порожньо</h3><p>Зберігайте цікаві оголошення, щоб не загубити їх.</p><Link className="button button-primary" to="/listings">Перейти до каталогу</Link></div>
+      )}
+    </main>
+  );
+}
+
+/** Публічний профіль продавця: ім'я, рейтинг і його активні оголошення. Контакт тут не показуємо. */
+function SellerPage({ user, authChecked, categoryNames, favorites, busy, onFavorite, onError, onNotice }: {
+  user: CurrentUser | null;
+  authChecked: boolean;
+  categoryNames: Map<string, string>;
+  favorites: Set<string>;
+  busy: boolean;
+  onFavorite: (id: string) => void;
+  onError: (message: string) => void;
+  onNotice: (message: string) => void;
+}) {
+  const { userId = "" } = useParams();
+  const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const [state, setState] = useState<"loading" | "ready" | "missing">("loading");
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [listingsLoading, setListingsLoading] = useState(true);
+  const authed = Boolean(user);
+  const isOwn = user?.user_id === userId;
+  const totalPages = Math.max(1, Math.ceil(total / CATALOG_PAGE_SIZE));
+
+  useEffect(() => {
+    if (!authed) return;
+    let cancelled = false;
+    setState("loading");
+    getPublicProfile(userId)
+      .then((item) => { if (!cancelled) { setProfile(item); setState("ready"); } })
+      .catch(() => { if (!cancelled) setState("missing"); });
+    return () => { cancelled = true; };
+  }, [userId, authed]);
+
+  useEffect(() => { setPage(1); }, [userId]);
+  useEffect(() => {
+    if (!authed || state !== "ready") return;
+    let cancelled = false;
+    setListingsLoading(true);
+    getSellerListings(userId, CATALOG_PAGE_SIZE, (page - 1) * CATALOG_PAGE_SIZE)
+      .then((result) => { if (!cancelled) { setListings(result.items); setTotal(result.total); } })
+      .catch((requestError) => { if (!cancelled) onError(errorText(requestError)); })
+      .finally(() => { if (!cancelled) setListingsLoading(false); });
+    return () => { cancelled = true; };
+  }, [userId, authed, state, page, onError]);
+
+  if (!authChecked) return <PageLoading />;
+  if (!user) return <SignInRequired title="Профіль продавця доступний після входу" />;
+  if (state === "loading") return <PageLoading />;
+  if (state === "missing" || !profile) return <NotFoundPage />;
+  const name = isOwn ? user.display_name : profile.display_name;
+  const avatar = isOwn ? user.avatar_url : profile.avatar_url;
+  return (
+    <main className="page-main seller-page">
+      <Link className="back-link" to="/listings">← До оголошень</Link>
+      <section className="lot-card seller-hero">
+        <Avatar name={name} url={avatar} className="avatar-xl" />
+        <div className="seller-hero-info">
+          <span className="eyebrow dark">Продавець НаУКМА</span>
+          <h1>{name}</h1>
+          {isOwn && <Link className="button button-light" to="/profile">Редагувати профіль</Link>}
+        </div>
+        <div className="seller-hero-rating">
+          <SellerRatingBlock sellerId={userId} canRate={!isOwn} onError={onError} onNotice={onNotice} />
+        </div>
+      </section>
+      <div className="seller-listings-head">
+        <h2>Активні оголошення</h2>
+        {!listingsLoading && <span>{total}</span>}
+      </div>
+      {listingsLoading ? <ListingSkeleton /> : listings.length ? (
+        <>
+          <ListingGrid listings={listings} categoryNames={categoryNames} favorites={favorites} busy={busy} onFavorite={onFavorite} />
+          <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+        </>
+      ) : (
+        <div className="empty-state"><span>∅</span><h3>Активних оголошень немає</h3><p>{isOwn ? "Опублікуйте перше оголошення, і воно зʼявиться тут." : "Цей продавець зараз нічого не пропонує."}</p>{isOwn && <Link className="button button-primary" to="/listings/new">Створити оголошення</Link>}</div>
       )}
     </main>
   );
