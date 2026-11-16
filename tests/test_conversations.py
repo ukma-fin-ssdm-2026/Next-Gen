@@ -3,7 +3,9 @@
 - домен: нормалізація пари й тексту, курсор, позначка прочитаного, налаштування;
 - контракт сховища розмов (`ConversationRepositoryContract`), який перевіряється
   на in-memory адаптері тут і на PostgreSQL-адаптері в
-  `tests/test_postgres_repositories.py`.
+  `tests/test_postgres_repositories.py`;
+- `ConversationService`: правила доступу, картка оголошення, курсори,
+  прочитання й ліміти.
 """
 
 import base64
@@ -20,17 +22,41 @@ from src.domain.conversations import (
     ChatSettings,
     Conversation,
     Message,
+    as_utc,
     decode_cursor,
     encode_cursor,
     normalize_message_body,
     normalize_pair,
 )
+from src.domain.activity import ActivityType
 from src.domain.exceptions import (
+    ChatRateLimitError,
     ConversationForbiddenError,
+    ConversationNotFoundError,
     InvalidChatCursorError,
     InvalidMessageError,
+    ListingNotFoundError,
+    ListingUnauthorizedError,
 )
+from src.domain.listings import (
+    SEED_CATEGORY_ID,
+    Listing,
+    ListingImage,
+    ListingStatus,
+)
+from src.domain.users import CurrentUser, User, UserRole
 from src.repositories.conversations import InMemoryConversationRepository
+from src.repositories.listings import InMemoryListingRepository
+from src.repositories.moderation import InMemoryModerationActionRepository
+from src.repositories.support import InMemoryActivityRepository
+from src.repositories.users import InMemoryUserRepository
+from src.services.activity import ActivityLogService
+from src.services.conversations import (
+    MESSAGES_PAGE_MAX,
+    ConversationService,
+    ListingCard,
+    Participant,
+)
 
 T0 = datetime(2026, 11, 16, 12, 0, tzinfo=timezone.utc)
 
@@ -449,6 +475,19 @@ class ConversationRepositoryContract:
         remaining = repo.list_messages(mixed.conversation_id, limit=10)
         assert [m.message_id for m in remaining] == [fresh.message_id]
 
+    def test_write_locks_return_current_conversation_state(self, repo, new_user):
+        """[TP-051]
+        Блокування відправника працює як контекстний менеджер, а блокування
+        розмови повертає її актуальний `last_message_at` (або None).
+        """
+        a, b = new_user(), new_user()
+        conversation, _ = self._start(repo, a, b)
+        with repo.sender_write_lock(a):
+            self._send(repo, conversation, a, T0 + timedelta(seconds=7))
+            locked = repo.lock_conversation(conversation.conversation_id)
+        assert as_utc(locked.last_message_at) == T0 + timedelta(seconds=7)
+        assert repo.lock_conversation(uuid4()) is None
+
 
 class TestInMemoryConversationRepository(ConversationRepositoryContract):
     """[TP-051] Контракт сховища розмов на in-memory адаптері."""
@@ -470,3 +509,596 @@ class TestInMemoryConversationRepository(ConversationRepositoryContract):
                 Message(conversation_id=uuid4(), sender_id=LOW_ID, body="x")
             )
         assert repo.list_messages(uuid4(), limit=0) == []
+
+
+# ---------------------------------------------------------------------------
+# ConversationService
+# ---------------------------------------------------------------------------
+
+
+class _Clock:
+    """Керований годинник: тести рухають час без sleep."""
+
+    def __init__(self, now: datetime = T0) -> None:
+        self.now = now
+
+    def __call__(self) -> datetime:
+        return self.now
+
+    def advance(self, **delta) -> None:
+        self.now += timedelta(**delta)
+
+
+class _Chat:
+    """Сервіс чату на in-memory сховищах з користувачами й оголошеннями."""
+
+    def __init__(self, settings: ChatSettings | None = None) -> None:
+        self.clock = _Clock()
+        self.users = InMemoryUserRepository()
+        self.listings = InMemoryListingRepository([])
+        self.repo = InMemoryConversationRepository()
+        self.events = InMemoryActivityRepository()
+        self.service = ConversationService(
+            self.repo,
+            self.listings,
+            self.users,
+            ActivityLogService(
+                self.events, self.users, InMemoryModerationActionRepository()
+            ),
+            settings,
+            clock=self.clock,
+        )
+
+    def user(self, name: str, *, blocked: bool = False) -> CurrentUser:
+        user = User(
+            tenant_id=uuid4(),
+            entra_object_id=uuid4(),
+            email=f"{uuid4().hex}@ukma.edu.ua",
+            display_name=name,
+            avatar_url=f"/uploads/{name}.webp",
+            is_blocked=blocked,
+        )
+        self.users.save(user)
+        return CurrentUser(
+            user_id=user.user_id,
+            tenant_id=user.tenant_id,
+            entra_object_id=user.entra_object_id,
+            email=user.email,
+            display_name=user.display_name,
+            role=UserRole.USER,
+        )
+
+    def listing(self, seller: CurrentUser, title: str = "Калькулятор") -> Listing:
+        return self.listings.add(
+            Listing(
+                title=title,
+                description="Робочий",
+                price=250.0,
+                category_id=SEED_CATEGORY_ID,
+                contact="@seller_telegram",
+                user_id=seller.user_id,
+                images=[
+                    ListingImage(image_url="/uploads/2.webp", display_order=1),
+                    ListingImage(
+                        image_url="/uploads/1.webp",
+                        thumbnail_url="/uploads/1_thumb.webp",
+                        display_order=0,
+                    ),
+                ],
+            )
+        )
+
+    def withdraw(self, listing: Listing) -> None:
+        listing.status = ListingStatus.WITHDRAWN
+        self.listings.save(listing)
+
+    def started_events(self) -> list:
+        return [
+            event
+            for event in self.events.list_events(False)
+            if event.action_type == ActivityType.CONVERSATION_STARTED
+        ]
+
+
+@pytest.fixture
+def chat() -> _Chat:
+    return _Chat()
+
+
+def test_start_from_listing_creates_conversation_with_first_message(chat) -> None:
+    """[TP-053]
+    Покупець пише продавцю: одна розмова, перше повідомлення з карткою
+    оголошення, той самий created_at і подія без тексту повідомлення.
+    """
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    listing = chat.listing(seller)
+
+    result = chat.service.start_from_listing(buyer, listing.id, "  Ще продаєте?  ")
+
+    assert result.created is True
+    conversation = chat.repo.get(result.conversation_id)
+    assert set(conversation.participants) == {seller.user_id, buyer.user_id}
+    assert conversation.created_at == result.message.created_at == T0
+    assert result.message.body == "Ще продаєте?"
+    assert result.message.is_own is True
+    assert result.message.listing == ListingCard(
+        listing_id=listing.id,
+        available=True,
+        title="Калькулятор",
+        price=250.0,
+        image_url="/uploads/1_thumb.webp",
+    )
+    [event] = chat.started_events()
+    assert event.actor_id == buyer.user_id
+    assert event.listing_id == listing.id
+    assert "Ще продаєте" not in event.details
+    assert str(result.conversation_id) in event.details
+
+
+def test_second_start_reuses_conversation_for_pair(chat) -> None:
+    """[TP-053]
+    Повторний старт (і з іншого оголошення того ж продавця) не створює
+    другої розмови й другої події CONVERSATION_STARTED.
+    """
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    first = chat.service.start_from_listing(buyer, chat.listing(seller).id, "Привіт")
+    chat.clock.advance(seconds=5)
+    other_listing = chat.listing(seller, "Підручник")
+
+    second = chat.service.start_from_listing(buyer, other_listing.id, "А це?")
+
+    assert second.created is False
+    assert second.conversation_id == first.conversation_id
+    assert second.message.listing.title == "Підручник"
+    assert len(chat.started_events()) == 1
+    page = chat.service.list_messages(seller, first.conversation_id)
+    assert [m.body for m in page.items] == ["Привіт", "А це?"]
+
+
+def test_start_rejects_own_blocked_and_unavailable_listing(chat) -> None:
+    """[TP-053]
+    Власник не пише сам собі (403), заблокований не пише (403), зняте чи
+    неіснуюче оголошення — 404; жодна спроба нічого не створює.
+    """
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    blocked = chat.user("Заблокований", blocked=True)
+    listing = chat.listing(seller)
+    withdrawn = chat.listing(seller, "Знято")
+    chat.withdraw(withdrawn)
+
+    with pytest.raises(ConversationForbiddenError):
+        chat.service.start_from_listing(seller, listing.id, "Сам собі")
+    with pytest.raises(ConversationForbiddenError):
+        chat.service.start_from_listing(blocked, listing.id, "Привіт")
+    with pytest.raises(ListingNotFoundError):
+        chat.service.start_from_listing(buyer, withdrawn.id, "Привіт")
+    with pytest.raises(ListingNotFoundError):
+        chat.service.start_from_listing(buyer, uuid4(), "Привіт")
+    assert chat.service.list_conversations(buyer).items == []
+    assert chat.started_events() == []
+
+
+@pytest.mark.parametrize("body", ["", "   ", "x" * (MESSAGE_BODY_MAX_LENGTH + 1)])
+def test_start_with_invalid_body_creates_nothing(chat, body) -> None:
+    """[TP-053]
+    Порожній або задовгий текст — InvalidMessageError (422) до створення розмови.
+    """
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    listing = chat.listing(seller)
+
+    with pytest.raises(InvalidMessageError):
+        chat.service.start_from_listing(buyer, listing.id, body)
+
+    assert chat.service.list_conversations(buyer).items == []
+    assert chat.service.list_conversations(seller).items == []
+
+
+def test_anonymous_actor_is_unauthorized_everywhere(chat) -> None:
+    """[TP-053]
+    Без користувача кожна операція — ListingUnauthorizedError (401).
+    """
+    seller = chat.user("Продавець")
+    listing_id, conversation_id = chat.listing(seller).id, uuid4()
+    calls = [
+        lambda: chat.service.start_from_listing(None, listing_id, "x"),
+        lambda: chat.service.send_message(None, conversation_id, "x"),
+        lambda: chat.service.list_conversations(None),
+        lambda: chat.service.list_messages(None, conversation_id),
+        lambda: chat.service.mark_read(None, conversation_id),
+        lambda: chat.service.unread_count(None),
+    ]
+    for call in calls:
+        with pytest.raises(ListingUnauthorizedError):
+            call()
+
+
+def test_non_participant_gets_not_found(chat) -> None:
+    """[TP-053]
+    Чужа й неіснуюча розмова однаково дають ConversationNotFoundError (404,
+    IDOR): не можна читати, писати чи позначати прочитаним.
+    """
+    seller, buyer, stranger = (
+        chat.user("Продавець"),
+        chat.user("Покупець"),
+        chat.user("Сторонній"),
+    )
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "Hi")
+
+    for conversation_id in (started.conversation_id, uuid4()):
+        with pytest.raises(ConversationNotFoundError):
+            chat.service.list_messages(stranger, conversation_id)
+        with pytest.raises(ConversationNotFoundError):
+            chat.service.send_message(stranger, conversation_id, "Я тут")
+        with pytest.raises(ConversationNotFoundError):
+            chat.service.mark_read(stranger, conversation_id)
+    assert chat.repo.unread_count(started.conversation_id, seller.user_id) == 1
+
+
+def test_blocked_participant_cannot_send(chat) -> None:
+    """[TP-053]
+    Учасника, якого заблокували після старту, сервіс не пускає писати (403).
+    """
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "Hi")
+    user = chat.users.get_by_id(buyer.user_id)
+    user.is_blocked = True
+    chat.users.save(user)
+
+    with pytest.raises(ConversationForbiddenError):
+        chat.service.send_message(buyer, started.conversation_id, "Ще раз")
+
+
+def test_attached_listing_must_be_active_and_belong_to_participant(chat) -> None:
+    """[TP-053]
+    До повідомлення можна прикріпити лише ACTIVE-оголошення учасника; чуже,
+    зняте чи неіснуюче — однаковий ListingNotFoundError (404).
+    """
+    seller, buyer, stranger = (
+        chat.user("Продавець"),
+        chat.user("Покупець"),
+        chat.user("Сторонній"),
+    )
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "Hi")
+    conversation_id = started.conversation_id
+    foreign = chat.listing(stranger, "Чуже")
+    withdrawn = chat.listing(seller, "Знято")
+    chat.withdraw(withdrawn)
+
+    for listing_id in (foreign.id, withdrawn.id, uuid4()):
+        with pytest.raises(ListingNotFoundError):
+            chat.service.send_message(buyer, conversation_id, "Глянь", listing_id)
+
+    own = chat.listing(buyer, "Обміняю на")
+    message = chat.service.send_message(buyer, conversation_id, "Обмін?", own.id)
+    assert message.listing.title == "Обміняю на"
+    assert len(chat.service.list_messages(buyer, conversation_id).items) == 2
+
+
+def test_card_of_withdrawn_or_deleted_listing_shows_only_state(chat) -> None:
+    """[TP-053]
+    Після зняття чи видалення оголошення картка має лише available=False:
+    без назви, ціни, фото й контакту; історія та розмова працюють далі.
+    """
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    listing = chat.listing(seller)
+    gone = chat.listing(seller, "Видалене")
+    started = chat.service.start_from_listing(buyer, listing.id, "Hi")
+    chat.clock.advance(seconds=1)
+    chat.service.send_message(buyer, started.conversation_id, "І це", gone.id)
+
+    chat.withdraw(listing)
+    chat.listings.delete(gone.id)
+    chat.clock.advance(seconds=1)
+    chat.service.send_message(seller, started.conversation_id, "Вже продав")
+
+    first, second, third = chat.service.list_messages(
+        seller, started.conversation_id
+    ).items
+    assert first.listing == ListingCard(listing_id=listing.id, available=False)
+    assert second.listing == ListingCard(listing_id=gone.id, available=False)
+    assert third.listing is None
+    assert "contact" not in ListingCard.__dataclass_fields__
+
+
+def test_markup_and_sql_like_text_is_kept_as_plain_text(chat) -> None:
+    """[TP-053]
+    XSS- і SQL-подібний текст зберігається без змін як звичайний текст.
+    """
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    body = "<script>alert(1)</script> '; DROP TABLE messages; --"
+
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, body)
+
+    [message] = chat.service.list_messages(seller, started.conversation_id).items
+    assert message.body == body
+    assert message.is_own is False
+
+
+def test_list_conversations_shows_public_profile_unread_and_pages(chat) -> None:
+    """[TP-053]
+    Список розмов: від найсвіжішої, співрозмовник лише з іменем і аватаркою
+    (без email), останнє повідомлення, непрочитані й курсор наступної сторінки.
+    """
+    buyer = chat.user("Покупець")
+    sellers = [chat.user(f"Продавець{i}") for i in range(3)]
+    for seller in sellers:
+        chat.service.start_from_listing(buyer, chat.listing(seller).id, "Привіт")
+        chat.clock.advance(seconds=1)
+    reply = chat.service.list_conversations(sellers[0]).items[0]
+    chat.service.send_message(sellers[0], reply.conversation_id, "Так, продаю")
+
+    first = chat.service.list_conversations(buyer, limit=2)
+    second = chat.service.list_conversations(buyer, limit=2, cursor=first.next_cursor)
+
+    names = [item.other.display_name for item in first.items + second.items]
+    assert names == ["Продавець0", "Продавець2", "Продавець1"]
+    assert second.next_cursor is None
+    top = first.items[0]
+    assert top.other == Participant(
+        user_id=sellers[0].user_id,
+        display_name="Продавець0",
+        avatar_url="/uploads/Продавець0.webp",
+    )
+    assert "email" not in Participant.__dataclass_fields__
+    assert top.last_message.body == "Так, продаю"
+    assert top.last_message_at == chat.clock.now
+    assert [item.unread_count for item in first.items + second.items] == [1, 0, 0]
+    assert chat.service.unread_count(buyer) == 1
+    assert chat.service.unread_count(sellers[1]) == 1
+    with pytest.raises(InvalidChatCursorError):
+        chat.service.list_conversations(buyer, cursor="не-курсор")
+
+
+def test_list_messages_pages_back_and_polls_forward(chat) -> None:
+    """[TP-053]
+    Без курсора — останні `limit`; `before` гортає старіші до кінця; `after`
+    повертає лише нові, а без нових залишає той самий курсор опитування.
+    """
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "m0")
+    conversation_id = started.conversation_id
+    for i in range(1, 5):
+        chat.clock.advance(seconds=1)
+        chat.service.send_message(seller if i % 2 else buyer, conversation_id, f"m{i}")
+
+    latest = chat.service.list_messages(buyer, conversation_id, limit=2)
+    older = chat.service.list_messages(
+        buyer, conversation_id, before=latest.before_cursor, limit=2
+    )
+    oldest = chat.service.list_messages(
+        buyer, conversation_id, before=older.before_cursor, limit=2
+    )
+    assert [m.body for m in latest.items] == ["m3", "m4"]
+    assert [m.body for m in older.items] == ["m1", "m2"]
+    assert [m.body for m in oldest.items] == ["m0"]
+    assert latest.has_more and older.has_more and not oldest.has_more
+    assert oldest.before_cursor is None
+
+    idle = chat.service.list_messages(buyer, conversation_id, after=latest.after_cursor)
+    assert idle.items == [] and idle.after_cursor == latest.after_cursor
+    chat.clock.advance(seconds=1)
+    chat.service.send_message(seller, conversation_id, "m5")
+    fresh = chat.service.list_messages(buyer, conversation_id, after=idle.after_cursor)
+    assert [m.body for m in fresh.items] == ["m5"]
+    assert fresh.before_cursor is None and not fresh.has_more
+
+
+def test_list_messages_rejects_both_or_broken_cursors(chat) -> None:
+    """[TP-053]
+    after і before разом або пошкоджений курсор — InvalidChatCursorError (422);
+    limit поза межами відхиляється ще до запиту до сховища.
+    """
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "Hi")
+    cursor = chat.service.list_messages(buyer, started.conversation_id).after_cursor
+
+    with pytest.raises(InvalidChatCursorError):
+        chat.service.list_messages(
+            buyer, started.conversation_id, after=cursor, before=cursor
+        )
+    with pytest.raises(InvalidChatCursorError):
+        chat.service.list_messages(buyer, started.conversation_id, before="%%%")
+    for limit in (0, MESSAGES_PAGE_MAX + 1):
+        with pytest.raises(ValueError):
+            chat.service.list_messages(buyer, started.conversation_id, limit=limit)
+
+
+def test_mark_read_clears_only_own_unread(chat) -> None:
+    """[TP-053]
+    Прочитання обнуляє непрочитані лише читача; співрозмовник свої не втрачає,
+    а порожній результат для нових розмов не ламає лічильник.
+    """
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "Hi")
+    chat.service.send_message(seller, started.conversation_id, "Вітаю")
+    chat.service.send_message(buyer, started.conversation_id, "Коли можна забрати?")
+
+    chat.service.mark_read(seller, started.conversation_id)
+    chat.service.mark_read(seller, started.conversation_id)
+
+    assert chat.service.unread_count(seller) == 0
+    assert chat.service.unread_count(buyer) == 1
+    chat.service.mark_read(buyer, started.conversation_id)
+    assert chat.service.unread_count(buyer) == 0
+
+
+# ---------------------------------------------------------------------------
+# Ліміти (ADR-005, розділ 2.5)
+# ---------------------------------------------------------------------------
+
+
+def test_message_rate_limit_blocks_until_minute_passes() -> None:
+    """[TP-054]
+    Ліміт повідомлень за рухому хвилину: N-те проходить, N+1 — 429 з
+    Retry-After 60 с; рівно через 60 с перше ще в вікні, трохи пізніше — ні.
+    """
+    chat = _Chat(ChatSettings(message_rate_per_minute=3))
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "1")
+    chat.service.send_message(buyer, started.conversation_id, "2")
+    chat.service.send_message(buyer, started.conversation_id, "3")
+
+    with pytest.raises(ChatRateLimitError) as error:
+        chat.service.send_message(buyer, started.conversation_id, "4")
+    assert error.value.retry_after_seconds == 60
+    chat.service.send_message(seller, started.conversation_id, "Ліміт окремий")
+
+    chat.clock.advance(seconds=60)
+    with pytest.raises(ChatRateLimitError):
+        chat.service.send_message(buyer, started.conversation_id, "4")
+    chat.clock.advance(microseconds=1)
+    chat.service.send_message(buyer, started.conversation_id, "4")
+    assert len(chat.service.list_messages(buyer, started.conversation_id).items) == 5
+
+
+def test_message_rate_limit_applies_to_start_from_listing() -> None:
+    """[TP-054]
+    Повторний старт з оголошення теж рахується як повідомлення.
+    """
+    chat = _Chat(ChatSettings(message_rate_per_minute=1))
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    listing = chat.listing(seller)
+    chat.service.start_from_listing(buyer, listing.id, "Hi")
+
+    with pytest.raises(ChatRateLimitError):
+        chat.service.start_from_listing(buyer, listing.id, "Hi again")
+
+
+def test_conversation_start_limit_counts_only_new_conversations() -> None:
+    """[TP-054]
+    Ліміт нових розмов за рухомі 24 год: зайвий старт — 429 з Retry-After
+    доби й без створеної розмови; існуюча розмова лімітом не обмежена;
+    через 24 год і 1 мкс старт знову можливий.
+    """
+    chat = _Chat(ChatSettings(conversation_starts_per_day=2))
+    buyer = chat.user("Покупець")
+    sellers = [chat.user(f"Продавець{i}") for i in range(3)]
+    listings = [chat.listing(seller) for seller in sellers]
+    chat.service.start_from_listing(buyer, listings[0].id, "Hi")
+    chat.service.start_from_listing(buyer, listings[1].id, "Hi")
+
+    with pytest.raises(ChatRateLimitError) as error:
+        chat.service.start_from_listing(buyer, listings[2].id, "Hi")
+    assert error.value.retry_after_seconds == 24 * 60 * 60
+    assert chat.service.list_conversations(sellers[2]).items == []
+    again = chat.service.start_from_listing(buyer, listings[0].id, "Ще раз")
+    assert again.created is False
+
+    chat.clock.advance(days=1, microseconds=1)
+    assert chat.service.start_from_listing(buyer, listings[2].id, "Hi").created
+    assert len(chat.started_events()) == 3
+
+
+def test_message_times_strictly_increase_so_polling_never_skips(chat) -> None:
+    """[TP-053]
+    Однакова мітка годинника чи годинник, що відстав, не ставлять нове
+    повідомлення позаду вже виданого курсора `after`: час строго зростає.
+    """
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "m0")
+    conversation_id = started.conversation_id
+    cursor = chat.service.list_messages(seller, conversation_id).after_cursor
+    seen = []
+    for i, step in enumerate((0, -5, 0), start=1):
+        chat.clock.advance(seconds=step)
+        chat.service.send_message(buyer, conversation_id, f"m{i}")
+        page = chat.service.list_messages(seller, conversation_id, after=cursor)
+        seen += [m.body for m in page.items]
+        cursor = page.after_cursor
+
+    times = [
+        m.created_at for m in chat.service.list_messages(seller, conversation_id).items
+    ]
+    assert seen == ["m1", "m2", "m3"]
+    assert times == sorted(set(times))
+    assert times[0] == T0
+
+
+def test_send_to_conversation_removed_before_lock_is_not_found(chat) -> None:
+    """[TP-053]
+    Якщо розмову видалило очищення між перевіркою доступу й блокуванням,
+    повідомлення не додається, а відповідь — ConversationNotFoundError (404).
+    """
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "Hi")
+    chat.repo.lock_conversation = lambda conversation_id: None
+
+    with pytest.raises(ConversationNotFoundError):
+        chat.service.send_message(seller, started.conversation_id, "Відповідь")
+    assert chat.repo.unread_count(started.conversation_id, buyer.user_id) == 0
+
+
+def test_parallel_sends_cannot_bypass_rate_limit() -> None:
+    """[TP-054]
+    Паралельні запити одного користувача рахуються по черзі: за ліміту 1
+    проходить рівно одне повідомлення, решта — ChatRateLimitError.
+    """
+    import threading
+    import time
+
+    chat = _Chat(ChatSettings(message_rate_per_minute=2))
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "1")
+    count = chat.repo.count_messages_since
+
+    def slow_count(sender_id, since):
+        # Розширюємо вікно між підрахунком і вставкою, щоб гонка була певною.
+        result = count(sender_id, since)
+        time.sleep(0.02)
+        return result
+
+    chat.repo.count_messages_since = slow_count
+    barrier = threading.Barrier(8)
+    outcomes: list[str] = []
+
+    def send() -> None:
+        barrier.wait()
+        try:
+            chat.service.send_message(buyer, started.conversation_id, "паралельно")
+            outcomes.append("ok")
+        except ChatRateLimitError:
+            outcomes.append("429")
+
+    threads = [threading.Thread(target=send) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert sorted(outcomes) == ["429"] * 7 + ["ok"]
+
+
+def test_default_limits_match_adr() -> None:
+    """[TP-054]
+    За замовчуванням сервіс пропускає 30 повідомлень за хвилину, 31-ше — 429.
+    """
+    chat = _Chat()
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "1")
+    for i in range(2, DEFAULT_CHAT_MESSAGE_RATE_PER_MINUTE + 1):
+        chat.service.send_message(buyer, started.conversation_id, str(i))
+
+    with pytest.raises(ChatRateLimitError):
+        chat.service.send_message(buyer, started.conversation_id, "зайве")
+
+
+def test_conversation_service_factory_and_startup_validation(monkeypatch) -> None:
+    """[TP-054]
+    Фабрика без DATABASE_URL дає сервіс на in-memory сховищі; некоректне
+    CHAT_* зупиняє старт застосунку ще до прийому запитів.
+    """
+    from fastapi.testclient import TestClient
+
+    from src.api import deps
+    from src.api.main import app
+
+    service = deps.get_conversation_service(None)
+    assert isinstance(service, ConversationService)
+    assert deps.get_conversation_repository(None) is (
+        deps.get_conversation_repository(None)
+    )
+
+    monkeypatch.setenv("CHAT_MESSAGE_RATE_PER_MINUTE", "0")
+    with pytest.raises(RuntimeError, match="CHAT_MESSAGE_RATE_PER_MINUTE"):
+        with TestClient(app):
+            pass

@@ -5,6 +5,7 @@
 повідомлень впорядковані лише за `(created_at, message_id)`.
 """
 
+from contextlib import AbstractContextManager
 from datetime import datetime
 from threading import RLock
 from typing import Protocol
@@ -21,6 +22,21 @@ class ConversationRepository(Protocol):
 
     def get_by_pair(self, user_low_id: UUID, user_high_id: UUID) -> Conversation | None:
         """Розмова нормалізованої пари учасників або None."""
+
+    def sender_write_lock(self, sender_id: UUID) -> AbstractContextManager[None]:
+        """Серіалізує записи одного відправника (ліміти без гонок).
+
+        Підрахунок для лімітів і вставка повідомлення виконуються під цим
+        блокуванням, тож паралельні запити одного користувача не проходять
+        ліміт обидва. У PostgreSQL блокування тримається до кінця транзакції.
+        """
+
+    def lock_conversation(self, conversation_id: UUID) -> Conversation | None:
+        """Блокує розмову для запису й повертає її актуальний стан.
+
+        Записи в одну розмову йдуть по черзі до кінця транзакції, тому новий
+        `created_at` можна взяти строго більшим за `last_message_at`.
+        """
 
     def get_or_create(self, conversation: Conversation) -> tuple[Conversation, bool]:
         """Повертає розмову пари, створюючи передану, якщо її ще немає.
@@ -94,6 +110,13 @@ class InMemoryConversationRepository:
 
     def get(self, conversation_id: UUID) -> Conversation | None:
         return self._conversations.get(conversation_id)
+
+    def sender_write_lock(self, sender_id: UUID) -> AbstractContextManager[None]:
+        # Одне блокування на все сховище: записи в пам'яті просто йдуть по черзі.
+        return self._lock
+
+    def lock_conversation(self, conversation_id: UUID) -> Conversation | None:
+        return self.get(conversation_id)
 
     def get_by_pair(self, user_low_id: UUID, user_high_id: UUID) -> Conversation | None:
         conversation_id = self._by_pair.get((user_low_id, user_high_id))

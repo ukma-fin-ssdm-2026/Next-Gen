@@ -5,8 +5,17 @@
 запити не створюють дубліката й не обривають транзакцію помилкою. Курсори
 порівнюються як пари рядків `(created_at, message_id)`, що працює однаково в
 PostgreSQL і SQLite (модульні тести).
+
+Записи серіалізуються блокуваннями рядків `FOR NO KEY UPDATE` до кінця
+транзакції: рядок відправника в `users` (ліміти) і рядок розмови (порядок
+повідомлень). Цей режим не конфліктує з `FOR KEY SHARE`, який беруть
+перевірки зовнішніх ключів, тому вставки з посиланням на ці рядки не чекають.
+Порядок завжди «користувач, потім розмова», що виключає взаємоблокування.
+SQLite (модульні тести) `FOR UPDATE` не підтримує й ігнорує.
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from uuid import UUID
 
@@ -20,7 +29,7 @@ from src.db.converters import (
     message_domain_to_row,
     message_row_to_domain,
 )
-from src.db.models import ConversationRow, MessageRow
+from src.db.models import ConversationRow, MessageRow, UserRow
 from src.domain.conversations import Conversation, Message, MessageKey
 
 _MESSAGE_ORDER = tuple_(MessageRow.created_at, MessageRow.message_id)
@@ -58,6 +67,27 @@ class PostgresConversationRepository:
 
     def get(self, conversation_id: UUID) -> Conversation | None:
         row = self._session.get(ConversationRow, conversation_id)
+        return conversation_row_to_domain(row) if row else None
+
+    @contextmanager
+    def sender_write_lock(self, sender_id: UUID) -> Iterator[None]:
+        # Блокування рядка знімає лише commit/rollback сесії запиту, а не вихід
+        # із блоку: так лічильник лімітів і вставка видні наступному запиту разом.
+        self._session.execute(
+            select(UserRow.user_id)
+            .where(UserRow.user_id == sender_id)
+            .with_for_update(key_share=True)
+        )
+        yield
+
+    def lock_conversation(self, conversation_id: UUID) -> Conversation | None:
+        stmt = (
+            select(ConversationRow)
+            .where(ConversationRow.conversation_id == conversation_id)
+            .with_for_update(key_share=True)
+            .execution_options(populate_existing=True)
+        )
+        row = self._session.scalars(stmt).first()
         return conversation_row_to_domain(row) if row else None
 
     def get_by_pair(self, user_low_id: UUID, user_high_id: UUID) -> Conversation | None:
