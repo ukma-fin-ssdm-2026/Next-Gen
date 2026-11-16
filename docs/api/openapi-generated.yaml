@@ -586,6 +586,471 @@ paths:
             application/json:
               example:
                 detail: База даних тимчасово недоступна. Спробуйте за кілька секунд.
+  /api/v1/listings/{listing_id}/conversation:
+    post:
+      tags:
+      - Conversations
+      summary: Почати або продовжити розмову зі сторінки оголошення
+      description: Знаходить наявну або створює нову розмову з продавцем активного
+        оголошення та атомарно надсилає перше повідомлення з безпечною карткою цього
+        оголошення (FR-021). Повертає 201 для нової розмови та 200, якщо розмова вже
+        існувала.
+      operationId: start_listing_conversation_api_v1_listings__listing_id__conversation_post
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Listing Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartConversationRequest'
+      responses:
+        '200':
+          description: Повідомлення надіслано в наявну розмову
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartConversationResponse'
+        '201':
+          description: Розмову створено та перше повідомлення надіслано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartConversationResponse'
+        '401':
+          description: Потрібна чинна сесія
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Дія заборонена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Оголошення не знайдено або недоступне
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Невалідні дані
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+        '429':
+          description: Перевищено сервісний ліміт повідомлень або нових розмов
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 60
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: База даних тимчасово недоступна (REL-03); повторіть запит пізніше
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 5
+          content:
+            application/json:
+              example:
+                detail: База даних тимчасово недоступна. Спробуйте за кілька секунд.
+  /api/v1/conversations:
+    get:
+      tags:
+      - Conversations
+      summary: Отримати список власних розмов
+      description: Повертає сторінку розмов поточного користувача від найсвіжішої
+        активності без розкриття email чи контактів співрозмовника (FR-022, SEC-002).
+      operationId: list_conversations_api_v1_conversations_get
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cursor
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationPageResponse'
+        '401':
+          description: Потрібна чинна сесія
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Дія заборонена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Невалідні дані
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+        '503':
+          description: База даних тимчасово недоступна (REL-03); повторіть запит пізніше
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 5
+          content:
+            application/json:
+              example:
+                detail: База даних тимчасово недоступна. Спробуйте за кілька секунд.
+  /api/v1/conversations/unread-count:
+    get:
+      tags:
+      - Conversations
+      summary: Отримати сумарну кількість непрочитаних повідомлень
+      description: Повертає лише сумарне число непрочитаних повідомлень поточного
+        користувача в усіх його розмовах (FR-022).
+      operationId: get_unread_count_api_v1_conversations_unread_count_get
+      parameters:
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnreadCountResponse'
+        '401':
+          description: Потрібна чинна сесія
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Дія заборонена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: База даних тимчасово недоступна (REL-03); повторіть запит пізніше
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 5
+          content:
+            application/json:
+              example:
+                detail: База даних тимчасово недоступна. Спробуйте за кілька секунд.
+  /api/v1/conversations/{conversation_id}/messages:
+    get:
+      tags:
+      - Conversations
+      summary: Отримати повідомлення розмови з курсорною пагінацією та polling
+      description: Повертає повідомлення розмови лише для її учасників; для не-учасника
+        або неіснуючого ID повертає однаковий 404 (SEC-003). Курсори `after` (polling)
+        та `before` (історія) є взаємовиключними.
+      operationId: list_conversation_messages_api_v1_conversations__conversation_id__messages_get
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Conversation Id
+      - name: after
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: After
+      - name: before
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Before
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessagePageResponse'
+        '401':
+          description: Потрібна чинна сесія
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Дія заборонена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Розмову не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Невалідні дані
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+        '503':
+          description: База даних тимчасово недоступна (REL-03); повторіть запит пізніше
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 5
+          content:
+            application/json:
+              example:
+                detail: База даних тимчасово недоступна. Спробуйте за кілька секунд.
+    post:
+      tags:
+      - Conversations
+      summary: Надіслати повідомлення в розмову
+      description: Надсилає текстове повідомлення в наявну розмову учасником із перевіреної
+        сесії; за потреби прикріплює картку активного оголошення одного з учасників
+        (FR-022, SEC-003).
+      operationId: send_conversation_message_api_v1_conversations__conversation_id__messages_post
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Conversation Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Потрібна чинна сесія
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Дія заборонена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Розмову або прикріплене оголошення не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Невалідні дані
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+        '429':
+          description: Перевищено сервісний ліміт повідомлень або нових розмов
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 60
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: База даних тимчасово недоступна (REL-03); повторіть запит пізніше
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 5
+          content:
+            application/json:
+              example:
+                detail: База даних тимчасово недоступна. Спробуйте за кілька секунд.
+  /api/v1/conversations/{conversation_id}/read:
+    post:
+      tags:
+      - Conversations
+      summary: Позначити розмову прочитаною
+      description: Пересуває позначку прочитаного для поточного учасника до останнього
+        повідомлення в розмові (FR-022); для не-учасника повертає 404 (SEC-003).
+      operationId: mark_conversation_read_api_v1_conversations__conversation_id__read_post
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Conversation Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '204':
+          description: Successful Response
+        '401':
+          description: Потрібна чинна сесія
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Дія заборонена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Розмову не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Невалідні дані
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+        '503':
+          description: База даних тимчасово недоступна (REL-03); повторіть запит пізніше
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 5
+          content:
+            application/json:
+              example:
+                detail: База даних тимчасово недоступна. Спробуйте за кілька секунд.
   /api/v1/favorites:
     get:
       tags:
@@ -3789,6 +4254,58 @@ components:
       - DISMISSED
       title: ComplaintStatus
       description: 'Життєвий цикл скарги: нова, опрацьована або відхилена.'
+    ConversationPageResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ConversationSummaryResponse'
+          type: array
+          title: Items
+          description: Список розмов від найсвіжішої активності
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+          description: Непрозорий курсор для наступної сторінки або null
+      type: object
+      required:
+      - items
+      title: ConversationPageResponse
+      description: Сторінка списку розмов із курсором наступної (старішої) сторінки.
+    ConversationSummaryResponse:
+      properties:
+        conversation_id:
+          type: string
+          format: uuid
+          title: Conversation Id
+          description: Унікальний ідентифікатор розмови
+        other:
+          $ref: '#/components/schemas/ParticipantResponse'
+          description: Дані співрозмовника
+        last_message:
+          anyOf:
+          - $ref: '#/components/schemas/MessageResponse'
+          - type: 'null'
+          description: Останнє повідомлення в розмові
+        last_message_at:
+          type: string
+          format: date-time
+          title: Last Message At
+          description: Час останньої активності в розмові (UTC)
+        unread_count:
+          type: integer
+          minimum: 0.0
+          title: Unread Count
+          description: Кількість непрочитаних повідомлень у цій розмові
+      type: object
+      required:
+      - conversation_id
+      - other
+      - last_message_at
+      - unread_count
+      title: ConversationSummaryResponse
+      description: Елемент списку розмов поточного користувача.
     CurrentUserResponse:
       properties:
         user_id:
@@ -3980,6 +4497,43 @@ components:
       required:
       - reason
       title: HideSellerReviewRequest
+    ListingCardResponse:
+      properties:
+        listing_id:
+          type: string
+          format: uuid
+          title: Listing Id
+          description: Ідентифікатор оголошення
+        available:
+          type: boolean
+          title: Available
+          description: True, якщо оголошення активне; False — якщо зняте або видалене
+            («Оголошення знято»)
+        title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Title
+          description: Назва активного оголошення; null, якщо оголошення знято
+        price:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Price
+          description: Ціна активного оголошення; null, якщо оголошення знято
+        image_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Image Url
+          description: URL обкладинки активного оголошення; null, якщо знято або без
+            фото
+      type: object
+      required:
+      - listing_id
+      - available
+      title: ListingCardResponse
+      description: Безпечна картка оголошення в повідомленні (без контакту продавця).
     ListingCondition:
       type: string
       enum:
@@ -4489,6 +5043,82 @@ components:
       - action_type
       title: LogEntryResponse
       description: Рядок журналу дій користувачів або адміністраторів.
+    MessagePageResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/MessageResponse'
+          type: array
+          title: Items
+          description: Повідомлення у хронологічному порядку
+        before_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Before Cursor
+          description: Непрозорий курсор для завантаження старіших повідомлень або
+            null
+        after_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: After Cursor
+          description: Непрозорий курсор для опитування (polling) нових повідомлень
+        has_more:
+          type: boolean
+          title: Has More
+          description: True, якщо в напрямку запиту залишилися ще повідомлення
+      type: object
+      required:
+      - items
+      - has_more
+      title: MessagePageResponse
+      description: Сторінка повідомлень розмови з курсорами гортання і polling.
+    MessageResponse:
+      properties:
+        message_id:
+          type: string
+          format: uuid
+          title: Message Id
+          description: Унікальний ідентифікатор повідомлення
+        conversation_id:
+          type: string
+          format: uuid
+          title: Conversation Id
+          description: Ідентифікатор розмови
+        sender_id:
+          type: string
+          format: uuid
+          title: Sender Id
+          description: Публічний ідентифікатор відправника
+        body:
+          type: string
+          title: Body
+          description: Звичайний текст повідомлення
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Час створення повідомлення (UTC)
+        is_own:
+          type: boolean
+          title: Is Own
+          description: True, якщо повідомлення надіслав поточний користувач
+        listing:
+          anyOf:
+          - $ref: '#/components/schemas/ListingCardResponse'
+          - type: 'null'
+          description: Прикріплена картка оголошення або null
+      type: object
+      required:
+      - message_id
+      - conversation_id
+      - sender_id
+      - body
+      - created_at
+      - is_own
+      title: MessageResponse
+      description: Одне повідомлення розмови без контактних даних користувачів.
     ModeratedSellerReviewResponse:
       properties:
         review_id:
@@ -4683,6 +5313,29 @@ components:
       - created_at
       - updated_at
       title: OwnSellerReviewResponse
+    ParticipantResponse:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+          description: Ідентифікатор співрозмовника
+        display_name:
+          type: string
+          title: Display Name
+          description: Відображуване ім'я співрозмовника
+        avatar_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Avatar Url
+          description: URL аватарки або null
+      type: object
+      required:
+      - user_id
+      - display_name
+      title: ParticipantResponse
+      description: Публічний профіль співрозмовника без email і контактів (SEC-002).
     ProfileUpdate:
       properties:
         display_name:
@@ -4842,6 +5495,29 @@ components:
       - VISIBLE
       - HIDDEN
       title: SellerReviewStatus
+    SendMessageRequest:
+      properties:
+        body:
+          type: string
+          title: Body
+          description: Текст повідомлення (1–1000 символів після обрізання пробілів,
+            без керівних символів)
+          examples:
+          - Можемо зустрітися сьогодні біля 1-го корпусу о 15:00.
+        listing_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Listing Id
+          description: Необов'язковий ідентифікатор активного оголошення одного з
+            учасників розмови
+      additionalProperties: false
+      type: object
+      required:
+      - body
+      title: SendMessageRequest
+      description: Запит на надсилання повідомлення в наявну розмову.
     SetSellerReviewRequest:
       properties:
         rating:
@@ -4860,6 +5536,54 @@ components:
       required:
       - rating
       title: SetSellerReviewRequest
+    StartConversationRequest:
+      properties:
+        body:
+          type: string
+          title: Body
+          description: Текст першого повідомлення (1–1000 символів після обрізання
+            пробілів, без керівних символів)
+          examples:
+          - Вітаю! Чи актуальне ще це оголошення?
+      additionalProperties: false
+      type: object
+      required:
+      - body
+      title: StartConversationRequest
+      description: Запит на створення або продовження розмови зі сторінки оголошення.
+    StartConversationResponse:
+      properties:
+        conversation_id:
+          type: string
+          format: uuid
+          title: Conversation Id
+          description: Ідентифікатор розмови
+        message:
+          $ref: '#/components/schemas/MessageResponse'
+          description: Щойно надіслане повідомлення
+        created:
+          type: boolean
+          title: Created
+          description: True, якщо розмову створено вперше; False — якщо вона вже існувала
+      type: object
+      required:
+      - conversation_id
+      - message
+      - created
+      title: StartConversationResponse
+      description: Результат початку або продовження розмови зі сторінки оголошення.
+    UnreadCountResponse:
+      properties:
+        unread_count:
+          type: integer
+          minimum: 0.0
+          title: Unread Count
+          description: Сумарна кількість непрочитаних повідомлень
+      type: object
+      required:
+      - unread_count
+      title: UnreadCountResponse
+      description: Сумарна кількість непрочитаних повідомлень у всіх розмовах користувача.
     UploadedImageResponse:
       properties:
         image_id:
