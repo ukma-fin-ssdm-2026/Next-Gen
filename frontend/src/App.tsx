@@ -557,7 +557,7 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
           {authChecked && user ? (
             <button className="button button-light" disabled={busy} onClick={() => { closeMenu(); onLogout(); }}>Вийти</button>
           ) : authChecked ? (
-            <a className="button button-primary" href={currentLoginUrl}>Увійти через Microsoft</a>
+            <a className="button button-primary" href={currentLoginUrl}>Увійти з Microsoft</a>
           ) : null}
         </div>
       </aside>
@@ -1362,7 +1362,7 @@ function HomePage({ categories, categoryNames, user, favorites, busy, onFavorite
             <span>02</span><h3>Увійдіть</h3><p>Підтвердьте належність до спільноти через Microsoft.</p>
             {user
               ? <div className="step-done">Ви вже увійшли</div>
-              : <a className="button button-light step-button" href={loginUrl("/listings")}>Увійти через Microsoft</a>}
+              : <a className="button button-light step-button" href={loginUrl("/listings")}>Увійти з Microsoft</a>}
           </article>
           <article>
             <span>03</span><h3>Домовтеся</h3><p>Отримайте контакт продавця і напишіть напряму.</p>
@@ -2323,7 +2323,7 @@ function CategorySuggestionsPanel({ onError, onNotice, onCategoriesChanged }: {
 
 function SignInRequired({ title }: { title: string }) {
   const currentLoginUrl = useCurrentLoginUrl();
-  return <main className="page-main auth-required"><span className="brand-mark large-mark">Б</span><h1>{title}</h1><p>Увійдіть через корпоративний Microsoft-акаунт НаУКМА.</p><a className="button button-primary" href={currentLoginUrl}>Увійти через Microsoft</a></main>;
+  return <main className="page-main auth-required"><span className="brand-mark large-mark">Б</span><h1>{title}</h1><p>Увійдіть через корпоративний Microsoft-акаунт НаУКМА.</p><a className="button button-primary" href={currentLoginUrl}>Увійти з Microsoft</a></main>;
 }
 
 function PageHeading({ eyebrow, title }: { eyebrow: string; title: string }) {

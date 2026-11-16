@@ -135,7 +135,7 @@ export function FeedbackPage({ user, authChecked, loginHref, onError, onNotice }
 
   if (!authChecked) return <main className="page-main narrow-page" />;
   if (!user) {
-    return <main className="page-main auth-required"><span className="brand-mark large-mark">Б</span><h1>Звернення доступне після входу</h1><p>Увійдіть через корпоративний Microsoft-акаунт НаУКМА.</p><a className="button button-primary" href={loginHref}>Увійти через Microsoft</a><a className="button button-light" href={ADMIN_CONTACT_URL} target="_blank" rel="noopener noreferrer">Зв'язатись через Telegram</a></main>;
+    return <main className="page-main auth-required"><span className="brand-mark large-mark">Б</span><h1>Звернення доступне після входу</h1><p>Увійдіть через корпоративний Microsoft-акаунт НаУКМА.</p><a className="button button-primary" href={loginHref}>Увійти з Microsoft</a><a className="button button-light" href={ADMIN_CONTACT_URL} target="_blank" rel="noopener noreferrer">Зв'язатись через Telegram</a></main>;
   }
 
   async function submit(event: FormEvent) {
