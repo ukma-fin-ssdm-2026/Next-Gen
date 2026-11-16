@@ -62,6 +62,7 @@
 | `sender_id` | UUID | FK → `User`, Required, один із учасників | Відправник; лише з серверної сесії |
 | `body` | text | 1–1000 символів після `trim`, без керівних символів (крім переносу рядка) | Текст |
 | `listing_id` | UUID | FK → `Listing`, Nullable, `ON DELETE SET NULL` | Оголошення, з яким пов'язане повідомлення |
+| `reply_to_id` | UUID | FK → `Message`, Nullable, `ON DELETE SET NULL` | Повідомлення тієї ж розмови, на яке це є відповіддю; цитата (до 140 символів) обчислюється під час читання й не зберігається |
 | `created_at` | datetime | Required | Час (UTC) |
 
 Індекси `(conversation_id, created_at, message_id)` і `(sender_id, created_at)`. Повідомлення незмінні: у v1 немає редагування й ручного видалення.

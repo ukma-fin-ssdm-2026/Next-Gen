@@ -458,6 +458,7 @@ def message_row_to_domain(row: MessageRow) -> Message:
         body=row.body,
         listing_id=row.listing_id,
         created_at=as_utc(row.created_at),
+        reply_to_id=row.reply_to_id,
     )
 
 
@@ -470,5 +471,6 @@ def message_domain_to_row(m: Message, existing: MessageRow | None = None) -> Mes
         sender_id=m.sender_id,
         body=m.body,
         listing_id=m.listing_id,
+        reply_to_id=m.reply_to_id,
         created_at=m.created_at,
     )

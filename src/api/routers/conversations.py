@@ -283,6 +283,7 @@ def send_conversation_message(
             conversation_id,
             payload.body,
             listing_id=payload.listing_id,
+            reply_to_id=payload.reply_to_id,
         )
     return MessageResponse.model_validate(message)
 

@@ -38,7 +38,21 @@
 .chat-day span { padding: 4px 12px; border-radius: 999px; background: rgba(44, 95, 184, 0.09); color: #4a5a85; font-size: 12px; font-weight: 700; }
 .chat-bubble { max-width: min(520px, 82%); padding: 9px 13px 7px; border-radius: 18px; display: grid; gap: 4px; overflow-wrap: anywhere; }
 .chat-bubble p { margin: 0; white-space: pre-wrap; font-size: 14.5px; line-height: 1.45; }
-.chat-bubble time { justify-self: end; font-size: 11px; opacity: 0.65; }
+.chat-bubble time { font-size: 11px; opacity: 0.65; }
+.chat-meta { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.chat-reply-btn { border: 0; background: none; padding: 0; font: inherit; font-size: 11.5px; font-weight: 700; color: inherit; opacity: 0; cursor: pointer; transition: opacity 0.15s; }
+.chat-bubble:hover .chat-reply-btn, .chat-reply-btn:focus-visible { opacity: 0.8; }
+@media (hover: none) { .chat-reply-btn { opacity: 0.7; } }
+.chat-row.is-flash .chat-bubble { box-shadow: 0 0 0 3px rgba(44, 95, 184, 0.35); }
+.chat-quote { display: grid; gap: 1px; text-align: left; border: 0; border-left: 3px solid currentColor; border-radius: 8px; padding: 5px 9px; background: rgba(127, 140, 180, 0.16); color: inherit; font: inherit; font-size: 12.5px; cursor: pointer; min-width: 0; }
+.chat-quote strong { font-size: 12px; }
+.chat-quote span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; opacity: 0.85; white-space: pre-wrap; }
+.chat-bubble.is-own .chat-quote { background: rgba(255, 255, 255, 0.18); }
+.chat-reply-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 16px; border-top: 1px solid rgba(27, 37, 71, 0.08); background: rgba(44, 95, 184, 0.06); font-size: 13px; }
+.chat-reply-bar > div { display: grid; gap: 1px; min-width: 0; border-left: 3px solid var(--brand); padding-left: 9px; }
+.chat-reply-bar strong { color: var(--brand); font-size: 12.5px; }
+.chat-reply-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #4a5a85; }
+.chat-reply-bar button { border: 0; background: none; font-size: 20px; line-height: 1; color: #4a5a85; cursor: pointer; padding: 4px 8px; }
 .chat-bubble.is-their { align-self: flex-start; background: #fff; border: 1px solid #e0e7f6; border-bottom-left-radius: 6px; color: var(--ink); }
 .chat-bubble.is-own { align-self: flex-end; background: var(--grad-brand); color: #fff; border-bottom-right-radius: 6px; }
 

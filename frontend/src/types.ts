@@ -213,6 +213,13 @@ export interface ChatListingCard {
   image_url: string | null;
 }
 
+export interface ChatReplyPreview {
+  message_id: string;
+  sender_id: string;
+  is_own: boolean;
+  body: string;
+}
+
 export interface ChatMessage {
   message_id: string;
   conversation_id: string;
@@ -221,6 +228,7 @@ export interface ChatMessage {
   created_at: string;
   is_own: boolean;
   listing: ChatListingCard | null;
+  reply_to?: ChatReplyPreview | null;
 }
 
 export interface ChatParticipant {

@@ -684,6 +684,15 @@ class MessageRow(Base):
         ForeignKey("listings.listing_id", ondelete="SET NULL"),
         nullable=True,
     )
+    # Відповідь на інше повідомлення тієї самої розмови; SET NULL, бо старі
+    # повідомлення видаляє політика зберігання (retention).
+    reply_to_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "messages.message_id", ondelete="SET NULL", name="fk_messages_reply_to_id"
+        ),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )

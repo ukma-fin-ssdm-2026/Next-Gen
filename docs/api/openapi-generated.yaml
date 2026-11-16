@@ -5108,6 +5108,11 @@ components:
           - $ref: '#/components/schemas/ListingCardResponse'
           - type: 'null'
           description: Прикріплена картка оголошення або null
+        reply_to:
+          anyOf:
+          - $ref: '#/components/schemas/ReplyPreviewResponse'
+          - type: 'null'
+          description: Цитата повідомлення, на яке відповідають, або null
       type: object
       required:
       - message_id
@@ -5398,6 +5403,35 @@ components:
       - database
       - timestamp
       title: ReadinessResponse
+    ReplyPreviewResponse:
+      properties:
+        message_id:
+          type: string
+          format: uuid
+          title: Message Id
+          description: Ідентифікатор оригінального повідомлення
+        sender_id:
+          type: string
+          format: uuid
+          title: Sender Id
+          description: Публічний ідентифікатор відправника
+        is_own:
+          type: boolean
+          title: Is Own
+          description: True, якщо оригінал надіслав поточний користувач
+        body:
+          type: string
+          title: Body
+          description: Початок тексту оригіналу (до 140 символів)
+      type: object
+      required:
+      - message_id
+      - sender_id
+      - is_own
+      - body
+      title: ReplyPreviewResponse
+      description: Цитата повідомлення, на яке відповідають (скорочений текст, без
+        контактів).
     ReviewAuthorStatsResponse:
       properties:
         total_count:
@@ -5511,6 +5545,14 @@ components:
           title: Listing Id
           description: Необов'язковий ідентифікатор активного оголошення одного з
             учасників розмови
+        reply_to_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Reply To Id
+          description: Необов'язковий ідентифікатор повідомлення цієї ж розмови, на
+            яке це повідомлення є відповіддю
       additionalProperties: false
       type: object
       required:

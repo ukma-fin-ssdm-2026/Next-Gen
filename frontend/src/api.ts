@@ -384,8 +384,11 @@ export function getMessages(
   return apiFetch<ChatMessagePage>(`/conversations/${segment(conversationId)}/messages?${pairs.join("&")}`);
 }
 
-export function sendChatMessage(conversationId: string, body: string): Promise<ChatMessage> {
-  return apiFetch<ChatMessage>(`/conversations/${segment(conversationId)}/messages`, { method: "POST", body: JSON.stringify({ body }) });
+export function sendChatMessage(conversationId: string, body: string, replyToId?: string): Promise<ChatMessage> {
+  return apiFetch<ChatMessage>(`/conversations/${segment(conversationId)}/messages`, {
+    method: "POST",
+    body: JSON.stringify(replyToId ? { body, reply_to_id: replyToId } : { body }),
+  });
 }
 
 export function markConversationRead(conversationId: string): Promise<void> {

@@ -38,6 +38,7 @@ from src.domain.exceptions import (
     ConversationForbiddenError,
     ConversationNotFoundError,
     InvalidChatCursorError,
+    InvalidMessageError,
     ListingNotFoundError,
     ListingUnauthorizedError,
 )
@@ -49,6 +50,7 @@ from src.repositories.users import UserRepository
 from src.services.activity import ActivityLogService
 
 MESSAGES_PAGE_DEFAULT = 50
+REPLY_PREVIEW_LENGTH = 140
 MESSAGES_PAGE_MAX = 100
 CONVERSATIONS_PAGE_DEFAULT = 20
 CONVERSATIONS_PAGE_MAX = 50
@@ -76,6 +78,16 @@ class ListingCard:
 
 
 @dataclass(frozen=True)
+class ReplyPreview:
+    """Цитата повідомлення, на яке відповідають: скорочений текст без вкладень."""
+
+    message_id: UUID
+    sender_id: UUID
+    is_own: bool
+    body: str
+
+
+@dataclass(frozen=True)
 class MessageView:
     """Повідомлення для учасника розмови."""
 
@@ -86,6 +98,7 @@ class MessageView:
     created_at: datetime
     is_own: bool
     listing: ListingCard | None
+    reply_to: ReplyPreview | None = None
 
 
 @dataclass(frozen=True)
@@ -214,17 +227,26 @@ class ConversationService:
         conversation_id: UUID,
         body: str,
         listing_id: UUID | None = None,
+        reply_to_id: UUID | None = None,
     ) -> MessageView:
-        """Надсилає повідомлення учасником розмови, за потреби з карткою."""
+        """Надсилає повідомлення учасником розмови, за потреби з карткою й цитатою."""
         user_id = self._require_active_actor(actor)
         conversation = self._require_participant(conversation_id, user_id)
         clean_body = normalize_message_body(body)
         if listing_id is not None:
             self._require_attachable_listing(listing_id, conversation)
+        if reply_to_id is not None and (
+            self._conversations.get_message(conversation_id, reply_to_id) is None
+        ):
+            raise InvalidMessageError("Повідомлення для відповіді не знайдено")
         with self._conversations.sender_write_lock(user_id):
             self._check_message_rate(user_id, self._clock())
             message = self._append(
-                conversation.conversation_id, user_id, clean_body, listing_id
+                conversation.conversation_id,
+                user_id,
+                clean_body,
+                listing_id,
+                reply_to_id=reply_to_id,
             )
         return self._message_view(message, user_id)
 
@@ -243,6 +265,7 @@ class ConversationService:
         body: str,
         listing_id: UUID | None,
         first_at: datetime | None = None,
+        reply_to_id: UUID | None = None,
     ) -> Message:
         """Додає повідомлення під блокуванням розмови зі строго зростаючим часом.
 
@@ -263,6 +286,7 @@ class ConversationService:
                 body=body,
                 listing_id=listing_id,
                 created_at=created_at,
+                reply_to_id=reply_to_id,
             )
         )
 
@@ -392,6 +416,25 @@ class ConversationService:
             created_at=message.key[0],
             is_own=message.sender_id == viewer_id,
             listing=self._listing_card(message.listing_id),
+            reply_to=self._reply_preview(message, viewer_id),
+        )
+
+    def _reply_preview(self, message: Message, viewer_id: UUID) -> ReplyPreview | None:
+        if message.reply_to_id is None:
+            return None
+        target = self._conversations.get_message(
+            message.conversation_id, message.reply_to_id
+        )
+        if target is None:
+            return None
+        body = target.body
+        if len(body) > REPLY_PREVIEW_LENGTH:
+            body = body[: REPLY_PREVIEW_LENGTH - 1].rstrip() + "…"
+        return ReplyPreview(
+            message_id=target.message_id,
+            sender_id=target.sender_id,
+            is_own=target.sender_id == viewer_id,
+            body=body,
         )
 
     def _listing_card(self, listing_id: UUID | None) -> ListingCard | None:

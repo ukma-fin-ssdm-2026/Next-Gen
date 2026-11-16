@@ -779,6 +779,50 @@ def test_attached_listing_must_be_active_and_belong_to_participant(chat) -> None
     assert len(chat.service.list_messages(buyer, conversation_id).items) == 2
 
 
+def test_reply_quotes_message_of_same_conversation(chat) -> None:
+    """[TP-053] Відповідь цитує повідомлення своєї розмови; чужі й вигадані id — 422."""
+    seller, buyer, stranger = (
+        chat.user("Продавець"),
+        chat.user("Покупець"),
+        chat.user("Сторонній"),
+    )
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "Привіт")
+    other = chat.service.start_from_listing(
+        stranger, chat.listing(seller, "Інше").id, "Секрет"
+    )
+    first_id = started.message.message_id
+
+    chat.clock.advance(seconds=1)
+    reply = chat.service.send_message(
+        seller, started.conversation_id, "Так", reply_to_id=first_id
+    )
+    assert reply.reply_to.message_id == first_id
+    assert reply.reply_to.body == "Привіт"
+    assert reply.reply_to.is_own is False
+
+    for bad in (other.message.message_id, uuid4()):
+        with pytest.raises(InvalidMessageError):
+            chat.service.send_message(
+                seller, started.conversation_id, "Ні", reply_to_id=bad
+            )
+
+    items = chat.service.list_messages(buyer, started.conversation_id).items
+    assert items[0].reply_to is None
+    assert items[1].reply_to.is_own is True
+
+
+def test_reply_preview_is_truncated(chat) -> None:
+    """[TP-053] Довга цитата скорочується до 140 символів з «…»."""
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "я" * 500)
+    chat.clock.advance(seconds=1)
+    reply = chat.service.send_message(
+        seller, started.conversation_id, "ok", reply_to_id=started.message.message_id
+    )
+    assert len(reply.reply_to.body) == 140
+    assert reply.reply_to.body.endswith("…")
+
+
 def test_card_of_withdrawn_or_deleted_listing_shows_only_state(chat) -> None:
     """[TP-053]
     Після зняття чи видалення оголошення картка має лише available=False:

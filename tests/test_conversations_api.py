@@ -1191,3 +1191,47 @@ async def test_nfr_perf_002_concurrent_chat_polling_50_users() -> None:
     finally:
         app.dependency_overrides.clear()
         app.dependency_overrides.update(saved_overrides)
+
+
+def test_reply_to_message_returns_quote_and_rejects_foreign_id(
+    client, chat_env: ChatEnv
+) -> None:
+    """[TP-055] [FR-022] [SEC-003]
+    Відповідь повертає цитату; id повідомлення з іншої розмови чи вигаданий дають 422.
+    """
+    seller = chat_env.make_user(display_name="Продавець", email="s.reply@ukma.edu.ua")
+    buyer = chat_env.make_user(display_name="Покупець", email="b.reply@ukma.edu.ua")
+    other = chat_env.make_user(display_name="Інший", email="o.reply@ukma.edu.ua")
+    listing = chat_env.add_listing(seller, title="Лампа", price=100.0)
+    other_listing = chat_env.add_listing(seller, title="Стілець", price=50.0)
+
+    chat_env.authenticate(client, other)
+    foreign = client.post(
+        f"{API}/listings/{other_listing.id}/conversation", json={"body": "Чужа"}
+    ).json()["message"]["message_id"]
+
+    chat_env.authenticate(client, buyer)
+    started = client.post(
+        f"{API}/listings/{listing.id}/conversation", json={"body": "Привіт"}
+    ).json()
+    conversation_id = started["conversation_id"]
+    first_id = started["message"]["message_id"]
+
+    chat_env.authenticate(client, seller)
+    reply = client.post(
+        f"{API}/conversations/{conversation_id}/messages",
+        json={"body": "Добрий день", "reply_to_id": first_id},
+    )
+    assert reply.status_code == 201
+    quote = reply.json()["reply_to"]
+    assert quote["message_id"] == first_id
+    assert quote["body"] == "Привіт"
+    assert quote["is_own"] is False
+
+    for bad_id in (foreign, str(uuid4())):
+        bad = client.post(
+            f"{API}/conversations/{conversation_id}/messages",
+            json={"body": "Ні", "reply_to_id": bad_id},
+        )
+        assert bad.status_code == 422
+        assert bad.headers.get("cache-control") == "no-store"

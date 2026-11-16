@@ -304,10 +304,11 @@ function Thread({ conversation, onError }: { conversation: ChatConversation | nu
     if (!body || sending || !conversationId) return;
     setSending(true);
     try {
-      const sent = await sendChatMessage(conversationId, body);
+      const sent = await sendChatMessage(conversationId, body, replyTo?.message_id);
       stickToBottom.current = true;
       merge([sent]);
       setText("");
+      setReplyTo(null);
       notifyChatChanged();
     } catch (requestError) { onError(errorText(requestError)); }
     finally { setSending(false); }
@@ -316,6 +317,21 @@ function Thread({ conversation, onError }: { conversation: ChatConversation | nu
   // Safari/Firefox не підтримують `field-sizing: content`, тож без цього
   // Shift+Enter додає рядок, який не видно: поле лишається однорядковим.
   const composer = useRef<HTMLTextAreaElement>(null);
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  useEffect(() => setReplyTo(null), [conversationId]);
+
+  function startReply(message: ChatMessage) {
+    setReplyTo(message);
+    composer.current?.focus();
+  }
+
+  function jumpTo(messageId: string) {
+    const node = document.getElementById(`msg-${messageId}`);
+    if (!node) return;
+    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    node.classList.add("is-flash");
+    window.setTimeout(() => node.classList.remove("is-flash"), 1400);
+  }
   useLayoutEffect(() => {
     const field = composer.current;
     if (!field) return;
@@ -341,17 +357,35 @@ function Thread({ conversation, onError }: { conversation: ChatConversation | nu
         {messages.map((message, index) => {
           const showDay = index === 0 || !sameDay(new Date(messages[index - 1].created_at), new Date(message.created_at));
           return (
-            <div key={message.message_id} className="chat-row">
+            <div key={message.message_id} id={`msg-${message.message_id}`} className="chat-row">
               {showDay && <div className="chat-day"><span>{dayLabel(message.created_at)}</span></div>}
               <div className={`chat-bubble ${message.is_own ? "is-own" : "is-their"}`}>
+                {message.reply_to && (
+                  <button type="button" className="chat-quote" onClick={() => jumpTo(message.reply_to!.message_id)}>
+                    <strong>{message.reply_to.is_own ? "Ви" : conversation.other.display_name}</strong>
+                    <span>{message.reply_to.body}</span>
+                  </button>
+                )}
                 {message.listing && <ListingCardView card={message.listing} />}
                 <p>{message.body}</p>
-                <time dateTime={message.created_at}>{new Date(message.created_at).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</time>
+                <div className="chat-meta">
+                  <button type="button" className="chat-reply-btn" onClick={() => startReply(message)} aria-label="Відповісти на повідомлення">Відповісти</button>
+                  <time dateTime={message.created_at}>{new Date(message.created_at).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</time>
+                </div>
               </div>
             </div>
           );
         })}
       </div>
+      {replyTo && (
+        <div className="chat-reply-bar">
+          <div>
+            <strong>Відповідь {replyTo.is_own ? "собі" : conversation.other.display_name}</strong>
+            <span>{replyTo.body}</span>
+          </div>
+          <button type="button" onClick={() => setReplyTo(null)} aria-label="Скасувати відповідь">×</button>
+        </div>
+      )}
       <form className="chat-composer" onSubmit={(event) => void send(event)}>
         <textarea ref={composer} value={text} onChange={(event) => setText(event.target.value)} onKeyDown={onKeyDown} maxLength={MESSAGE_MAX} rows={1} placeholder="Напишіть повідомлення…" aria-label="Повідомлення" />
         <button className="button button-primary" type="submit" disabled={sending || !text.trim()}>Надіслати</button>

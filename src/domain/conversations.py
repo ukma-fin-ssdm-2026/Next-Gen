@@ -223,6 +223,7 @@ class Message:
     listing_id: UUID | None = None
     message_id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=utc_now)
+    reply_to_id: UUID | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "body", normalize_message_body(self.body))
