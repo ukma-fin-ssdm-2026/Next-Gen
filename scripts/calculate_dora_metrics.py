@@ -24,6 +24,8 @@ import requests
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_REPO = "ukma-fin-ssdm-2026/Next-Gen"
+DEFAULT_SINCE = "2026-10-30"
+DEFAULT_UNTIL = "2026-11-13"
 DEFAULT_EVIDENCE = (
     REPO_ROOT
     / "docs"
@@ -107,21 +109,16 @@ def _github_headers() -> dict[str, str]:
     return headers
 
 
-def fetch_units_from_github(
-    repo: str,
-    since_date: str,
-    until_date: str,
-    fallback_evidence: Path | None = None,
-) -> tuple[list[DeliveryUnit], list[dict[str, Any]]]:
+def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]:
     """Отримує запуски CI/CD на `main` через GitHub Actions REST API."""
     headers = _github_headers()
-    base_url = f"https://api.github.com/repos/{repo}"
-    start_dt = _parse_iso(f"{since_date}T00:00:00Z")
-    end_dt = _parse_iso(f"{until_date}T23:59:59Z")
+    base_url = f"https://api.github.com/repos/{DEFAULT_REPO}"
+    start_dt = _parse_iso(f"{DEFAULT_SINCE}T00:00:00Z")
+    end_dt = _parse_iso(f"{DEFAULT_UNTIL}T23:59:59Z")
 
     fallback_by_sha: dict[str, dict[str, Any]] = {}
-    if fallback_evidence and fallback_evidence.exists():
-        saved = json.loads(fallback_evidence.read_text(encoding="utf-8"))
+    if DEFAULT_EVIDENCE.exists():
+        saved = json.loads(DEFAULT_EVIDENCE.read_text(encoding="utf-8"))
         for item in saved.get("delivery_units", []):
             fallback_by_sha[item["full_sha"]] = item
             fallback_by_sha[item["commit_sha"]] = item
@@ -204,7 +201,9 @@ def fetch_units_from_github(
             pr_match = re.search(r"#(\d+)", title)
             pr_number = int(pr_match.group(1)) if pr_match else None
             pr_url = (
-                f"https://github.com/{repo}/pull/{pr_number}" if pr_number else None
+                f"https://github.com/{DEFAULT_REPO}/pull/{pr_number}"
+                if pr_number
+                else None
             )
             first_commit_at = created_min
             if pr_number and can_query_details:
@@ -239,11 +238,9 @@ def fetch_units_from_github(
     return units, filtered_raw
 
 
-def load_units_from_evidence(
-    evidence_path: Path,
-) -> tuple[dict[str, Any], list[DeliveryUnit]]:
+def load_units_from_evidence() -> tuple[dict[str, Any], list[DeliveryUnit]]:
     """Зчитує нормалізований JSON-експорт із `/docs/ci-cd/evidence/`."""
-    payload = json.loads(evidence_path.read_text(encoding="utf-8"))
+    payload = json.loads(DEFAULT_EVIDENCE.read_text(encoding="utf-8"))
     units = [
         DeliveryUnit(
             unit_number=int(row["unit_number"]),
@@ -548,59 +545,35 @@ def main() -> None:
         description="Автоматичний підрахунок 4 метрик DORA (Лаб 10, Бонус 1)."
     )
     parser.add_argument(
-        "--evidence",
-        type=Path,
-        default=DEFAULT_EVIDENCE,
-        help="Шлях до JSON-файлу доказів",
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=DEFAULT_OUTPUT,
-        help="Шлях для збереження автоматичного звіту Markdown",
-    )
-    parser.add_argument(
         "--fetch-github",
         action="store_true",
         help="Отримати свіжі запуски з GitHub Actions REST API",
     )
-    parser.add_argument(
-        "--repo",
-        default=DEFAULT_REPO,
-        help="Репозиторій GitHub у форматі owner/name",
-    )
-    parser.add_argument("--since", default="2026-10-30", help="Початок періоду UTC")
-    parser.add_argument("--until", default="2026-11-13", help="Кінець періоду UTC")
     args = parser.parse_args()
 
     if args.fetch_github:
-        units, _ = fetch_units_from_github(
-            args.repo,
-            args.since,
-            args.until,
-            fallback_evidence=args.evidence,
-        )
-        start_d = datetime.strptime(args.since, "%Y-%m-%d").date()
-        end_d = datetime.strptime(args.until, "%Y-%m-%d").date()
+        units, _ = fetch_units_from_github()
+        start_d = datetime.strptime(DEFAULT_SINCE, "%Y-%m-%d").date()
+        end_d = datetime.strptime(DEFAULT_UNTIL, "%Y-%m-%d").date()
         period_days = (end_d - start_d).days + 1
         metadata = {
-            "repository": args.repo,
+            "repository": DEFAULT_REPO,
             "branch": "main",
-            "period_start": args.since,
-            "period_end": args.until,
+            "period_start": DEFAULT_SINCE,
+            "period_end": DEFAULT_UNTIL,
             "period_days": period_days,
         }
     else:
-        metadata, units = load_units_from_evidence(args.evidence)
+        metadata, units = load_units_from_evidence()
         period_days = int(metadata["period_days"])
 
     metrics = compute_metrics(units, period_days)
     report = render_markdown(metadata, metrics)
-    args.output.write_text(report, encoding="utf-8")
+    DEFAULT_OUTPUT.write_text(report, encoding="utf-8")
 
     s = metrics["strict"]
     b = metrics["breakdown"]
-    print(f"[OK] Автоматичний звіт DORA збережено: {args.output}")
+    print(f"[OK] Автоматичний звіт DORA збережено: {DEFAULT_OUTPUT}")
     print(
         f"     Розгортання (зелені): {metrics['counts']['success']} "
         f"({s['deployment_freq_per_day']:.1f}/день) | "
