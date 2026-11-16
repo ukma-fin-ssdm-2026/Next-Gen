@@ -1,5 +1,6 @@
 """Конвертори між ORM-рядками (Row) та доменними dataclass-об'єктами."""
 
+from datetime import datetime
 from typing import Any, TypeVar
 
 from src.db.models import (
@@ -7,10 +8,12 @@ from src.db.models import (
     CategoryRow,
     CategorySuggestionRow,
     ComplaintRow,
+    ConversationRow,
     FavoriteRow,
     FeedbackRow,
     ListingImageRow,
     ListingRow,
+    MessageRow,
     ModerationActionRow,
     UserRow,
 )
@@ -18,6 +21,7 @@ from src.domain.activity import ActivityEvent, ActivityType
 from src.domain.categories import Category
 from src.domain.category_suggestions import CategorySuggestion, CategorySuggestionStatus
 from src.domain.complaints import Complaint, ComplaintReason, ComplaintStatus
+from src.domain.conversations import Conversation, Message, as_utc
 from src.domain.favorites import Favorite
 from src.domain.feedback import Feedback, FeedbackStatus
 from src.domain.listings import (
@@ -394,4 +398,51 @@ def activity_domain_to_row(
         listing_id=e.listing_id,
         details=e.details,
         created_at=e.created_at,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Conversation / Message (ADR-005)
+# ---------------------------------------------------------------------------
+
+
+def _optional_utc(value: datetime | None) -> datetime | None:
+    return as_utc(value) if value is not None else None
+
+
+def conversation_row_to_domain(row: ConversationRow) -> Conversation:
+    return Conversation(
+        conversation_id=row.conversation_id,
+        user_low_id=row.user_low_id,
+        user_high_id=row.user_high_id,
+        created_at=as_utc(row.created_at),
+        last_message_at=as_utc(row.last_message_at),
+        low_last_read_at=_optional_utc(row.low_last_read_at),
+        low_last_read_message_id=row.low_last_read_message_id,
+        high_last_read_at=_optional_utc(row.high_last_read_at),
+        high_last_read_message_id=row.high_last_read_message_id,
+    )
+
+
+def message_row_to_domain(row: MessageRow) -> Message:
+    return Message(
+        message_id=row.message_id,
+        conversation_id=row.conversation_id,
+        sender_id=row.sender_id,
+        body=row.body,
+        listing_id=row.listing_id,
+        created_at=as_utc(row.created_at),
+    )
+
+
+def message_domain_to_row(m: Message, existing: MessageRow | None = None) -> MessageRow:
+    return _populate_row(
+        MessageRow,
+        existing,
+        message_id=m.message_id,
+        conversation_id=m.conversation_id,
+        sender_id=m.sender_id,
+        body=m.body,
+        listing_id=m.listing_id,
+        created_at=m.created_at,
     )
