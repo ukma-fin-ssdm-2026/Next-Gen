@@ -127,9 +127,9 @@ export function SellerRatingBlock({ sellerId, fallback, canRate, listingId, onEr
       <RatingSummary rating={summary} />
       {rating?.distribution && summary.count > 0 && <Distribution distribution={rating.distribution} total={summary.count} />}
       {canRate && (
-        <div className="rate-seller">
+        <div className="rate-seller" onMouseLeave={() => setHover(0)}>
           <span className="rate-label">{mine ? `Ваша оцінка: ${mine} з 5` : "Оцініть продавця"}</span>
-          <div className="rate-stars" role="radiogroup" aria-label="Ваша оцінка продавця" onMouseLeave={() => setHover(0)}>
+          <div className="rate-stars" role="radiogroup" aria-label="Ваша оцінка продавця">
             {[1, 2, 3, 4, 5].map((value) => (
               <button
                 key={value}

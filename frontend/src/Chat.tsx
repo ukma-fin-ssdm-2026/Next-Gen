@@ -421,7 +421,7 @@ function Thread({ conversation, onError, onNotice }: { conversation: ChatConvers
       </div>
       {menu && createPortal(
         <>
-          <div className="chat-menu-backdrop" onClick={() => setMenu(null)} onContextMenu={(event) => { event.preventDefault(); setMenu(null); }} />
+          <button type="button" className="chat-menu-backdrop" tabIndex={-1} aria-label="Закрити меню" onClick={() => setMenu(null)} onContextMenu={(event) => { event.preventDefault(); setMenu(null); }} />
           <div className="chat-menu" role="menu" style={{ left: Math.max(8, Math.min(menu.x, window.innerWidth - 208)), top: Math.max(8, Math.min(menu.y, window.innerHeight - 156)) }}>
             <button type="button" role="menuitem" onClick={() => { startReply(menu.message); setMenu(null); }}>Відповісти</button>
             <button type="button" role="menuitem" onClick={() => { void copyText(menu.message); setMenu(null); }}>Копіювати текст</button>
