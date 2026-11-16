@@ -42,8 +42,10 @@ from src.api.routers import (
     feedback,
     listings,
     moderation,
+    seller_reviews,
     users,
 )
+from src.config import get_review_min_count_to_display
 from src.db.engine import validate_database_settings
 from src.domain.conversations import ChatSettings
 from src.domain.exceptions import InvalidListingImageError
@@ -54,10 +56,12 @@ from src.repositories.image_storage import STORAGE_KEY_PATTERN, ImageStorage
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Перевіряє налаштування до прийому запитів (fail fast).
 
-    REL-03 — параметри БД; ADR-005 — ліміти й строк зберігання чату `CHAT_*`.
+    REL-03 — параметри БД; ADR-004 — поріг показу рейтингу продавця;
+    ADR-005 — ліміти й строк зберігання чату `CHAT_*`.
     """
     validate_database_settings()
     ChatSettings.from_env()
+    get_review_min_count_to_display()
     yield
 
 
@@ -183,6 +187,7 @@ for _router in (
     auth.router,
     moderation.router,
     users.router,
+    seller_reviews.router,
     complaints.router,
     feedback.router,
     activity.router,

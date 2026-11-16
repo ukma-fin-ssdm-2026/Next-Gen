@@ -18,7 +18,7 @@ ER-діаграма зберігається у файлі:
 
 `docs/architecture/uml/data-model.puml`
 
-На діаграмі жовтим позначено заплановані сутності `SellerReview`, `Conversation` і `Message` (ADR-004, ADR-005). Їх опис у цьому документі з'явиться разом із реалізацією.
+На діаграмі жовтим позначено заплановані сутності `Conversation` і `Message` (ADR-005).
 
 ---
 
@@ -183,6 +183,27 @@ ER-діаграма зберігається у файлі:
 
 ---
 
+Події `REVIEW_SET` та `REVIEW_REMOVED` належать до журналу користувачів і враховуються у квоті за індексом `(actor_id, action_type, created_at)`. `REVIEW_HIDDEN` та `REVIEW_RESTORED` належать до журналу адміністраторів. Оцінка й подія зберігаються в одній PostgreSQL-транзакції. Необов'язкове поле `moderation_reason` зберігає повну причину приховування (до 500 символів) окремо від `details`.
+
+### SellerReview
+
+Таблиця `seller_reviews` (міграція `0005_seller_reviews`) зберігає одну оцінку на автора й продавця. `0007_merge_reviews_chat` об'єднує незалежні гілки міграцій оцінок і чату, щоб БД, які вже на `0006_chat_tables`, отримали схему оцінок.
+
+| Атрибут | Тип | Обмеження |
+|---|---|---|
+| `review_id` | UUID | PK |
+| `author_id`, `seller_id` | UUID | Обов'язкові FK → `User.user_id`, `ON DELETE CASCADE` |
+| `listing_id` | UUID | Необов'язковий FK → `Listing.listing_id`, `ON DELETE SET NULL`; належність продавцю перевіряє сервіс |
+| `rating` | smallint | Обов'язковий, `CHECK` від 1 до 5 |
+| `status` | enum | `VISIBLE` за замовчуванням або `HIDDEN` |
+| `hidden_by`, `hidden_at`, `hidden_reason` | UUID, datetime, text | Обов'язкові в `HIDDEN`, порожні в `VISIBLE`; причина 5–500 символів; `hidden_by` — FK → `User.user_id` |
+| `deleted_at` | datetime | Необов'язкова позначка видалення автором, можлива лише в `HIDDEN` |
+| `created_at`, `updated_at` | datetime | Обов'язкові, з часовим поясом |
+
+`UNIQUE (author_id, seller_id)` забороняє дублікати, `CHECK (author_id <> seller_id)` забороняє самооцінку. Індекс `(seller_id, status)` підтримує агрегування видимих оцінок. Користувач може бути автором багатьох оцінок і отримувати оцінки від багатьох інших користувачів. Прив'язка до оголошення лишається необов'язковим контекстом, рейтинг належить продавцю.
+
+---
+
 ### Favorite
 
 Представляє оголошення, яке користувач додав до обраного.
@@ -338,6 +359,7 @@ ER-діаграма зберігається у файлі:
 | Текстовий пошук | `Listing.title`, `Listing.description` |
 | Додавання до обраного | `User`, `Favorite`, `Listing` |
 | Перегляд контактів продавця | `Listing.contact` |
+| Оцінки й модерація продавців | `SellerReview`, `ActivityEvent`, `User`, `Listing` |
 | Профіль користувача: ім'я, аватарка, контакти за замовчуванням | `User.display_name`, `User.display_name_customized`, `User.avatar_url`, `User.contact` |
 | Модерація оголошень, категорій, пропозицій і користувачів | `User.role`, `User.is_blocked`, `Category.is_active`, `CategorySuggestion`, `Listing.status`, `ModerationAction` |
 

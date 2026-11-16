@@ -20,6 +20,8 @@
 | FR-016   | Скарги на оголошення                                | React SPA, Complaint Service, Activity Log Service, Data Access Layer (ORM), Complaint, Listing, ActivityEvent | TP-031, TP-034 |
 | FR-017   | Звернення до адміністрації                          | React SPA, Feedback Service, Activity Log Service, Data Access Layer (ORM), FeedbackMessage, ActivityEvent | TP-032, TP-034 |
 | FR-018   | Окремі журнали дій користувачів та адміністраторів  | React SPA, Activity Log Service, Moderation Service, Data Access Layer (ORM), ActivityEvent, ModerationAction | TP-033, TP-034 |
+| FR-019   | Власна оцінка й агрегат продавця | API Router, Seller Review Service, PostgreSQL, SellerReview, ActivityEvent, ListingDetailPublicResponse | TP-039, TP-040, TP-042, TP-043, TP-044 |
+| FR-020   | Модерація оцінок і статистика за автором | API Router, Auth Service, Seller Review Service, SellerReview, ActivityEvent | TP-041, TP-043 |
 | PERF-001 | Час завантаження ≤300мс при 50 користувачах         | React SPA, API Router, Listing Service, Data Access Layer (ORM), PostgreSQL (Listing) | Навантажувальний тест |
 | REL-001  | Відновлення без втрати даних, RTO ≤5хв              | Data Access Layer (ORM), PostgreSQL Database | Хаос-експеримент (збій сервера) |
 | SEC-001  | Лише tenant НаУКМА та @ukma.edu.ua | Microsoft Entra ID, Auth Service, User.tenant_id/entra_object_id/email | Негативні тести tenant, issuer, audience, expiry, state/nonce і domain |

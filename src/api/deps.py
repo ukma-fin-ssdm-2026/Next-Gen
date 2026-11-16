@@ -17,6 +17,7 @@ from src.config import (
     EntraSettings,
     get_admin_emails,
     get_image_storage_dir,
+    get_review_min_count_to_display,
 )
 from src.domain.conversations import ChatSettings
 from src.domain.users import CurrentUser
@@ -37,6 +38,10 @@ from src.services.auth import (
     EntraAuthConfig,
     InvalidSessionError,
 )
+from src.repositories.seller_reviews import (
+    InMemorySellerReviewRepository,
+    SellerReviewRepository,
+)
 from src.repositories.support import (
     InMemoryActivityRepository,
     InMemoryComplaintRepository,
@@ -54,6 +59,7 @@ from src.services.feedback import FeedbackService
 from src.services.listings import ListingService
 from src.services.moderation import ModerationService
 from src.services.profile import ProfileService
+from src.services.seller_reviews import SellerReviewService
 from src.services.user_moderation import UserModerationService
 
 # ---------------------------------------------------------------------------
@@ -84,6 +90,7 @@ _inmem_complaint_repository = InMemoryComplaintRepository()
 _inmem_feedback_repository = InMemoryFeedbackRepository()
 _inmem_activity_repository = InMemoryActivityRepository()
 _inmem_conversation_repository = InMemoryConversationRepository()
+_inmem_seller_reviews = InMemorySellerReviewRepository()
 
 SESSION_COOKIE_NAME = "baraholka_session"
 OIDC_STATE_COOKIE_NAME = "baraholka_oidc_state"
@@ -345,6 +352,24 @@ def get_activity_repository(session: DbSession = None):
     return _inmem_activity_repository
 
 
+def get_seller_review_service(session: DbSession = None) -> SellerReviewService:
+    """Збирає сховище оцінок і журнал у межах однієї сесії запиту."""
+    reviews: SellerReviewRepository = _inmem_seller_reviews
+    if session is not None:
+        from src.repositories.postgres_seller_reviews import (
+            PostgresSellerReviewRepository,
+        )
+
+        reviews = PostgresSellerReviewRepository(session)
+    return SellerReviewService(
+        reviews,
+        get_user_repository(session),
+        get_listing_repository(session),
+        get_activity_repository(session),
+        get_review_min_count_to_display(),
+    )
+
+
 def get_activity_service(session: DbSession = None) -> ActivityLogService:
     """Повертає сервіс журналу дій для ін'єкції в роутери (FR-018)."""
     return ActivityLogService(
@@ -465,3 +490,20 @@ def require_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(exc),
         ) from exc
+
+
+def optional_current_user(
+    request: Request,
+    session_token: SessionCookie = None,
+    sessions: InMemoryAuthSessionStore = Depends(get_auth_session_store),
+    session: DbSession = None,
+) -> CurrentUser | None:
+    """Публічний маршрут лишається доступним без чинної сесії."""
+    if session_token is None:
+        return None
+    try:
+        return require_current_user(request, session_token, sessions, session)
+    except HTTPException as exc:
+        if exc.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN):
+            return None
+        raise

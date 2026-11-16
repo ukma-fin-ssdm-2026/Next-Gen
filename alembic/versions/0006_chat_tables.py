@@ -8,9 +8,9 @@
 Revision ID: 0006_chat_tables
 Revises: 0004_condition_for_parts
 
-За ADR-005 чат іде після міграції оцінок `0005_seller_reviews`. Поки її немає
-в `main`, ланцюжок продовжує `0004`; після злиття оцінок `down_revision`
-треба змінити на "0005_seller_reviews", інакше Alembic побачить дві голови.
+Ця міграція вже опублікована з батьківською ревізією `0004`.
+Міграція `0007_merge_reviews_chat` зводить її з `0005_seller_reviews`,
+щоб інсталяції на `0006` отримали таблицю оцінок під час upgrade.
 """
 
 from __future__ import annotations

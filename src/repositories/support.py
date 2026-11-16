@@ -1,9 +1,14 @@
 """Сховища скарг, звернень і журналу дій (FR-016, FR-017, FR-018)."""
 
 from typing import Protocol
+from datetime import datetime
 from uuid import UUID
 
-from src.domain.activity import ADMIN_ONLY_ACTIVITY_TYPES, ActivityEvent
+from src.domain.activity import (
+    ADMIN_ONLY_ACTIVITY_TYPES,
+    REVIEW_MUTATION_ACTIVITY_TYPES,
+    ActivityEvent,
+)
 from src.domain.complaints import Complaint, ComplaintStatus
 from src.domain.feedback import Feedback, FeedbackStatus
 
@@ -38,6 +43,8 @@ class ActivityRepository(Protocol):
     """Контракт append-only сховища журналу дій."""
 
     def add(self, event: ActivityEvent) -> ActivityEvent: ...
+
+    def count_review_mutations(self, actor_id: UUID, since: datetime) -> int: ...
 
     def list_events(
         self, admin_only: bool, skip: int = 0, limit: int = 100
@@ -114,3 +121,11 @@ class InMemoryActivityRepository:
         ]
         items.sort(key=lambda item: item.created_at, reverse=True)
         return items[skip : skip + limit]
+
+    def count_review_mutations(self, actor_id: UUID, since: datetime) -> int:
+        return sum(
+            event.actor_id == actor_id
+            and event.action_type in REVIEW_MUTATION_ACTIVITY_TYPES
+            and event.created_at > since
+            for event in self._items
+        )
