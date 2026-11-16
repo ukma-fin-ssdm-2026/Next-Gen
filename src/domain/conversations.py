@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import re
 import os
 import unicodedata
 from dataclasses import dataclass, field
@@ -56,14 +57,21 @@ def normalize_pair(first: UUID, second: UUID) -> tuple[UUID, UUID]:
 
 
 def normalize_message_body(body: str) -> str:
-    """Обрізає пробіли й перевіряє текст: 1–1000 символів, без керівних."""
+    """Обрізає пробіли й перевіряє текст: 1–1000 символів, без керівних.
+
+    Дозволено лише перенос рядка: `\\r\\n` і `\\r` зводяться до `\\n`, а три й
+    більше переносів поспіль скорочуються до двох (порожній рядок).
+    """
     if not isinstance(body, str):
         raise InvalidMessageError("Текст повідомлення має бути рядком")
+    body = body.replace("\r\n", "\n").replace("\r", "\n")
     if any(
-        unicodedata.category(ch) == "Cc" or ch in BIDI_CONTROL_CHARACTERS for ch in body
+        (unicodedata.category(ch) == "Cc" and ch != "\n")
+        or ch in BIDI_CONTROL_CHARACTERS
+        for ch in body
     ):
         raise InvalidMessageError("Повідомлення не може містити керівні символи")
-    cleaned = body.strip()
+    cleaned = re.sub(r"\n{3,}", "\n\n", body.strip())
     if not MESSAGE_BODY_MIN_LENGTH <= len(cleaned) <= MESSAGE_BODY_MAX_LENGTH:
         raise InvalidMessageError(
             f"Повідомлення має містити від {MESSAGE_BODY_MIN_LENGTH} "

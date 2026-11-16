@@ -50,7 +50,7 @@
 .chat-listing-card.is-gone { color: #6b7898; font-size: 13px; padding: 10px 12px; }
 
 .chat-composer { display: flex; align-items: flex-end; gap: 10px; padding: 12px 16px; border-top: 1px solid rgba(27, 37, 71, 0.08); background: rgba(255, 255, 255, 0.6); }
-.chat-composer textarea { flex: 1; resize: none; max-height: 140px; min-height: 44px; padding: 11px 14px; border: 1px solid #d3dcf1; border-radius: 14px; background: #f8faff; font: inherit; font-size: 14.5px; line-height: 1.4; outline: none; field-sizing: content; }
+.chat-composer textarea { flex: 1; resize: none; max-height: 140px; min-height: 44px; padding: 11px 14px; border: 1px solid #d3dcf1; border-radius: 14px; background: #f8faff; font: inherit; font-size: 14.5px; line-height: 1.4; outline: none; field-sizing: content; overflow-y: auto; }
 .chat-composer textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(44, 95, 184, 0.1); background: #fff; }
 .chat-counter { justify-self: end; color: #6b7898; font-size: 12px; margin-top: -8px; }
 .chat-start-dialog textarea { min-height: 96px; }

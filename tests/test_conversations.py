@@ -117,14 +117,13 @@ def test_message_body_accepts_valid_text(raw: str, expected: str) -> None:
         "",
         "   ",
         "я" * (MESSAGE_BODY_MAX_LENGTH + 1),
-        "рядок\nще рядок",
         "таб\tтут",
         "нуль\x00байт",
         "del\x7f",
         "підміна " + RIGHT_TO_LEFT_OVERRIDE + "тексту",
         None,
     ],
-    ids=["empty", "spaces", "too-long", "newline", "tab", "nul", "del", "bidi", "none"],
+    ids=["empty", "spaces", "too-long", "tab", "nul", "del", "bidi", "none"],
 )
 def test_message_body_rejects_invalid_text(raw) -> None:
     """[TP-050]
@@ -133,6 +132,12 @@ def test_message_body_rejects_invalid_text(raw) -> None:
     """
     with pytest.raises(InvalidMessageError):
         normalize_message_body(raw)
+
+
+def test_message_body_keeps_line_breaks() -> None:
+    """[TP-050] Перенос рядка дозволений: CRLF зводиться до LF, 3+ переноси до двох."""
+    assert normalize_message_body("  рядок\r\nщe рядок  ") == "рядок\nщe рядок"
+    assert normalize_message_body("а\n\n\n\n\nб") == "а\n\nб"
 
 
 def test_message_entity_normalizes_body_and_rejects_invalid() -> None:

@@ -313,6 +313,16 @@ function Thread({ conversation, onError }: { conversation: ChatConversation | nu
     finally { setSending(false); }
   }
 
+  // Safari/Firefox не підтримують `field-sizing: content`, тож без цього
+  // Shift+Enter додає рядок, який не видно: поле лишається однорядковим.
+  const composer = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const field = composer.current;
+    if (!field) return;
+    field.style.height = "auto";
+    field.style.height = `${Math.min(field.scrollHeight, 140)}px`;
+  }, [text]);
+
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); }
   }
@@ -343,7 +353,7 @@ function Thread({ conversation, onError }: { conversation: ChatConversation | nu
         })}
       </div>
       <form className="chat-composer" onSubmit={(event) => void send(event)}>
-        <textarea value={text} onChange={(event) => setText(event.target.value)} onKeyDown={onKeyDown} maxLength={MESSAGE_MAX} rows={1} placeholder="Напишіть повідомлення…" aria-label="Повідомлення" />
+        <textarea ref={composer} value={text} onChange={(event) => setText(event.target.value)} onKeyDown={onKeyDown} maxLength={MESSAGE_MAX} rows={1} placeholder="Напишіть повідомлення…" aria-label="Повідомлення" />
         <button className="button button-primary" type="submit" disabled={sending || !text.trim()}>Надіслати</button>
       </form>
     </div>
