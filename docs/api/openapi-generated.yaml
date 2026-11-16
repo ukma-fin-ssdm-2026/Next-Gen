@@ -338,7 +338,7 @@ paths:
       tags:
       - Listings
       summary: Отримати оголошення за ID (публічне)
-      description: Деталі активного оголошення без контактів.
+      description: Деталі активного оголошення з рейтингом продавця, без контактів.
       operationId: get_listing_api_v1_listings__listing_id__get
       parameters:
       - name: listing_id
@@ -354,7 +354,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListingPublicResponse'
+                $ref: '#/components/schemas/ListingDetailPublicResponse'
         '404':
           description: Not Found
           content:
@@ -2193,6 +2193,446 @@ paths:
             application/json:
               example:
                 detail: База даних тимчасово недоступна. Спробуйте за кілька секунд.
+  /api/v1/users/{seller_id}/review:
+    put:
+      tags:
+      - Seller reviews
+      summary: Поставити або змінити оцінку продавця
+      operationId: set_seller_review_api_v1_users__seller_id__review_put
+      parameters:
+      - name: seller_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Seller Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetSellerReviewRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnSellerReviewResponse'
+        '201':
+          description: Оцінку створено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnSellerReviewResponse'
+        '401':
+          description: Потрібна чинна сесія
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Дія заборонена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Продавця або оголошення не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Невалідні дані
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+        '429':
+          description: Вичерпано ліміт за 24 години
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: База даних тимчасово недоступна (REL-03); повторіть запит пізніше
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 5
+          content:
+            application/json:
+              example:
+                detail: База даних тимчасово недоступна. Спробуйте за кілька секунд.
+    delete:
+      tags:
+      - Seller reviews
+      summary: Видалити свою оцінку продавця
+      operationId: delete_seller_review_api_v1_users__seller_id__review_delete
+      parameters:
+      - name: seller_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Seller Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '204':
+          description: Successful Response
+        '401':
+          description: Потрібна чинна сесія
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Дія заборонена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Оцінку не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Невалідні дані
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+        '429':
+          description: Вичерпано ліміт за 24 години
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: База даних тимчасово недоступна (REL-03); повторіть запит пізніше
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 5
+          content:
+            application/json:
+              example:
+                detail: База даних тимчасово недоступна. Спробуйте за кілька секунд.
+  /api/v1/users/{seller_id}/rating:
+    get:
+      tags:
+      - Seller reviews
+      summary: Отримати видимий рейтинг продавця
+      operationId: get_seller_rating_api_v1_users__seller_id__rating_get
+      parameters:
+      - name: seller_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Seller Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SellerRatingResponse'
+        '404':
+          description: Продавця не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Невалідні дані
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+        '503':
+          description: База даних тимчасово недоступна (REL-03); повторіть запит пізніше
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 5
+          content:
+            application/json:
+              example:
+                detail: База даних тимчасово недоступна. Спробуйте за кілька секунд.
+  /api/v1/admin/reviews:
+    get:
+      tags:
+      - Seller reviews
+      summary: Переглянути оцінки та статистику їх авторів
+      operationId: list_seller_reviews_api_v1_admin_reviews_get
+      parameters:
+      - name: seller_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Seller Id
+      - name: author_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Author Id
+      - name: skip
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Skip
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminSellerReviewResponse'
+                title: Response List Seller Reviews Api V1 Admin Reviews Get
+        '401':
+          description: Потрібна чинна сесія
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Дія заборонена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Невалідні дані
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+        '503':
+          description: База даних тимчасово недоступна (REL-03); повторіть запит пізніше
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 5
+          content:
+            application/json:
+              example:
+                detail: База даних тимчасово недоступна. Спробуйте за кілька секунд.
+  /api/v1/admin/reviews/{review_id}/hide:
+    post:
+      tags:
+      - Seller reviews
+      summary: Приховати оцінку з обов'язковою причиною
+      operationId: hide_seller_review_api_v1_admin_reviews__review_id__hide_post
+      parameters:
+      - name: review_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Review Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HideSellerReviewRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModeratedSellerReviewResponse'
+        '401':
+          description: Потрібна чинна сесія
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Дія заборонена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Оцінку не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Невалідні дані
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+        '503':
+          description: База даних тимчасово недоступна (REL-03); повторіть запит пізніше
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 5
+          content:
+            application/json:
+              example:
+                detail: База даних тимчасово недоступна. Спробуйте за кілька секунд.
+  /api/v1/admin/reviews/{review_id}/restore:
+    post:
+      tags:
+      - Seller reviews
+      summary: Відновити видимість оцінки
+      operationId: restore_seller_review_api_v1_admin_reviews__review_id__restore_post
+      parameters:
+      - name: review_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Review Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModeratedSellerReviewResponse'
+        '401':
+          description: Потрібна чинна сесія
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Дія заборонена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Оцінку не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Невалідні дані
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiValidationErrorResponse'
+        '503':
+          description: База даних тимчасово недоступна (REL-03); повторіть запит пізніше
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 5
+          content:
+            application/json:
+              example:
+                detail: База даних тимчасово недоступна. Спробуйте за кілька секунд.
   /api/v1/listings/{listing_id}/complaints:
     post:
       tags:
@@ -2846,6 +3286,75 @@ paths:
                 $ref: '#/components/schemas/ReadinessResponse'
 components:
   schemas:
+    AdminSellerReviewResponse:
+      properties:
+        review_id:
+          type: string
+          format: uuid
+          title: Review Id
+        seller_id:
+          type: string
+          format: uuid
+          title: Seller Id
+        listing_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Listing Id
+        rating:
+          type: integer
+          maximum: 5.0
+          minimum: 1.0
+          title: Rating
+        status:
+          $ref: '#/components/schemas/SellerReviewStatus'
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+        author_id:
+          type: string
+          format: uuid
+          title: Author Id
+        hidden_by:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Hidden By
+        hidden_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Hidden At
+        hidden_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hidden Reason
+        author_stats:
+          $ref: '#/components/schemas/ReviewAuthorStatsResponse'
+      type: object
+      required:
+      - review_id
+      - seller_id
+      - listing_id
+      - rating
+      - status
+      - created_at
+      - updated_at
+      - author_id
+      - hidden_by
+      - hidden_at
+      - hidden_reason
+      - author_stats
+      title: AdminSellerReviewResponse
     ApiValidationErrorResponse:
       properties:
         detail:
@@ -3451,6 +3960,18 @@ components:
       - version
       - timestamp
       title: HealthResponse
+    HideSellerReviewRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 5
+          title: Reason
+      additionalProperties: false
+      type: object
+      required:
+      - reason
+      title: HideSellerReviewRequest
     ListingCondition:
       type: string
       enum:
@@ -3537,6 +4058,91 @@ components:
       - contact
       - image_urls
       title: ListingCreate
+    ListingDetailPublicResponse:
+      properties:
+        title:
+          type: string
+          maxLength: 100
+          minLength: 3
+          title: Title
+          description: Назва оголошення
+          examples:
+          - Худі з логотипом НаУКМА
+        description:
+          type: string
+          maxLength: 2000
+          title: Description
+          description: Необов'язковий опис товару; може бути порожнім
+          examples:
+          - Худі в ідеальному стані, розмір M. Продаю, бо не ношу.
+        price:
+          type: number
+          maximum: 100000000.0
+          minimum: 0.0
+          title: Price
+          description: Ціна в гривнях (від 0 до 100 000 000)
+          examples:
+          - 150.0
+        category_id:
+          type: string
+          format: uuid
+          title: Category Id
+          description: ID категорії
+          examples:
+          - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        condition:
+          $ref: '#/components/schemas/ListingCondition'
+          description: Стан товару (NEW, LIKE_NEW, GOOD, USED, FOR_PARTS)
+          default: GOOD
+          examples:
+          - GOOD
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Унікальний ідентифікатор оголошення
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+          description: ID автора
+        status:
+          type: string
+          title: Status
+          description: Статус оголошення
+          examples:
+          - ACTIVE
+        images:
+          items:
+            $ref: '#/components/schemas/ListingImageResponse'
+          type: array
+          title: Images
+          description: Список фотографій оголошення
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Дата створення
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+          description: Дата останнього оновлення
+        seller_rating:
+          $ref: '#/components/schemas/SellerRatingSummary'
+      type: object
+      required:
+      - title
+      - description
+      - price
+      - category_id
+      - id
+      - user_id
+      - status
+      - created_at
+      - updated_at
+      - seller_rating
+      title: ListingDetailPublicResponse
     ListingImageResponse:
       properties:
         image_id:
@@ -3875,6 +4481,72 @@ components:
       - action_type
       title: LogEntryResponse
       description: Рядок журналу дій користувачів або адміністраторів.
+    ModeratedSellerReviewResponse:
+      properties:
+        review_id:
+          type: string
+          format: uuid
+          title: Review Id
+        seller_id:
+          type: string
+          format: uuid
+          title: Seller Id
+        listing_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Listing Id
+        rating:
+          type: integer
+          maximum: 5.0
+          minimum: 1.0
+          title: Rating
+        status:
+          $ref: '#/components/schemas/SellerReviewStatus'
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+        author_id:
+          type: string
+          format: uuid
+          title: Author Id
+        hidden_by:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Hidden By
+        hidden_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Hidden At
+        hidden_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hidden Reason
+      type: object
+      required:
+      - review_id
+      - seller_id
+      - listing_id
+      - rating
+      - status
+      - created_at
+      - updated_at
+      - author_id
+      - hidden_by
+      - hidden_at
+      - hidden_reason
+      title: ModeratedSellerReviewResponse
     ModerationActionResponse:
       properties:
         id:
@@ -3954,6 +4626,47 @@ components:
       - reason
       title: ModerationWithdrawRequest
       description: Тіло запиту містить лише причину; модератор береться із сесії.
+    OwnSellerReviewResponse:
+      properties:
+        review_id:
+          type: string
+          format: uuid
+          title: Review Id
+        seller_id:
+          type: string
+          format: uuid
+          title: Seller Id
+        listing_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Listing Id
+        rating:
+          type: integer
+          maximum: 5.0
+          minimum: 1.0
+          title: Rating
+        status:
+          $ref: '#/components/schemas/SellerReviewStatus'
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+      type: object
+      required:
+      - review_id
+      - seller_id
+      - listing_id
+      - rating
+      - status
+      - created_at
+      - updated_at
+      title: OwnSellerReviewResponse
     ProfileUpdate:
       properties:
         display_name:
@@ -4017,6 +4730,25 @@ components:
       - database
       - timestamp
       title: ReadinessResponse
+    ReviewAuthorStatsResponse:
+      properties:
+        total_count:
+          type: integer
+          title: Total Count
+        recent_count:
+          type: integer
+          title: Recent Count
+          description: Оцінки, створені за останні 24 години
+        recent_one_star_count:
+          type: integer
+          title: Recent One Star Count
+          description: Кількість однозіркових оцінок, створених за останні 24 години
+      type: object
+      required:
+      - total_count
+      - recent_count
+      - recent_one_star_count
+      title: ReviewAuthorStatsResponse
     SellerContactResponse:
       properties:
         listing_id:
@@ -4035,6 +4767,83 @@ components:
       - listing_id
       - contact
       title: SellerContactResponse
+    SellerRatingResponse:
+      properties:
+        average:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Average
+          description: Середнє видимих оцінок або null, якщо їх замало
+        count:
+          type: integer
+          minimum: 0.0
+          title: Count
+          description: Кількість видимих оцінок
+        distribution:
+          anyOf:
+          - additionalProperties:
+              type: integer
+            type: object
+          - type: 'null'
+          title: Distribution
+          description: Кількість за кожним балом або null, якщо оцінок замало
+        my_rating:
+          anyOf:
+          - type: integer
+            maximum: 5.0
+            minimum: 1.0
+          - type: 'null'
+          title: My Rating
+          description: Повертається, лише якщо поточний користувач є автором оцінки
+      type: object
+      required:
+      - average
+      - count
+      - distribution
+      title: SellerRatingResponse
+    SellerRatingSummary:
+      properties:
+        average:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Average
+          description: Середнє видимих оцінок або null, якщо їх замало
+        count:
+          type: integer
+          minimum: 0.0
+          title: Count
+          description: Кількість видимих оцінок
+      type: object
+      required:
+      - average
+      - count
+      title: SellerRatingSummary
+    SellerReviewStatus:
+      type: string
+      enum:
+      - VISIBLE
+      - HIDDEN
+      title: SellerReviewStatus
+    SetSellerReviewRequest:
+      properties:
+        rating:
+          type: integer
+          maximum: 5.0
+          minimum: 1.0
+          title: Rating
+        listing_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Listing Id
+      additionalProperties: false
+      type: object
+      required:
+      - rating
+      title: SetSellerReviewRequest
     UploadedImageResponse:
       properties:
         image_id:

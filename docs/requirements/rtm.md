@@ -19,7 +19,9 @@
 | US-011 / FR-016 | FR | Користувач скаржиться на оголошення, адміністратор розглядає скарги в адмін-панелі | SEC-001 | `TP-031` (інтеграційний API, `tests/test_support_api.py`: `POST /api/v1/listings/{id}/complaints`, `GET /admin/complaints`, `POST /admin/complaints/{id}/resolve` — 201/401/403/404/409/422, одна скарга на пару користувач–оголошення, заборона скарги на власне оголошення, OTHER вимагає опису) |
 | US-012 / FR-017 | FR | Користувач пише адміністрації, адміністратор опрацьовує звернення | SEC-001 | `TP-032` (інтеграційний API: `POST /api/v1/feedback`, `GET /admin/feedback`, `POST /admin/feedback/{id}/resolve` — межі довжини теми й тексту, 401/403/404/409/422) |
 | US-013 / FR-018 | FR | Адміністратор бачить окремі журнали дій користувачів та адміністраторів | SEC-001 | `TP-033` (інтеграційний API: `GET /api/v1/admin/logs/users` та `/admin/logs/admins` — розділення за видом дії: адмін-дії окремо від загальних, пагінація, журнал модерації в журналі адміністраторів, 401/403) |
-
+| US-014 / FR-019 | FR | Виставлення, зміна та видалення власної оцінки, рухомий ліміт і атомарний upsert | SEC-001 | `TP-039`, `TP-040`, `TP-043`, `TP-044` — `tests/test_seller_reviews.py`, `tests/test_seller_reviews_api.py`, `tests/test_postgres_repositories.py` |
+| US-015 / FR-019 | FR | Публічний агрегат і приватне поле `my_rating`, рейтинг тільки в деталях оголошення | SEC-002, PERF-001 | `TP-042` — `tests/test_seller_reviews.py`, `tests/test_seller_reviews_api.py` |
+| US-016 / FR-020 | FR | Адміністративна вибірка, приховування й відновлення оцінок з аудитом | SEC-001 | `TP-041`, `TP-043` — `tests/test_seller_reviews.py`, `tests/test_seller_reviews_api.py`, `tests/test_postgres_repositories.py` |
 
 ---
 > ### Нотатка «Використання ШІ»

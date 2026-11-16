@@ -6,7 +6,7 @@ hide stereotypes
 
 legend right
   Жовтим позначено заплановані сутності
-  (ADR-004, ADR-005); реалізація триває.
+  (ADR-005); реалізація триває.
 endlegend
 
 entity "User" as user {
@@ -121,7 +121,7 @@ entity "ActivityEvent" as activity {
   * created_at : datetime
 }
 
-entity "SellerReview" as review <<planned>> #FFF4D6;line:D9A441 {
+entity "SellerReview" as review {
   * review_id : UUID <<PK>>
   --
   * seller_id : UUID <<FK>>

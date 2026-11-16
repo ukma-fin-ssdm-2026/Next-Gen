@@ -16,6 +16,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -512,6 +513,12 @@ class ActivityEventRow(Base):
     __tablename__ = "activity_events"
     __table_args__ = (
         Index("ix_activity_events_role_created", "actor_role", "created_at"),
+        Index(
+            "ix_activity_events_actor_action_created",
+            "actor_id",
+            "action_type",
+            "created_at",
+        ),
     )
 
     event_id: Mapped[uuid.UUID] = mapped_column(
@@ -531,3 +538,48 @@ class ActivityEventRow(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
+
+
+class SellerReviewRow(Base):
+    """Одна оцінка продавця від автора (ADR-004)."""
+
+    __tablename__ = "seller_reviews"
+    __table_args__ = (
+        UniqueConstraint(
+            "author_id", "seller_id", name="uq_seller_reviews_author_seller"
+        ),
+        CheckConstraint("author_id <> seller_id", name="ck_seller_reviews_not_self"),
+        CheckConstraint("rating BETWEEN 1 AND 5", name="ck_seller_reviews_rating"),
+        CheckConstraint(
+            "(status = 'VISIBLE' AND hidden_by IS NULL AND hidden_at IS NULL "
+            "AND hidden_reason IS NULL) OR "
+            "(status = 'HIDDEN' AND hidden_by IS NOT NULL AND hidden_at IS NOT NULL "
+            "AND hidden_reason IS NOT NULL "
+            "AND length(trim(hidden_reason)) BETWEEN 5 AND 500)",
+            name="ck_seller_reviews_moderation",
+        ),
+        Index("ix_seller_reviews_seller_status", "seller_id", "status"),
+    )
+
+    review_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    seller_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE")
+    )
+    author_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE")
+    )
+    listing_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("listings.listing_id", ondelete="SET NULL")
+    )
+    rating: Mapped[int] = mapped_column(SmallInteger)
+    status: Mapped[str] = mapped_column(
+        SAEnum("VISIBLE", "HIDDEN", name="seller_review_status"),
+        server_default="VISIBLE",
+    )
+    hidden_by: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.user_id")
+    )
+    hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    hidden_reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

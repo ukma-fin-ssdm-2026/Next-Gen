@@ -25,6 +25,15 @@ class ActivityType(str, Enum):
     FEEDBACK_SUBMITTED = "FEEDBACK_SUBMITTED"
     FEEDBACK_RESOLVED = "FEEDBACK_RESOLVED"
     PROFILE_UPDATED = "PROFILE_UPDATED"
+    REVIEW_SET = "REVIEW_SET"
+    REVIEW_REMOVED = "REVIEW_REMOVED"
+    REVIEW_HIDDEN = "REVIEW_HIDDEN"
+    REVIEW_RESTORED = "REVIEW_RESTORED"
+
+
+REVIEW_MUTATION_ACTIVITY_TYPES = frozenset(
+    {ActivityType.REVIEW_SET, ActivityType.REVIEW_REMOVED}
+)
 
 
 # Дії, які можуть виконувати лише адміністратори: вони потрапляють у журнал
@@ -34,6 +43,8 @@ ADMIN_ONLY_ACTIVITY_TYPES = frozenset(
         ActivityType.COMPLAINT_RESOLVED,
         ActivityType.COMPLAINT_DISMISSED,
         ActivityType.FEEDBACK_RESOLVED,
+        ActivityType.REVIEW_HIDDEN,
+        ActivityType.REVIEW_RESTORED,
     }
 )
 

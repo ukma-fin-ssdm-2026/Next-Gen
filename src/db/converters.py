@@ -1,5 +1,6 @@
 """Конвертори між ORM-рядками (Row) та доменними dataclass-об'єктами."""
 
+from dataclasses import asdict
 from typing import Any, TypeVar
 
 from src.db.models import (
@@ -12,6 +13,7 @@ from src.db.models import (
     ListingImageRow,
     ListingRow,
     ModerationActionRow,
+    SellerReviewRow,
     UserRow,
 )
 from src.domain.activity import ActivityEvent, ActivityType
@@ -27,6 +29,7 @@ from src.domain.listings import (
     ListingStatus,
 )
 from src.domain.moderation import ModerationAction, ModerationActionType
+from src.domain.seller_reviews import SellerReview, SellerReviewStatus
 from src.domain.users import User, UserRole
 
 RowT = TypeVar("RowT")
@@ -395,3 +398,23 @@ def activity_domain_to_row(
         details=e.details,
         created_at=e.created_at,
     )
+
+
+def seller_review_row_to_domain(row: SellerReviewRow) -> SellerReview:
+    return SellerReview(
+        review_id=row.review_id,
+        seller_id=row.seller_id,
+        author_id=row.author_id,
+        listing_id=row.listing_id,
+        rating=row.rating,
+        status=SellerReviewStatus(row.status),
+        hidden_by=row.hidden_by,
+        hidden_at=row.hidden_at,
+        hidden_reason=row.hidden_reason,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def seller_review_domain_to_values(review: SellerReview) -> dict[str, Any]:
+    return {**asdict(review), "status": review.status.value}

@@ -42,8 +42,10 @@ from src.api.routers import (
     feedback,
     listings,
     moderation,
+    seller_reviews,
     users,
 )
+from src.config import get_review_min_count_to_display
 from src.db.engine import validate_database_settings
 from src.domain.exceptions import InvalidListingImageError
 from src.repositories.image_storage import STORAGE_KEY_PATTERN, ImageStorage
@@ -53,6 +55,7 @@ from src.repositories.image_storage import STORAGE_KEY_PATTERN, ImageStorage
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Перевіряє налаштування БД до прийому запитів (REL-03, fail fast)."""
     validate_database_settings()
+    get_review_min_count_to_display()
     yield
 
 
@@ -178,6 +181,7 @@ for _router in (
     auth.router,
     moderation.router,
     users.router,
+    seller_reviews.router,
     complaints.router,
     feedback.router,
     activity.router,

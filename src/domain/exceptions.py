@@ -148,3 +148,23 @@ class FeedbackNotFoundError(FeedbackError):
 
 class FeedbackConflictError(FeedbackError):
     """Звернення вже опрацьовано."""
+
+
+class SellerReviewError(Exception):
+    """Базова помилка операцій з оцінками продавців."""
+
+
+class SellerReviewNotFoundError(SellerReviewError):
+    """Продавця, оцінку або оголошення не знайдено."""
+
+
+class SellerReviewForbiddenError(SellerReviewError):
+    """Дія з оцінкою заборонена для поточного користувача."""
+
+
+class InvalidSellerReviewContextError(SellerReviewError):
+    """Оголошення не належить продавцю, якого оцінюють."""
+
+
+class SellerReviewRateLimitError(SellerReviewError):
+    """Вичерпано денний ліміт операцій з оцінками."""
