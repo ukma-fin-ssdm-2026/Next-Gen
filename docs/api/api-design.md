@@ -100,6 +100,14 @@
 
 ---
 
+### 2.11 Оцінки продавців (FR-019, FR-020)
+
+- `PUT /users/{seller_id}/review` приймає JSON з цілим `rating` від 1 до 5 і необов'язковим `listing_id`. Автор береться із сесії. Наявний запис зберігає свій `review_id`, час створення та стан модерації. `DELETE` видаляє власну оцінку. Для прихованої оцінки сервер залишає запис модерації з `deleted_at`. Повторний PUT повертає 200 і оновлює той самий прихований запис. Відновлення з позначкою видалення знімає обмеження для майбутніх оцінок, і видалена автором оцінка залишається відсутньою. Сукупний ліміт — 10 успішних PUT/DELETE за рухомі 24 години на автора.
+- Публічний `GET /users/{seller_id}/rating` повертає `average`, `count`, `distribution` лише для видимих оцінок. `distribution` — об'єкт із ключами `"1"`–`"5"` і кількістю оцінок. Якщо `count` нижчий за `REVIEW_MIN_COUNT_TO_DISPLAY` (типово 3), `average` і `distribution` дорівнюють `null`. Чинна сесія автора додає `my_rating`, якщо він має оцінку цього продавця. Відповідь має `Cache-Control: private, no-store`.
+- `GET /listings/{listing_id}` використовує `ListingDetailPublicResponse` з `seller_rating {average, count}`. Каталог, пошук, обране й власна історія зберігають наявні схеми та не запитують оцінки.
+- `GET /admin/reviews` повертає рядки оцінок разом із `author_stats {total_count, recent_count, recent_one_star_count}`. Останні два лічильники стосуються оцінок, створених в останні 24 години, незалежно від фільтрів списку. Параметри `seller_id` і `author_id` необов'язкові; `skip` типово 0, `limit` типово 50 (1–100).
+- Приховування приймає `{"reason": "..."}` (5–500 символів після обрізання пробілів), відновлення очищає поточні метадані приховування або прибирає запис, видалений автором. Поле `deleted_at` доступне в адміністративних відповідях. Журнал адміністраторів зберігає повну причину в історії після відновлення. Повторний запит, що залишає статус без змін, повертає поточну оцінку без повторного запису в журнал.
+
 ## 3. Кінцеві точки (Endpoints)
 
 | Метод | URL | Опис | Успішний статус | Статуси помилок |
@@ -108,7 +116,7 @@
 | `GET` | `/api/v1/listings` | Отримати список оголошень (з пагінацією, фільтрацією та сортуванням) | 200 OK | 422 Unprocessable Entity, 503 Service Unavailable |
 | `GET` | `/api/v1/listings/my` | Отримати історію власних оголошень продавця (активні та зняті, `FR-005`) | 200 OK | 401 Unauthorized, 403 Forbidden, 422, 503 Service Unavailable |
 | `POST` | `/api/v1/listings` | Створити нове оголошення (підтримує `suggested_category_name`, `FR-002`, `FR-015`) | 201 Created | 400 Bad Request, 401 Unauthorized, 403 Forbidden, 409 Conflict, 422, 429 Too Many Requests, 503 Service Unavailable |
-| `GET` | `/api/v1/listings/{id}` | Отримати деталі конкретного оголошення за ID (без контактів) | 200 OK | 404 Not Found, 503 Service Unavailable |
+| `GET` | `/api/v1/listings/{id}` | Отримати деталі оголошення з `seller_rating`, без контактів | 200 OK | 404 Not Found, 422, 503 Service Unavailable |
 | `PATCH` | `/api/v1/listings/{id}` | Частково оновити дані оголошення | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422, 503 Service Unavailable |
 | `DELETE` | `/api/v1/listings/{id}` | Видалити оголошення | 204 No Content | 401 Unauthorized, 403 Forbidden, 404 Not Found, 503 Service Unavailable |
 | `GET` | `/api/v1/favorites` | Отримати власне обране (активні оголошення без контактів, `FR-009`) | 200 OK | 401 Unauthorized, 403 Forbidden (заблокований), 503 Service Unavailable |
@@ -135,6 +143,12 @@
 | `PUT` | `/api/v1/auth/me/avatar` | Завантажити або замінити аватарку, `multipart/form-data`, поле `file` (JPEG, PNG, WebP, HEIC/HEIF до 10 МБ; нормалізується до WebP, метадані видаляються) (`FR-014`) | 200 OK | 401 Unauthorized, 403 Forbidden, 422, 503 Service Unavailable |
 | `DELETE` | `/api/v1/auth/me/avatar` | Видалити аватарку (`FR-014`) | 200 OK | 401 Unauthorized, 403 Forbidden, 503 Service Unavailable |
 | `GET` | `/api/v1/users/{user_id}` | Публічний профіль для автентифікованих: лише `user_id`, `display_name`, `avatar_url`; без email, ролі й контактів (`FR-014`, `SEC-002`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422, 503 Service Unavailable |
+| `PUT` | `/api/v1/users/{seller_id}/review` | Виставити або змінити власну оцінку | 201 Created, 200 OK | 401, 403, 404, 422, 429, 503 |
+| `DELETE` | `/api/v1/users/{seller_id}/review` | Видалити власну оцінку | 204 No Content | 401, 403, 404, 422, 429, 503 |
+| `GET` | `/api/v1/users/{seller_id}/rating` | Публічний агрегат і власна оцінка лише її автору | 200 OK | 404, 422, 503 |
+| `GET` | `/api/v1/admin/reviews` | Список оцінок зі статистикою авторів (ADMIN) | 200 OK | 401, 403, 422, 503 |
+| `POST` | `/api/v1/admin/reviews/{review_id}/hide` | Приховати оцінку з причиною (ADMIN) | 200 OK | 401, 403, 404, 422, 503 |
+| `POST` | `/api/v1/admin/reviews/{review_id}/restore` | Відновити оцінку (ADMIN) | 200 OK | 401, 403, 404, 422, 503 |
 | `POST` | `/api/v1/auth/logout` | Завершити локальну сесію | 204 No Content | — |
 
 ---

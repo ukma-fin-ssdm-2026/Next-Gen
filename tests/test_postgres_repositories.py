@@ -1,25 +1,31 @@
 """Інтеграційні тести PostgreSQL-адаптерів (ADR-002).
 
-Тести використовують SQLite (in-process, without real PostgreSQL) через
-SQLAlchemy, щоб не вимагати запущеного контейнера в CI.
+Більшість тестів використовують SQLite через SQLAlchemy. Тести, які
+перевіряють PostgreSQL DDL і конкурентний доступ, потребують DATABASE_URL.
 Усі критерії прийняття перевіряються на рівні репозиторіїв.
 """
 
 import os
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import datetime, timezone
+from threading import Barrier
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, delete, func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, sessionmaker
 
-from src.db.models import Base
+from src.db.models import Base, SellerReviewRow, UserRow
 from src.domain.categories import Category
 from src.domain.category_suggestions import CategorySuggestion, CategorySuggestionStatus
+from src.domain.exceptions import SellerReviewRateLimitError
 from src.domain.favorites import Favorite
 from src.domain.listings import Listing, ListingCondition, ListingImage, ListingStatus
 from src.domain.moderation import ModerationAction, ModerationActionType
-from src.domain.users import User, UserRole
+from src.domain.seller_reviews import REVIEW_WINDOW, SellerReview, SellerReviewStatus
+from src.domain.users import CurrentUser, User, UserRole, utc_now
 from src.repositories.postgres_categories import PostgresCategoryRepository
 from src.repositories.postgres_favorites_moderation import (
     PostgresFavoriteRepository,
@@ -29,7 +35,10 @@ from src.repositories.postgres_category_suggestions import (
     PostgresCategorySuggestionRepository,
 )
 from src.repositories.postgres_listings import PostgresListingRepository
+from src.repositories.postgres_seller_reviews import PostgresSellerReviewRepository
+from src.repositories.postgres_support import PostgresActivityRepository
 from src.repositories.postgres_users import PostgresUserRepository
+from src.services.seller_reviews import SellerReviewService
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -731,7 +740,7 @@ def test_all_tables_created(engine):
 
 
 def test_alembic_migration_round_trip(monkeypatch):
-    """[FR-001] [FR-002] [TP-030] Alembic round-trip: upgrade → downgrade → upgrade.
+    """[FR-001] [FR-002] [TP-030] [TP-044] Alembic round-trip на чистій SQLite.
 
     Перевіряє, що міграція може бути застосована до порожньої бази,
     повністю відкочена та повторно застосована без помилок.
@@ -767,12 +776,25 @@ def test_alembic_migration_round_trip(monkeypatch):
             "listing_images",
             "favorites",
             "moderation_actions",
+            "seller_reviews",
             "conversations",
             "messages",
         }
         assert (
             expected <= tables_after_upgrade
         ), f"Відсутні таблиці після upgrade head: {expected - tables_after_upgrade}"
+
+        # Окремо перевіряємо межу нової міграції перед повним відкатом.
+        command.downgrade(cfg, "0004_condition_for_parts")
+        with eng.connect() as connection:
+            inspector = inspect(connection)
+            assert not inspector.has_table("seller_reviews")
+            activity_indexes = inspector.get_indexes("activity_events")
+            assert "ix_activity_events_actor_action_created" not in {
+                index["name"] for index in activity_indexes
+            }
+        eng.dispose()
+        command.upgrade(cfg, "head")
 
         # Крок 2: повний відкат
         command.downgrade(cfg, "base")
@@ -1365,6 +1387,198 @@ class TestPostgresSupportRepositories:
         assert listed[0].blocked_at is not None
 
 
+@pytest.fixture
+def seller_reviews_postgres():
+    """Тимчасові учасники на PostgreSQL із міграціями з CI job."""
+    database_url = os.getenv("DATABASE_URL", "")
+    if not database_url.startswith("postgresql"):
+        pytest.skip("Потрібен PostgreSQL; у CI це job postgres-migration.")
+
+    engine = create_engine(database_url)
+    author, seller, moderator = make_user(), make_user(), make_user(role=UserRole.ADMIN)
+    try:
+        with Session(engine) as session, session.begin():
+            users = PostgresUserRepository(session)
+            for user in (author, seller, moderator):
+                users.save(user)
+        yield engine, author, seller, moderator
+    finally:
+        with Session(engine) as session, session.begin():
+            session.execute(
+                delete(UserRow).where(
+                    UserRow.user_id.in_(
+                        [user.user_id for user in (author, seller, moderator)]
+                    )
+                )
+            )
+        engine.dispose()
+
+
+def _review_actor(user: User) -> CurrentUser:
+    return CurrentUser(
+        user_id=user.user_id,
+        tenant_id=user.tenant_id,
+        entra_object_id=user.entra_object_id,
+        email=user.email,
+        display_name=user.display_name,
+        role=user.role,
+    )
+
+
+def _pg_review_service(session: Session, events=None) -> SellerReviewService:
+    return SellerReviewService(
+        PostgresSellerReviewRepository(session),
+        PostgresUserRepository(session),
+        PostgresListingRepository(session),
+        events if events is not None else PostgresActivityRepository(session),
+        3,
+    )
+
+
+def test_postgres_seller_review_upsert_is_atomic(seller_reviews_postgres):
+    """[FR-019] [TP-043] Конкурентний ON CONFLICT повертає один стабільний ID."""
+    engine, author, seller, _ = seller_reviews_postgres
+    barrier = Barrier(5, timeout=15)
+
+    def upsert(rating):
+        candidate = SellerReview(seller.user_id, author.user_id, rating)
+        with Session(engine) as session, session.begin():
+            barrier.wait()
+            return PostgresSellerReviewRepository(session).upsert(candidate)
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        results = list(executor.map(upsert, range(1, 6)))
+
+    assert sum(created for _, created in results) == 1
+    assert len({review.review_id for review, _ in results}) == 1
+    assert len({review.created_at for review, _ in results}) == 1
+    with Session(engine) as session:
+        count = session.scalar(
+            select(func.count())
+            .select_from(SellerReviewRow)
+            .where(
+                SellerReviewRow.author_id == author.user_id,
+                SellerReviewRow.seller_id == seller.user_id,
+            )
+        )
+        assert count == 1
+
+
+def test_postgres_concurrent_review_mutations_respect_shared_quota(
+    seller_reviews_postgres,
+):
+    """[FR-019] [TP-043] 12 одночасних операцій дають 10 записів і 2 відмови."""
+    engine, author, seller, another_seller = seller_reviews_postgres
+    actor = _review_actor(author)
+    barrier = Barrier(12, timeout=15)
+
+    def set_review(index):
+        target = seller if index % 2 else another_seller
+        with Session(engine) as session:
+            barrier.wait()
+            try:
+                with session.begin():
+                    _pg_review_service(session).set_review(
+                        actor, target.user_id, 4, None
+                    )
+            except SellerReviewRateLimitError:
+                return False
+        return True
+
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        results = list(executor.map(set_review, range(12)))
+
+    assert sum(results) == 10
+    with Session(engine) as session:
+        events = PostgresActivityRepository(session)
+        assert (
+            events.count_review_mutations(author.user_id, utc_now() - REVIEW_WINDOW)
+            == 10
+        )
+
+
+def test_postgres_reviews_persist_moderation_and_roll_back_failed_audit(
+    seller_reviews_postgres, monkeypatch
+):
+    """[FR-019] [FR-020] [TP-043] Модерація зберігається, збій аудиту відкочує запис."""
+    engine, author, seller, moderator = seller_reviews_postgres
+    actor, admin = _review_actor(author), _review_actor(moderator)
+    with Session(engine) as session, session.begin():
+        events = PostgresActivityRepository(session)
+        add_event = events.add
+        monkeypatch.setattr(
+            events,
+            "add",
+            lambda event: add_event(replace(event, actor_id=uuid.uuid4())),
+        )
+        with pytest.raises(IntegrityError), session.begin_nested():
+            _pg_review_service(session, events).set_review(
+                actor, seller.user_id, 4, None
+            )
+
+        repo = PostgresSellerReviewRepository(session)
+        assert repo.find(author.user_id, seller.user_id) is None
+        service = _pg_review_service(session)
+        review, _ = service.set_review(actor, seller.user_id, 1, None)
+        service.moderate(admin, review.review_id, hide_reason="Підозріла оцінка")
+
+    with Session(engine) as session, session.begin():
+        service = _pg_review_service(session)
+        saved, stats = service.list_for_moderation(
+            admin, seller.user_id, author.user_id, 0, 50
+        )
+        assert len(saved) == 1
+        assert saved[0].status == SellerReviewStatus.HIDDEN
+        assert saved[0].hidden_by == moderator.user_id
+        assert saved[0].hidden_reason == "Підозріла оцінка"
+        assert stats[author.user_id].recent_one_star_count == 1
+        assert service.summary(seller.user_id).count == 0
+        updated, created = service.set_review(actor, seller.user_id, 4, None)
+        assert not created
+        assert updated.status == SellerReviewStatus.HIDDEN
+        assert (
+            service.moderate(admin, review.review_id, hide_reason=None).status
+            == SellerReviewStatus.VISIBLE
+        )
+        assert service.summary(seller.user_id).count == 1
+        service.remove_review(actor, seller.user_id)
+        assert service.summary(seller.user_id).count == 0
+
+
+def test_postgres_seller_review_api_persists_across_requests(
+    seller_reviews_postgres, monkeypatch
+):
+    """[FR-019] [TP-043] HTTP-запити читають оцінку з нової PostgreSQL-сесії."""
+    from fastapi.testclient import TestClient
+
+    from src.api.deps import get_db_session, require_current_user
+    from src.api.main import app
+
+    engine, author, seller, _ = seller_reviews_postgres
+
+    def request_session():
+        with Session(engine) as session, session.begin():
+            yield session
+
+    monkeypatch.setitem(app.dependency_overrides, get_db_session, request_session)
+    monkeypatch.setitem(
+        app.dependency_overrides, require_current_user, lambda: _review_actor(author)
+    )
+    path = f"/api/v1/users/{seller.user_id}"
+    with TestClient(app) as client:
+        first = client.put(f"{path}/review", json={"rating": 4})
+        second = client.put(f"{path}/review", json={"rating": 2})
+        assert (first.status_code, second.status_code) == (201, 200)
+        assert first.json()["review_id"] == second.json()["review_id"]
+        assert client.get(f"{path}/rating").json() == {
+            "average": None,
+            "count": 1,
+            "distribution": None,
+        }
+        assert client.delete(f"{path}/review").status_code == 204
+        assert client.get(f"{path}/rating").json()["count"] == 0
+
+
 # ---------------------------------------------------------------------------
 # Conversation / Message (ADR-005)
 # ---------------------------------------------------------------------------
@@ -1573,3 +1787,76 @@ def test_concurrent_get_or_create_does_not_duplicate_conversation(pg_engine):
     assert sorted(created for _, created in results) == [False, True]
     assert len({cid for cid, _ in results}) == 1
     assert count == 1
+
+
+@pytest.mark.parametrize("existing", ["0005_seller_reviews", "0006_chat_tables"])
+def test_seller_review_migration_upgrades_existing_branch(
+    tmp_path, monkeypatch, existing
+):
+    """[FR-019] [TP-044] Від 0005 або 0006 можна дійти до єдиної голови."""
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import inspect
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    url = f"sqlite:///{tmp_path / 'chat.db'}"
+    cfg = Config()
+    cfg.set_main_option("script_location", "alembic")
+    cfg.set_main_option("sqlalchemy.url", url)
+    command.upgrade(cfg, existing)
+
+    engine = create_engine(url)
+    try:
+        with engine.connect() as connection:
+            inspector = inspect(connection)
+            assert inspector.has_table("messages") == (existing == "0006_chat_tables")
+            assert inspector.has_table("seller_reviews") == (
+                existing == "0005_seller_reviews"
+            )
+
+        command.upgrade(cfg, "head")
+        with engine.connect() as connection:
+            inspector = inspect(connection)
+            assert inspector.has_table("messages")
+            assert inspector.has_table("seller_reviews")
+            event_columns = inspector.get_columns("activity_events")
+            assert "moderation_reason" in {column["name"] for column in event_columns}
+    finally:
+        engine.dispose()
+
+
+def test_postgres_hidden_review_tombstone_and_complete_audit(seller_reviews_postgres):
+    """[FR-020] [TP-043] PostgreSQL утримує приховування та повну причину."""
+    engine, author, seller, moderator = seller_reviews_postgres
+    actor, admin = _review_actor(author), _review_actor(moderator)
+    reason = "а" * 499 + "!"
+    with Session(engine) as session, session.begin():
+        service = _pg_review_service(session)
+        review, _ = service.set_review(actor, seller.user_id, 1, None)
+        service.moderate(admin, review.review_id, hide_reason=reason)
+        service.remove_review(actor, seller.user_id)
+
+    with Session(engine) as session, session.begin():
+        service = _pg_review_service(session)
+        assert service.get_rating(seller.user_id, actor)[1] is None
+        recreated, created = service.set_review(actor, seller.user_id, 5, None)
+        assert not created
+        assert recreated.review_id == review.review_id
+        assert recreated.status == SellerReviewStatus.HIDDEN
+        assert recreated.deleted_at is None
+        assert service.summary(seller.user_id).count == 0
+        service.remove_review(actor, seller.user_id)
+        service.moderate(admin, review.review_id, hide_reason=None)
+
+    with Session(engine) as session, session.begin():
+        service = _pg_review_service(session)
+        assert service.get_rating(seller.user_id, actor)[1] is None
+        events = PostgresActivityRepository(session).list_events(admin_only=True)
+        (audit,) = [
+            event
+            for event in events
+            if event.actor_id == moderator.user_id
+            and event.moderation_reason is not None
+        ]
+        assert audit.moderation_reason == reason
+        assert service.set_review(actor, seller.user_id, 5, None)[1]

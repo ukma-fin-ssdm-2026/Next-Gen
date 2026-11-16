@@ -2,7 +2,7 @@
 skinparam componentStyle uml2
 legend right
   Жовтим позначено заплановані компоненти
-  (ADR-004, ADR-005); реалізація триває.
+  (ADR-005); реалізація триває.
 endlegend
 
 title Component Diagram - Baraholka NaUKMA (Monolithic Client-Server)
@@ -24,7 +24,7 @@ package "Server Tier (FastAPI Monolith)" {
     component "Complaint Service" as ComplaintService <<Service>>
     component "Feedback Service" as FeedbackService <<Service>>
     component "Activity Log Service" as ActivityLogService <<Service>>
-    component "Review Service" as ReviewService <<Service, planned>> #FFF4D6;line:D9A441
+    component "Seller Review Service" as ReviewService <<Service>>
     component "Conversation Service" as ConversationService <<Service, planned>> #FFF4D6;line:D9A441
     
     component "Data Access Layer\n(ORM)" as DAL <<Repository>>
@@ -49,7 +49,7 @@ Router --> ModerationService
 Router --> ComplaintService
 Router --> FeedbackService
 Router --> ActivityLogService
-Router --> ReviewService
+Router --> ReviewService : "Rating, moderation, listing detail"
 Router --> ConversationService
 
 AuthService --> DAL
@@ -63,9 +63,7 @@ ComplaintService --> ActivityLogService : "Record Submit/Resolution"
 FeedbackService --> DAL
 FeedbackService --> ActivityLogService : "Record Submit/Resolution"
 ActivityLogService --> DAL
-ListingService ..> ReviewService : "seller_rating\n(batch aggregate)"
-ReviewService --> DAL
-ReviewService --> ActivityLogService : "Record REVIEW_SET/REMOVED/HIDDEN"
+ReviewService --> DAL : "Reviews and activity events"
 ConversationService --> DAL
 ConversationService --> ActivityLogService : "Record CONVERSATION_STARTED"
 

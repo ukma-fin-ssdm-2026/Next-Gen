@@ -6,6 +6,7 @@ from enum import Enum
 from uuid import UUID, uuid4
 
 from src.domain.listings import utc_now
+from src.domain.moderation import normalize_moderation_reason
 from src.domain.users import UserRole
 
 ACTIVITY_DETAILS_MAX_LENGTH = 300
@@ -26,6 +27,15 @@ class ActivityType(str, Enum):
     FEEDBACK_RESOLVED = "FEEDBACK_RESOLVED"
     PROFILE_UPDATED = "PROFILE_UPDATED"
     CONVERSATION_STARTED = "CONVERSATION_STARTED"
+    REVIEW_SET = "REVIEW_SET"
+    REVIEW_REMOVED = "REVIEW_REMOVED"
+    REVIEW_HIDDEN = "REVIEW_HIDDEN"
+    REVIEW_RESTORED = "REVIEW_RESTORED"
+
+
+REVIEW_MUTATION_ACTIVITY_TYPES = frozenset(
+    {ActivityType.REVIEW_SET, ActivityType.REVIEW_REMOVED}
+)
 
 
 # Дії, які можуть виконувати лише адміністратори: вони потрапляють у журнал
@@ -35,6 +45,8 @@ ADMIN_ONLY_ACTIVITY_TYPES = frozenset(
         ActivityType.COMPLAINT_RESOLVED,
         ActivityType.COMPLAINT_DISMISSED,
         ActivityType.FEEDBACK_RESOLVED,
+        ActivityType.REVIEW_HIDDEN,
+        ActivityType.REVIEW_RESTORED,
     }
 )
 
@@ -50,8 +62,15 @@ class ActivityEvent:
     details: str = ""
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=utc_now)
+    moderation_reason: str | None = None
 
     def __post_init__(self) -> None:
+        if self.moderation_reason is not None:
+            object.__setattr__(
+                self,
+                "moderation_reason",
+                normalize_moderation_reason(self.moderation_reason),
+            )
         if len(self.details) > ACTIVITY_DETAILS_MAX_LENGTH:
             object.__setattr__(
                 self, "details", self.details[:ACTIVITY_DETAILS_MAX_LENGTH]

@@ -1,8 +1,9 @@
 """PostgreSQL-адаптери скарг, звернень і журналу дій (FR-016, FR-017, FR-018)."""
 
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.db.converters import (
@@ -14,7 +15,11 @@ from src.db.converters import (
     feedback_row_to_domain,
 )
 from src.db.models import ActivityEventRow, ComplaintRow, FeedbackRow
-from src.domain.activity import ADMIN_ONLY_ACTIVITY_TYPES, ActivityEvent
+from src.domain.activity import (
+    ADMIN_ONLY_ACTIVITY_TYPES,
+    REVIEW_MUTATION_ACTIVITY_TYPES,
+    ActivityEvent,
+)
 from src.domain.complaints import Complaint, ComplaintStatus
 from src.domain.feedback import Feedback, FeedbackStatus
 
@@ -120,3 +125,17 @@ class PostgresActivityRepository:
         return [
             activity_row_to_domain(r) for r in self._session.execute(stmt).scalars()
         ]
+
+    def count_review_mutations(self, actor_id: UUID, since: datetime) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(ActivityEventRow)
+            .where(
+                ActivityEventRow.actor_id == actor_id,
+                ActivityEventRow.action_type.in_(
+                    [kind.value for kind in REVIEW_MUTATION_ACTIVITY_TYPES]
+                ),
+                ActivityEventRow.created_at > since,
+            )
+        )
+        return self._session.execute(stmt).scalar_one()

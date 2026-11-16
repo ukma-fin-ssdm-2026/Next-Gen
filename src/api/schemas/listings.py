@@ -184,6 +184,17 @@ class ListingPublicResponse(ListingBase):
     updated_at: datetime = Field(..., description="Дата останнього оновлення")
 
 
+class SellerRatingSummary(BaseModel):
+    average: float | None = Field(
+        ..., description="Середнє видимих оцінок або null, якщо їх замало"
+    )
+    count: int = Field(..., ge=0, description="Кількість видимих оцінок")
+
+
+class ListingDetailPublicResponse(ListingPublicResponse):
+    seller_rating: SellerRatingSummary
+
+
 class ListingResponse(ListingPublicResponse):
     contact: str = Field(..., description="Контактні дані (пошта або Telegram)")
     suggested_category_name: Optional[str] = Field(
