@@ -109,6 +109,20 @@ def _github_headers() -> dict[str, str]:
     return headers
 
 
+def _saved_run_fp(run: dict[str, Any]) -> tuple[Any, ...]:
+    created = str(run.get("createdAt") or run.get("created_at") or "")
+    started = str(run.get("runStartedAt") or run.get("run_started_at") or created)
+    updated = str(run.get("updatedAt") or run.get("updated_at") or "")
+    return (
+        int(run.get("databaseId") or run.get("id") or 0),
+        int(run.get("attempt") or run.get("run_attempt") or 1),
+        str(run.get("conclusion")),
+        _parse_iso(created),
+        _parse_iso(started),
+        _parse_iso(updated),
+    )
+
+
 def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]:
     """Отримує запуски CI/CD на `main` через GitHub Actions REST API."""
     headers = _github_headers()
@@ -117,11 +131,16 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
     end_dt = _parse_iso(f"{DEFAULT_UNTIL}T23:59:59Z")
 
     fallback_by_sha: dict[str, dict[str, Any]] = {}
+    saved_runs_by_sha: dict[str, list[tuple[Any, ...]]] = {}
     if DEFAULT_EVIDENCE.exists():
         saved = json.loads(DEFAULT_EVIDENCE.read_text(encoding="utf-8"))
         for item in saved.get("delivery_units", []):
             fallback_by_sha[item["full_sha"]] = item
             fallback_by_sha[item["commit_sha"]] = item
+        for raw_run in saved.get("github_runs_raw", []):
+            raw_sha = raw_run.get("headSha") or raw_run.get("head_sha")
+            if raw_sha:
+                saved_runs_by_sha.setdefault(raw_sha, []).append(_saved_run_fp(raw_run))
 
     raw_runs: list[dict[str, Any]] = []
     for page in range(1, 10):
@@ -165,7 +184,6 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
     )
 
     pr_first_commit_cache: dict[int, datetime] = {}
-    can_query_details = bool(os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN"))
 
     for idx, (sha, group) in enumerate(ordered_groups, start=1):
         conclusions = {r.get("conclusion") for r in group}
@@ -179,14 +197,31 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
             unit_status = "failure"
 
         cached = fallback_by_sha.get(sha) or fallback_by_sha.get(sha[:7])
-        if cached:
-            first_commit_at = _parse_iso(cached["first_commit_at"])
+        title = group[0].get("display_title", "")
+        pr_match = re.search(r"#(\d+)", title)
+        cached_pr = cached.get("pr_number") if cached else None
+        pr_number: int | None = (
+            int(pr_match.group(1))
+            if pr_match
+            else (int(cached_pr) if cached_pr is not None else None)
+        )
+        pr_url = (
+            cached.get("pr_url")
+            if cached and cached.get("pr_url")
+            else (
+                f"https://github.com/{DEFAULT_REPO}/pull/{pr_number}"
+                if pr_number is not None
+                else None
+            )
+        )
+        note = str(cached.get("note", "")) if cached else ""
+
+        live_fp = sorted(_saved_run_fp(r) for r in group)
+        saved_fp = sorted(saved_runs_by_sha.get(sha, []))
+        if cached and saved_fp and live_fp == saved_fp:
             completed_at = _parse_iso(cached["completed_at"])
             queue_seconds = int(cached["queue_seconds"])
             execution_seconds = int(cached["execution_seconds"])
-            pr_number = cached.get("pr_number")
-            pr_url = cached.get("pr_url")
-            note = str(cached.get("note", ""))
         else:
             created_min = min(_parse_iso(r["created_at"]) for r in group)
             started_min = min(
@@ -197,28 +232,36 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
             execution_seconds = max(
                 0, int((completed_at - started_min).total_seconds())
             )
-            title = group[0].get("display_title", "")
-            pr_match = re.search(r"#(\d+)", title)
-            pr_number = int(pr_match.group(1)) if pr_match else None
-            pr_url = (
-                f"https://github.com/{DEFAULT_REPO}/pull/{pr_number}"
-                if pr_number
-                else None
-            )
-            first_commit_at = created_min
-            if pr_number and can_query_details:
-                if pr_number not in pr_first_commit_cache:
-                    c_resp = requests.get(
-                        f"{base_url}/pulls/{pr_number}/commits",
-                        headers=headers,
-                        params={"per_page": 100},
-                        timeout=GITHUB_API_TIMEOUT_SECONDS,
+
+        if cached and cached.get("first_commit_at"):
+            first_commit_at = _parse_iso(cached["first_commit_at"])
+        else:
+            if pr_number is None:
+                raise RuntimeError(
+                    f"Не вдалося визначити час першого коміту для SHA {sha[:7]} "
+                    f"(PR #{pr_number})"
+                )
+            if pr_number not in pr_first_commit_cache:
+                c_resp = requests.get(
+                    f"{base_url}/pulls/{pr_number}/commits",
+                    headers=headers,
+                    params={"per_page": 100},
+                    timeout=GITHUB_API_TIMEOUT_SECONDS,
+                )
+                if not c_resp.ok:
+                    raise RuntimeError(
+                        f"Не вдалося визначити час першого коміту для SHA {sha[:7]} "
+                        f"(PR #{pr_number})"
                     )
-                    if c_resp.ok and c_resp.json():
-                        dt = c_resp.json()[0]["commit"]["author"]["date"]
-                        pr_first_commit_cache[pr_number] = _parse_iso(dt)
-                first_commit_at = pr_first_commit_cache.get(pr_number, created_min)
-            note = ""
+                commits_payload = c_resp.json()
+                if not commits_payload:
+                    raise RuntimeError(
+                        f"Не вдалося визначити час першого коміту для SHA {sha[:7]} "
+                        f"(PR #{pr_number})"
+                    )
+                dt = commits_payload[0]["commit"]["author"]["date"]
+                pr_first_commit_cache[pr_number] = _parse_iso(dt)
+            first_commit_at = pr_first_commit_cache[pr_number]
 
         units.append(
             DeliveryUnit(
@@ -238,10 +281,10 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
     return units, filtered_raw
 
 
-def load_units_from_evidence() -> tuple[dict[str, Any], list[DeliveryUnit]]:
+def load_units_from_evidence() -> list[DeliveryUnit]:
     """Зчитує нормалізований JSON-експорт із `/docs/ci-cd/evidence/`."""
     payload = json.loads(DEFAULT_EVIDENCE.read_text(encoding="utf-8"))
-    units = [
+    return [
         DeliveryUnit(
             unit_number=int(row["unit_number"]),
             commit_sha=str(row["commit_sha"]),
@@ -257,7 +300,6 @@ def load_units_from_evidence() -> tuple[dict[str, Any], list[DeliveryUnit]]:
         )
         for row in payload["delivery_units"]
     ]
-    return payload["metadata"], units
 
 
 def compute_metrics(units: list[DeliveryUnit], period_days: int) -> dict[str, Any]:
@@ -377,7 +419,7 @@ def compute_metrics(units: list[DeliveryUnit], period_days: int) -> dict[str, An
     }
 
 
-def render_markdown(metadata: dict[str, Any], metrics: dict[str, Any]) -> str:
+def render_markdown(metrics: dict[str, Any]) -> str:
     """Генерує Markdown-звіт із результатами автоматичного підрахунку."""
     c = metrics["counts"]
     s = metrics["strict"]
@@ -386,16 +428,20 @@ def render_markdown(metadata: dict[str, Any], metrics: dict[str, Any]) -> str:
     rec_episode = (
         _format_duration(s["incident_recoveries_s"][0])
         if s["incident_recoveries_s"]
-        else "0 с"
+        else "не спостерігалося"
     )
-    rec_per_fail = _format_duration(s["per_failure_median_s"])
+    rec_per_fail = (
+        _format_duration(s["per_failure_median_s"])
+        if s["per_failure_median_s"]
+        else "не спостерігалося"
+    )
 
     lines = [
         "# Автоматичний звіт DORA-метрик CI/CD (Бонус 1)",
         "",
-        f"- **Репозиторій:** `{metadata['repository']}` (гілка `{metadata['branch']}`)",
+        f"- **Репозиторій:** `{DEFAULT_REPO}` (гілка `main`)",
         (
-            f"- **Період:** {metadata['period_start']} — {metadata['period_end']} "
+            f"- **Період:** {DEFAULT_SINCE} — {DEFAULT_UNTIL} "
             f"({metrics['period_days']} календарних днів)"
         ),
         (
@@ -551,28 +597,27 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    start_d = datetime.strptime(DEFAULT_SINCE, "%Y-%m-%d").date()
+    end_d = datetime.strptime(DEFAULT_UNTIL, "%Y-%m-%d").date()
+    period_days = (end_d - start_d).days + 1
+
     if args.fetch_github:
         units, _ = fetch_units_from_github()
-        start_d = datetime.strptime(DEFAULT_SINCE, "%Y-%m-%d").date()
-        end_d = datetime.strptime(DEFAULT_UNTIL, "%Y-%m-%d").date()
-        period_days = (end_d - start_d).days + 1
-        metadata = {
-            "repository": DEFAULT_REPO,
-            "branch": "main",
-            "period_start": DEFAULT_SINCE,
-            "period_end": DEFAULT_UNTIL,
-            "period_days": period_days,
-        }
     else:
-        metadata, units = load_units_from_evidence()
-        period_days = int(metadata["period_days"])
+        units = load_units_from_evidence()
 
     metrics = compute_metrics(units, period_days)
-    report = render_markdown(metadata, metrics)
-    DEFAULT_OUTPUT.write_text(report, encoding="utf-8")
+    report = render_markdown(metrics)
+    with open(DEFAULT_OUTPUT, "w", encoding="utf-8") as out_file:
+        out_file.write(report)
 
     s = metrics["strict"]
     b = metrics["breakdown"]
+    recovery_text = (
+        _format_duration(s["incident_recoveries_s"][0])
+        if s["incident_recoveries_s"]
+        else "не спостерігалося"
+    )
     print(f"[OK] Автоматичний звіт DORA збережено: {DEFAULT_OUTPUT}")
     print(
         f"     Розгортання (зелені): {metrics['counts']['success']} "
@@ -587,7 +632,7 @@ def main() -> None:
     )
     print(
         f"     CFR (без скасованих): {s['cfr_no_cancelled_pct']:.1f}% | "
-        f"Відновлення інциденту: {_format_duration(s['incident_recoveries_s'][0])}"
+        f"Відновлення інциденту: {recovery_text}"
     )
 
 
