@@ -468,31 +468,57 @@ function useChatFullscreen() {
     const query = window.matchMedia("(max-width: 860px)");
     const root = document.documentElement;
     const viewport = window.visualViewport;
-    const apply = () => {
+    const timers: number[] = [];
+    const clear = () => {
+      root.style.removeProperty("--vv-height");
+      root.style.removeProperty("--vv-top");
+    };
+    const sync = () => {
       if (!query.matches) {
         root.classList.remove("chat-fullscreen");
-        root.style.removeProperty("--vv-height");
-        root.style.removeProperty("--vv-top");
+        clear();
         return;
       }
       root.classList.add("chat-fullscreen");
-      if (viewport) {
+      if (!viewport) return;
+      // iOS не зменшує layout viewport під клавіатурою і не завжди шле resize, коли її
+      // закрито: якщо visual viewport знову збігся з вікном, скидаємо змінні, інакше
+      // лишиться стара висота (порожня половина екрана) і зсув шапки.
+      const keyboardOpen = window.innerHeight - viewport.height > 80;
+      if (keyboardOpen || viewport.offsetTop > 1) {
         root.style.setProperty("--vv-height", `${viewport.height}px`);
         root.style.setProperty("--vv-top", `${viewport.offsetTop}px`);
+      } else {
+        clear();
       }
-      window.scrollTo(0, 0);
     };
-    apply();
-    viewport?.addEventListener("resize", apply);
-    viewport?.addEventListener("scroll", apply);
-    query.addEventListener("change", apply);
+    // Клавіатура з'являється й зникає з анімацією, тож перераховуємо кілька разів.
+    const settle = () => {
+      sync();
+      timers.splice(0).forEach((id) => window.clearTimeout(id));
+      [80, 250, 500, 900].forEach((delay) => timers.push(window.setTimeout(sync, delay)));
+    };
+    const onFocusOut = () => {
+      settle();
+      timers.push(window.setTimeout(() => window.scrollTo(0, 0), 120));
+    };
+    sync();
+    viewport?.addEventListener("resize", settle);
+    viewport?.addEventListener("scroll", sync);
+    window.addEventListener("orientationchange", settle);
+    document.addEventListener("focusin", settle);
+    document.addEventListener("focusout", onFocusOut);
+    query.addEventListener("change", sync);
     return () => {
-      viewport?.removeEventListener("resize", apply);
-      viewport?.removeEventListener("scroll", apply);
-      query.removeEventListener("change", apply);
+      timers.forEach((id) => window.clearTimeout(id));
+      viewport?.removeEventListener("resize", settle);
+      viewport?.removeEventListener("scroll", sync);
+      window.removeEventListener("orientationchange", settle);
+      document.removeEventListener("focusin", settle);
+      document.removeEventListener("focusout", onFocusOut);
+      query.removeEventListener("change", sync);
       root.classList.remove("chat-fullscreen");
-      root.style.removeProperty("--vv-height");
-      root.style.removeProperty("--vv-top");
+      clear();
     };
   }, []);
 }
