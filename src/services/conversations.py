@@ -176,24 +176,25 @@ class ConversationService:
             raise ListingNotFoundError("Оголошення не знайдено")
         low, high = normalize_pair(user_id, listing.user_id)
         clean_body = normalize_message_body(body)
-        now = self._clock()
-        self._check_message_rate(user_id, now)
-        conversation = self._conversations.get_by_pair(low, high)
-        created = False
-        if conversation is None:
-            self._check_conversation_starts(user_id, now)
-            conversation, created = self._conversations.get_or_create(
-                Conversation(user_low_id=low, user_high_id=high, created_at=now)
+        with self._conversations.sender_write_lock(user_id):
+            now = self._clock()
+            self._check_message_rate(user_id, now)
+            conversation = self._conversations.get_by_pair(low, high)
+            created = False
+            if conversation is None:
+                self._check_conversation_starts(user_id, now)
+                conversation, created = self._conversations.get_or_create(
+                    Conversation(user_low_id=low, user_high_id=high, created_at=now)
+                )
+            message = self._append(
+                conversation.conversation_id,
+                user_id,
+                clean_body,
+                listing.id,
+                # Перше повідомлення нової розмови має її created_at: так
+                # count_conversations_started_since визначає, хто її почав.
+                first_at=now if created else None,
             )
-        message = self._conversations.add_message(
-            Message(
-                conversation_id=conversation.conversation_id,
-                sender_id=user_id,
-                body=clean_body,
-                listing_id=listing.id,
-                created_at=now,
-            )
-        )
         if created:
             self._activity.record(
                 actor,
@@ -220,17 +221,11 @@ class ConversationService:
         clean_body = normalize_message_body(body)
         if listing_id is not None:
             self._require_attachable_listing(listing_id, conversation)
-        now = self._clock()
-        self._check_message_rate(user_id, now)
-        message = self._conversations.add_message(
-            Message(
-                conversation_id=conversation.conversation_id,
-                sender_id=user_id,
-                body=clean_body,
-                listing_id=listing_id,
-                created_at=now,
+        with self._conversations.sender_write_lock(user_id):
+            self._check_message_rate(user_id, self._clock())
+            message = self._append(
+                conversation.conversation_id, user_id, clean_body, listing_id
             )
-        )
         return self._message_view(message, user_id)
 
     def mark_read(self, actor: CurrentUser | None, conversation_id: UUID) -> None:
@@ -240,6 +235,36 @@ class ConversationService:
         last = self._conversations.last_message(conversation_id)
         if last is not None:
             self._conversations.mark_read(conversation_id, user_id, last.key)
+
+    def _append(
+        self,
+        conversation_id: UUID,
+        sender_id: UUID,
+        body: str,
+        listing_id: UUID | None,
+        first_at: datetime | None = None,
+    ) -> Message:
+        """Додає повідомлення під блокуванням розмови зі строго зростаючим часом.
+
+        Записи в розмову йдуть по черзі до commit, а `created_at` нового
+        повідомлення більший за `last_message_at`, тож повідомлення не може
+        з'явитися позаду курсора `after`, який клієнт уже отримав.
+        """
+        conversation = self._conversations.lock_conversation(conversation_id)
+        if conversation is None:
+            raise ConversationNotFoundError("Розмову не знайдено")
+        created_at = first_at or _later_than(
+            self._clock(), as_utc(conversation.last_message_at)
+        )
+        return self._conversations.add_message(
+            Message(
+                conversation_id=conversation_id,
+                sender_id=sender_id,
+                body=body,
+                listing_id=listing_id,
+                created_at=created_at,
+            )
+        )
 
     # -- читання --------------------------------------------------------------
 
@@ -407,6 +432,12 @@ class ConversationService:
 def _check_limit(limit: int, maximum: int) -> None:
     if not 1 <= limit <= maximum:
         raise ValueError(f"limit має бути від 1 до {maximum}")
+
+
+def _later_than(now: datetime, previous: datetime) -> datetime:
+    """`now` або найменший час, строго більший за `previous` (годинник міг
+    відстати або два записи отримали однакову мітку)."""
+    return now if now > previous else previous + timedelta(microseconds=1)
 
 
 def _seconds(window: timedelta) -> int:

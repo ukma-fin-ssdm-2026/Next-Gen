@@ -22,6 +22,7 @@ from src.domain.conversations import (
     ChatSettings,
     Conversation,
     Message,
+    as_utc,
     decode_cursor,
     encode_cursor,
     normalize_message_body,
@@ -473,6 +474,19 @@ class ConversationRepositoryContract:
         assert repo.get_by_pair(low, high) is None
         remaining = repo.list_messages(mixed.conversation_id, limit=10)
         assert [m.message_id for m in remaining] == [fresh.message_id]
+
+    def test_write_locks_return_current_conversation_state(self, repo, new_user):
+        """[TP-051]
+        Блокування відправника працює як контекстний менеджер, а блокування
+        розмови повертає її актуальний `last_message_at` (або None).
+        """
+        a, b = new_user(), new_user()
+        conversation, _ = self._start(repo, a, b)
+        with repo.sender_write_lock(a):
+            self._send(repo, conversation, a, T0 + timedelta(seconds=7))
+            locked = repo.lock_conversation(conversation.conversation_id)
+        assert as_utc(locked.last_message_at) == T0 + timedelta(seconds=7)
+        assert repo.lock_conversation(uuid4()) is None
 
 
 class TestInMemoryConversationRepository(ConversationRepositoryContract):
@@ -973,6 +987,85 @@ def test_conversation_start_limit_counts_only_new_conversations() -> None:
     chat.clock.advance(days=1, microseconds=1)
     assert chat.service.start_from_listing(buyer, listings[2].id, "Hi").created
     assert len(chat.started_events()) == 3
+
+
+def test_message_times_strictly_increase_so_polling_never_skips(chat) -> None:
+    """[TP-053]
+    Однакова мітка годинника чи годинник, що відстав, не ставлять нове
+    повідомлення позаду вже виданого курсора `after`: час строго зростає.
+    """
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "m0")
+    conversation_id = started.conversation_id
+    cursor = chat.service.list_messages(seller, conversation_id).after_cursor
+    seen = []
+    for i, step in enumerate((0, -5, 0), start=1):
+        chat.clock.advance(seconds=step)
+        chat.service.send_message(buyer, conversation_id, f"m{i}")
+        page = chat.service.list_messages(seller, conversation_id, after=cursor)
+        seen += [m.body for m in page.items]
+        cursor = page.after_cursor
+
+    times = [
+        m.created_at for m in chat.service.list_messages(seller, conversation_id).items
+    ]
+    assert seen == ["m1", "m2", "m3"]
+    assert times == sorted(set(times))
+    assert times[0] == T0
+
+
+def test_send_to_conversation_removed_before_lock_is_not_found(chat) -> None:
+    """[TP-053]
+    Якщо розмову видалило очищення між перевіркою доступу й блокуванням,
+    повідомлення не додається, а відповідь — ConversationNotFoundError (404).
+    """
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "Hi")
+    chat.repo.lock_conversation = lambda conversation_id: None
+
+    with pytest.raises(ConversationNotFoundError):
+        chat.service.send_message(seller, started.conversation_id, "Відповідь")
+    assert chat.repo.unread_count(started.conversation_id, buyer.user_id) == 0
+
+
+def test_parallel_sends_cannot_bypass_rate_limit() -> None:
+    """[TP-054]
+    Паралельні запити одного користувача рахуються по черзі: за ліміту 1
+    проходить рівно одне повідомлення, решта — ChatRateLimitError.
+    """
+    import threading
+    import time
+
+    chat = _Chat(ChatSettings(message_rate_per_minute=2))
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "1")
+    count = chat.repo.count_messages_since
+
+    def slow_count(sender_id, since):
+        # Розширюємо вікно між підрахунком і вставкою, щоб гонка була певною.
+        result = count(sender_id, since)
+        time.sleep(0.02)
+        return result
+
+    chat.repo.count_messages_since = slow_count
+    barrier = threading.Barrier(8)
+    outcomes: list[str] = []
+
+    def send() -> None:
+        barrier.wait()
+        try:
+            chat.service.send_message(buyer, started.conversation_id, "паралельно")
+            outcomes.append("ok")
+        except ChatRateLimitError:
+            outcomes.append("429")
+
+    threads = [threading.Thread(target=send) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert sorted(outcomes) == ["429"] * 7 + ["ok"]
 
 
 def test_default_limits_match_adr() -> None:

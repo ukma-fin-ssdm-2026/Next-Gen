@@ -1575,13 +1575,8 @@ def test_concurrent_get_or_create_does_not_duplicate_conversation(pg_engine):
     assert count == 1
 
 
-def _chat_service_flow(session) -> None:
-    """Сценарій ConversationService на SQLAlchemy-сховищах однієї сесії."""
-    from datetime import timedelta
-
-    from src.domain.activity import ActivityType
-    from src.domain.conversations import ChatSettings
-    from src.domain.exceptions import ChatRateLimitError, ConversationNotFoundError
+def _sql_chat_service(session, settings, clock):
+    """ConversationService на SQLAlchemy-сховищах однієї сесії."""
     from src.repositories.postgres_conversations import (
         PostgresConversationRepository,
     )
@@ -1589,17 +1584,38 @@ def _chat_service_flow(session) -> None:
     from src.services.activity import ActivityLogService
     from src.services.conversations import ConversationService
 
+    users = PostgresUserRepository(session)
+    return ConversationService(
+        PostgresConversationRepository(session),
+        PostgresListingRepository(session),
+        users,
+        ActivityLogService(
+            PostgresActivityRepository(session),
+            users,
+            PostgresModerationActionRepository(session),
+        ),
+        settings,
+        clock=clock,
+    )
+
+
+def _chat_service_flow(session) -> None:
+    """Сценарій ConversationService на SQLAlchemy-сховищах однієї сесії."""
+    from datetime import timedelta
+
+    from src.domain.activity import ActivityType
+    from src.domain.conversations import ChatSettings
+    from src.domain.exceptions import ChatRateLimitError, ConversationNotFoundError
+    from src.repositories.postgres_support import PostgresActivityRepository
+
     now = [T0]
     users = PostgresUserRepository(session)
     listings = PostgresListingRepository(session)
     events = PostgresActivityRepository(session)
-    service = ConversationService(
-        PostgresConversationRepository(session),
-        listings,
-        users,
-        ActivityLogService(events, users, PostgresModerationActionRepository(session)),
+    service = _sql_chat_service(
+        session,
         ChatSettings(message_rate_per_minute=3, conversation_starts_per_day=1),
-        clock=lambda: now[0],
+        lambda: now[0],
     )
     seller, buyer, stranger = (
         users.save(make_user(display_name=name)) for name in ("Sel", "Buy", "Str")
@@ -1684,3 +1700,149 @@ def test_conversation_service_on_real_postgres(pg_session):
     Той самий сценарій ConversationService на реальному PostgreSQL 16.
     """
     _chat_service_flow(pg_session)
+
+
+def _run_overlapping_sends(pg_engine, sends):
+    """Запускає відправлення в окремих транзакціях PostgreSQL з перекриттям.
+
+    `sends` — пари `(затримка старту, функція(session) -> результат)`. Кожна
+    транзакція тримається відкритою 0.3 с після відправлення, тож пізніша
+    мусить дочекатися commit попередньої. Повертає результати за порядком.
+    """
+    import threading
+    import time
+
+    results: list = [None] * len(sends)
+    start = threading.Barrier(len(sends))
+
+    def worker(index: int, delay: float, send) -> None:
+        with sessionmaker(bind=pg_engine)() as sess:
+            start.wait()
+            time.sleep(delay)
+            try:
+                results[index] = send(sess)
+                time.sleep(0.3)  # тримаємо транзакцію й блокування відкритими
+                sess.commit()
+            except Exception as exc:  # результат перевіряє сам тест
+                sess.rollback()
+                results[index] = exc
+
+    threads = [
+        threading.Thread(target=worker, args=(i, delay, send))
+        for i, (delay, send) in enumerate(sends)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+    return results
+
+
+def _committed_conversation(pg_engine):
+    """Двоє користувачів і розмова з першим повідомлення покупця о T0."""
+    from src.domain.conversations import Conversation, Message
+    from src.repositories.postgres_conversations import (
+        PostgresConversationRepository,
+    )
+
+    with sessionmaker(bind=pg_engine)() as setup:
+        users = PostgresUserRepository(setup)
+        seller, buyer = users.save(make_user()), users.save(make_user())
+        repo = PostgresConversationRepository(setup)
+        low, high = sorted([seller.user_id, buyer.user_id])
+        conversation, _ = repo.get_or_create(
+            Conversation(user_low_id=low, user_high_id=high, created_at=T0)
+        )
+        repo.add_message(
+            Message(
+                conversation_id=conversation.conversation_id,
+                sender_id=buyer.user_id,
+                body="Привіт",
+                created_at=T0,
+            )
+        )
+        setup.commit()
+    return seller, buyer, conversation.conversation_id
+
+
+def _delete_users(pg_engine, *users) -> None:
+    """Прибирає закомічені дані тесту (розмови й повідомлення — каскадом)."""
+    from sqlalchemy import delete
+
+    from src.db.models import UserRow
+
+    with sessionmaker(bind=pg_engine)() as check:
+        check.execute(
+            delete(UserRow).where(UserRow.user_id.in_([u.user_id for u in users]))
+        )
+        check.commit()
+
+
+@requires_postgres
+def test_parallel_sends_cannot_bypass_rate_limit_on_postgres(pg_engine):
+    """[TP-054]
+    Дві паралельні транзакції одного відправника: друга чекає на блокування
+    рядка користувача до commit першої й бачить її повідомлення в ліміті.
+    """
+    from datetime import timedelta
+
+    from sqlalchemy import func, select
+
+    from src.db.models import MessageRow
+    from src.domain.conversations import ChatSettings
+    from src.domain.exceptions import ChatRateLimitError
+
+    seller, buyer, conversation_id = _committed_conversation(pg_engine)
+    settings = ChatSettings(message_rate_per_minute=2)
+
+    def send(session):
+        service = _sql_chat_service(
+            session, settings, lambda: T0 + timedelta(seconds=10)
+        )
+        return service.send_message(_current(buyer), conversation_id, "Ще раз")
+
+    try:
+        first, second = _run_overlapping_sends(pg_engine, [(0.0, send), (0.1, send)])
+        with sessionmaker(bind=pg_engine)() as check:
+            sent = check.scalar(
+                select(func.count()).where(MessageRow.sender_id == buyer.user_id)
+            )
+    finally:
+        _delete_users(pg_engine, seller, buyer)
+
+    assert not isinstance(first, Exception)
+    assert isinstance(second, ChatRateLimitError)
+    assert sent == 2
+
+
+@requires_postgres
+def test_delayed_send_is_ordered_after_committed_message_on_postgres(pg_engine):
+    """[TP-053]
+    Запит, що взяв ранішу мітку часу, але дочекався блокування розмови,
+    отримує час строго після вже закоміченого повідомлення, тож не опиняється
+    позаду курсора `after`, який співрозмовник уже отримав.
+    """
+    from datetime import timedelta
+
+    from src.domain.conversations import ChatSettings
+
+    seller, buyer, conversation_id = _committed_conversation(pg_engine)
+
+    def send_at(user, seconds):
+        def send(session):
+            service = _sql_chat_service(
+                session, ChatSettings(), lambda: T0 + timedelta(seconds=seconds)
+            )
+            return service.send_message(_current(user), conversation_id, "Текст")
+
+        return send
+
+    try:
+        late, early = _run_overlapping_sends(
+            pg_engine, [(0.0, send_at(buyer, 20)), (0.1, send_at(seller, 10))]
+        )
+    finally:
+        _delete_users(pg_engine, seller, buyer)
+
+    assert late.created_at == T0 + timedelta(seconds=20)
+    assert early.created_at > late.created_at
