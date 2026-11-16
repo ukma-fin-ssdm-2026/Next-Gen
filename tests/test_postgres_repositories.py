@@ -1573,3 +1573,114 @@ def test_concurrent_get_or_create_does_not_duplicate_conversation(pg_engine):
     assert sorted(created for _, created in results) == [False, True]
     assert len({cid for cid, _ in results}) == 1
     assert count == 1
+
+
+def _chat_service_flow(session) -> None:
+    """Сценарій ConversationService на SQLAlchemy-сховищах однієї сесії."""
+    from datetime import timedelta
+
+    from src.domain.activity import ActivityType
+    from src.domain.conversations import ChatSettings
+    from src.domain.exceptions import ChatRateLimitError, ConversationNotFoundError
+    from src.repositories.postgres_conversations import (
+        PostgresConversationRepository,
+    )
+    from src.repositories.postgres_support import PostgresActivityRepository
+    from src.services.activity import ActivityLogService
+    from src.services.conversations import ConversationService
+
+    now = [T0]
+    users = PostgresUserRepository(session)
+    listings = PostgresListingRepository(session)
+    events = PostgresActivityRepository(session)
+    service = ConversationService(
+        PostgresConversationRepository(session),
+        listings,
+        users,
+        ActivityLogService(events, users, PostgresModerationActionRepository(session)),
+        ChatSettings(message_rate_per_minute=3, conversation_starts_per_day=1),
+        clock=lambda: now[0],
+    )
+    seller, buyer, stranger = (
+        users.save(make_user(display_name=name)) for name in ("Sel", "Buy", "Str")
+    )
+    actor = {user.user_id: _current(user) for user in (seller, buyer, stranger)}
+    category = PostgresCategoryRepository(session).add(make_category())
+    listing = listings.add(make_listing(seller.user_id, category.id))
+    other = listings.add(make_listing(stranger.user_id, category.id))
+
+    started = service.start_from_listing(actor[buyer.user_id], listing.id, "Привіт")
+    now[0] += timedelta(seconds=1)
+    again = service.start_from_listing(actor[buyer.user_id], listing.id, "Ще?")
+    assert started.created and not again.created
+    assert again.conversation_id == started.conversation_id
+    with pytest.raises(ChatRateLimitError):
+        # Ліміт нових розмов (1 на добу) рахується в БД.
+        service.start_from_listing(actor[buyer.user_id], other.id, "Привіт")
+    now[0] += timedelta(seconds=1)
+    service.send_message(actor[buyer.user_id], started.conversation_id, "Третє")
+    with pytest.raises(ChatRateLimitError):
+        # Ліміт повідомлень (3 за хвилину) теж рахується в БД.
+        service.send_message(actor[buyer.user_id], started.conversation_id, "4")
+    with pytest.raises(ConversationNotFoundError):
+        service.list_messages(actor[stranger.user_id], started.conversation_id)
+
+    assert service.unread_count(actor[seller.user_id]) == 3
+    service.mark_read(actor[seller.user_id], started.conversation_id)
+    assert service.unread_count(actor[seller.user_id]) == 0
+    [summary] = service.list_conversations(actor[seller.user_id]).items
+    assert summary.other.display_name == "Buy"
+    assert summary.last_message.body == "Третє"
+    page = service.list_messages(actor[seller.user_id], started.conversation_id)
+    assert [m.body for m in page.items] == ["Привіт", "Ще?", "Третє"]
+    assert page.items[0].listing.title == listing.title
+    [logged] = [
+        event
+        for event in events.list_events(False)
+        if event.action_type == ActivityType.CONVERSATION_STARTED
+    ]
+    assert logged.listing_id == listing.id
+    assert "Привіт" not in logged.details
+
+
+def _current(user: User):
+    from src.domain.users import CurrentUser
+
+    return CurrentUser(
+        user_id=user.user_id,
+        tenant_id=user.tenant_id,
+        entra_object_id=user.entra_object_id,
+        email=user.email,
+        display_name=user.display_name,
+        role=user.role,
+    )
+
+
+def test_conversation_service_on_sqlalchemy_repositories(session):
+    """[TP-053]
+    ConversationService працює на SQLAlchemy-сховищах так само, як на in-memory:
+    одна розмова на пару, ліміти з БД, 404 для стороннього, прочитання, журнал.
+    """
+    _chat_service_flow(session)
+
+
+def test_conversation_factory_uses_sql_repository_with_session(session):
+    """[TP-054]
+    З сесією БД фабрика повертає SQLAlchemy-сховище розмов, а не in-memory.
+    """
+    from src.api import deps
+    from src.repositories.postgres_conversations import (
+        PostgresConversationRepository,
+    )
+
+    repo = deps.get_conversation_repository(session)
+    assert isinstance(repo, PostgresConversationRepository)
+    assert repo is not deps.get_conversation_repository(None)
+
+
+@requires_postgres
+def test_conversation_service_on_real_postgres(pg_session):
+    """[TP-053]
+    Той самий сценарій ConversationService на реальному PostgreSQL 16.
+    """
+    _chat_service_flow(pg_session)
