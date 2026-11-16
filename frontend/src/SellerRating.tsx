@@ -15,8 +15,6 @@ import { formatDateTime } from "./SupportPanels";
 import type { AdminSellerReview, SellerRating, SellerRatingSummary } from "./types";
 import "./reviews.css";
 
-/** Скільки оцінок потрібно, щоб сервер віддав середнє (ADR-004, REVIEW_MIN_COUNT_TO_DISPLAY). */
-const MIN_COUNT_TO_SHOW = 3;
 const ADMIN_PAGE_SIZE = 10;
 
 function errorText(error: unknown): string {
@@ -52,7 +50,7 @@ export function RatingSummary({ rating, size = 18 }: { rating: SellerRatingSumma
         <span>
           {rating.count === 0
             ? "Ще немає оцінок"
-            : `${rating.count} ${pluralRatings(rating.count)} · рейтинг з'явиться від ${MIN_COUNT_TO_SHOW}`}
+            : `${rating.count} ${pluralRatings(rating.count)} · рейтинг ще формується`}
         </span>
       </div>
     );
@@ -167,7 +165,7 @@ export function MyRatingCard({ userId }: { userId: string }) {
   }, [userId]);
   return (
     <section className="form-block my-rating">
-      <div className="form-block-head"><div><h2>Мій рейтинг як продавця</h2><p className="form-hint">Оцінки від покупців. Середнє показується від {MIN_COUNT_TO_SHOW} оцінок.</p></div><Link className="button button-light" to={`/sellers/${userId}`}>Мій публічний профіль</Link></div>
+      <div className="form-block-head"><div><h2>Мій рейтинг як продавця</h2><p className="form-hint">Оцінки від покупців. Так бачать вас інші користувачі.</p></div><Link className="button button-light" to={`/sellers/${userId}`}>Мій публічний профіль</Link></div>
       {failed && <p className="form-hint">Не вдалося завантажити рейтинг.</p>}
       {!failed && rating === null && <p className="form-hint">Завантажуємо…</p>}
       {rating && <RatingSummary rating={rating} size={22} />}
