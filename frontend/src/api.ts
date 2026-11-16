@@ -17,8 +17,11 @@ import type {
   ListingUpdatePayload,
   ListingWithContact,
   ModerationAction,
+  AdminSellerReview,
+  OwnSellerReview,
   PublicProfile,
   SellerContact,
+  SellerRating,
   UploadedImage,
 } from "./types";
 
@@ -313,4 +316,31 @@ export function resolveFeedback(feedbackId: string): Promise<FeedbackMessage> {
 
 export function getActivityLog(kind: "users" | "admins", skip = 0, limit = 100): Promise<LogEntry[]> {
   return apiFetch<LogEntry[]>(`/admin/logs/${kind}?skip=${skip}&limit=${limit}`);
+}
+
+export function getSellerRating(sellerId: string): Promise<SellerRating> {
+  return apiFetch<SellerRating>(`/users/${segment(sellerId)}/rating`);
+}
+
+export function setSellerReview(sellerId: string, rating: number, listingId?: string): Promise<OwnSellerReview> {
+  return apiFetch<OwnSellerReview>(`/users/${segment(sellerId)}/review`, {
+    method: "PUT",
+    body: JSON.stringify({ rating, ...(listingId ? { listing_id: segment(listingId) } : {}) }),
+  });
+}
+
+export function deleteSellerReview(sellerId: string): Promise<void> {
+  return apiFetch<void>(`/users/${segment(sellerId)}/review`, { method: "DELETE" });
+}
+
+export function getAdminReviews(skip = 0, limit = 100): Promise<AdminSellerReview[]> {
+  return apiFetch<AdminSellerReview[]>(`/admin/reviews?skip=${skip}&limit=${limit}`);
+}
+
+export function hideSellerReview(reviewId: string, reason: string): Promise<AdminSellerReview> {
+  return apiFetch<AdminSellerReview>(`/admin/reviews/${segment(reviewId)}/hide`, { method: "POST", body: JSON.stringify({ reason }) });
+}
+
+export function restoreSellerReview(reviewId: string): Promise<AdminSellerReview> {
+  return apiFetch<AdminSellerReview>(`/admin/reviews/${segment(reviewId)}/restore`, { method: "POST" });
 }

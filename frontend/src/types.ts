@@ -36,6 +36,7 @@ export interface Listing {
   images: ListingImage[];
   created_at: string;
   updated_at: string;
+  seller_rating?: SellerRatingSummary;
 }
 
 export interface ListingWithContact extends Listing {
@@ -171,4 +172,35 @@ export interface BlockedStatus {
   is_blocked: boolean;
   reason: string | null;
   blocked_at: string | null;
+}
+
+export interface SellerRatingSummary {
+  average: number | null;
+  count: number;
+}
+
+export interface SellerRating extends SellerRatingSummary {
+  distribution: Record<string, number> | null;
+  my_rating?: number;
+}
+
+export type SellerReviewStatus = "VISIBLE" | "HIDDEN";
+
+export interface OwnSellerReview {
+  review_id: string;
+  seller_id: string;
+  listing_id: string | null;
+  rating: number;
+  status: SellerReviewStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminSellerReview extends OwnSellerReview {
+  author_id: string;
+  hidden_by: string | null;
+  hidden_at: string | null;
+  hidden_reason: string | null;
+  deleted_at: string | null;
+  author_stats: { total_count: number; recent_count: number; recent_one_star_count: number };
 }

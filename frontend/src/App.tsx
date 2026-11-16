@@ -54,6 +54,7 @@ import {
   FeedbackAdminPanel,
   FeedbackPage,
 } from "./SupportPanels";
+import { AdminReviewsPanel, MyRatingCard, SellerRatingBlock } from "./SellerRating";
 import { Pagination, usePaged } from "./Pagination";
 import type {
   BlockedStatus,
@@ -1677,6 +1678,14 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
               )}
               <div><strong>{sellerName ?? "Продавець"}</strong><small>Вхід через корпоративну пошту</small></div>
             </div>
+            <SellerRatingBlock
+              sellerId={listing.user_id}
+              fallback={listing.seller_rating}
+              canRate={Boolean(user) && !isOwner}
+              listingId={listing.id}
+              onError={onError}
+              onNotice={onNotice}
+            />
             {!user ? (
               <a className="button button-primary lot-contact-button" href={currentLoginUrl}>Увійти, щоб побачити контакт</a>
             ) : contactState === "loading" ? (
@@ -1867,6 +1876,8 @@ function ProfilePage({ user, authChecked, onUserChange, onError, onNotice }: {
           </div>
         </section>
 
+        <MyRatingCard userId={user.user_id} />
+
         <section className="form-block">
           <div className="form-block-head"><div><h2>Особисті дані</h2><p className="form-hint">Ім’я бачать інші користувачі в оголошеннях.</p></div></div>
           <label><span>Ім’я</span><input value={name} onChange={(event) => setName(event.target.value)} maxLength={100} required /></label>
@@ -1913,7 +1924,7 @@ function ProfilePage({ user, authChecked, onUserChange, onError, onNotice }: {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UKMA_EMAIL_PATTERN = /^[^@\s]+@ukma\.edu\.ua$/i;
 
-type AdminTab = "moderation" | "categories" | "complaints" | "feedback" | "blocked" | "user-log" | "admin-log";
+type AdminTab = "moderation" | "categories" | "complaints" | "feedback" | "blocked" | "user-log" | "admin-log" | "reviews";
 /** Кожна вкладка має власну адресу, щоб на неї можна було посилатися. */
 const ADMIN_TABS: { id: AdminTab; label: string; path: string }[] = [
   { id: "moderation", label: "Модерація", path: "/admin" },
@@ -1923,6 +1934,7 @@ const ADMIN_TABS: { id: AdminTab; label: string; path: string }[] = [
   { id: "blocked", label: "Заблоковані", path: "/admin/blocked" },
   { id: "user-log", label: "Журнал", path: "/admin/logs/users" },
   { id: "admin-log", label: "Адмін-дії", path: "/admin/logs/admins" },
+  { id: "reviews", label: "Оцінки", path: "/admin/logs/reviews" },
 ];
 
 function adminTabFromPath(pathname: string): AdminTab | null {
@@ -1946,6 +1958,8 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
   const [history, setHistory] = useState<ModerationAction[]>([]);
   const adminLocation = useLocation();
   const tab = adminTabFromPath(adminLocation.pathname);
+  // На вузьких екранах вкладки гортаються, тож активну підсуваємо в зону видимості.
+  useEffect(() => { document.querySelector(".admin-tabs a.is-active")?.scrollIntoView({ block: "nearest", inline: "center" }); }, [tab, authChecked, user]);
 
   if (!authChecked) return <PageLoading />;
   if (!user) return <SignInRequired title="Адмін-панель доступна після входу" />;
@@ -1979,13 +1993,15 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
   }
 
   return (
-    <main className="page-main narrow-page">
+    <main className="page-main narrow-page admin-page">
       <PageHeading eyebrow="Модерація" title="Адмін-панель" />
-      <div className="admin-tabs" role="tablist" aria-label="Розділи адмін-панелі">
+      <div className="admin-layout">
+      <nav className="admin-tabs" role="tablist" aria-label="Розділи адмін-панелі" aria-orientation="vertical">
         {ADMIN_TABS.map((item) => (
           <Link key={item.id} role="tab" aria-selected={tab === item.id} className={tab === item.id ? "is-active" : ""} to={item.path}>{item.label}</Link>
         ))}
-      </div>
+      </nav>
+      <div className="admin-content">
       {tab === null && <NotFoundPage />}
       {tab === "categories" && (<>
         <AdminCategoriesPanel onError={onError} onNotice={onNotice} onCategoriesChanged={onCategoriesChanged} />
@@ -1996,6 +2012,7 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
       {tab === "blocked" && <BlockedUsersPanel onError={onError} onNotice={onNotice} />}
       {tab === "user-log" && <ActivityLogPanel kind="users" onError={onError} />}
       {tab === "admin-log" && <ActivityLogPanel kind="admins" onError={onError} />}
+      {tab === "reviews" && <AdminReviewsPanel onError={onError} onNotice={onNotice} />}
       {tab === "moderation" && (<>
       <form className="profile-form" onSubmit={(event) => event.preventDefault()}>
         <section className="form-block">
@@ -2025,6 +2042,8 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
         )}
       </form>
       </>)}
+      </div>
+      </div>
     </main>
   );
 }
