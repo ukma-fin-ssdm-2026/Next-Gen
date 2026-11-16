@@ -1359,18 +1359,6 @@ paths:
           content:
             application/json:
               schema: {}
-        '400':
-          description: Invalid OIDC state
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Microsoft sign-in rejected
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: Local user is blocked
           content:

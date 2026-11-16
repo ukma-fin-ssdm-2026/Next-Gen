@@ -207,6 +207,22 @@ function App() {
   );
 
   useEffect(() => {
+    // /auth/callback повертає сюди з ?auth_error=..., якщо вхід не вдався.
+    const params = new URLSearchParams(window.location.search);
+    const authError = params.get("auth_error");
+    if (!authError) return;
+    const messages: Record<string, string> = {
+      identity: "Вхід можливий лише з підтвердженою поштою @ukma.edu.ua. Увійдіть обліковим записом університету.",
+      failed: "Не вдалося увійти через Microsoft. Спробуйте ще раз.",
+      expired: "Сесія входу завершилась. Спробуйте увійти ще раз.",
+    };
+    setError(messages[authError] ?? messages.failed);
+    params.delete("auth_error");
+    const query = params.toString();
+    window.history.replaceState(null, "", window.location.pathname + (query ? `?${query}` : "") + window.location.hash);
+  }, []);
+
+  useEffect(() => {
     void Promise.all([
       getCurrentUser()
         .then(setUser)
