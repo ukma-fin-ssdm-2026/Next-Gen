@@ -18,9 +18,11 @@ from src.config import (
     get_admin_emails,
     get_image_storage_dir,
 )
+from src.domain.conversations import ChatSettings
 from src.domain.users import CurrentUser
 from src.integrations.entra import EntraOidcClient, MsalEntraOidcClient
 from src.repositories.categories import InMemoryCategoryRepository
+from src.repositories.conversations import InMemoryConversationRepository
 from src.repositories.category_suggestions import (
     InMemoryCategorySuggestionRepository,
 )
@@ -46,6 +48,7 @@ from src.services.categories import CategoryService
 from src.services.category_suggestions import CategorySuggestionService
 from src.services.complaints import ComplaintService
 from src.services.contacts import SellerContactService
+from src.services.conversations import ConversationService
 from src.services.favorites import FavoriteService
 from src.services.feedback import FeedbackService
 from src.services.listings import ListingService
@@ -80,6 +83,7 @@ _inmem_user_repository = InMemoryUserRepository()
 _inmem_complaint_repository = InMemoryComplaintRepository()
 _inmem_feedback_repository = InMemoryFeedbackRepository()
 _inmem_activity_repository = InMemoryActivityRepository()
+_inmem_conversation_repository = InMemoryConversationRepository()
 
 SESSION_COOKIE_NAME = "baraholka_session"
 OIDC_STATE_COOKIE_NAME = "baraholka_oidc_state"
@@ -347,6 +351,28 @@ def get_activity_service(session: DbSession = None) -> ActivityLogService:
         get_activity_repository(session),
         get_user_repository(session),
         get_moderation_repository(session),
+    )
+
+
+def get_conversation_repository(session: DbSession = None):
+    """Повертає PostgreSQL або in-memory сховище розмов (ADR-005)."""
+    if session is not None:
+        from src.repositories.postgres_conversations import (
+            PostgresConversationRepository,
+        )
+
+        return PostgresConversationRepository(session)
+    return _inmem_conversation_repository
+
+
+def get_conversation_service(session: DbSession = None) -> ConversationService:
+    """Повертає сервіс чату; ліміти й строк зберігання читаються з `CHAT_*`."""
+    return ConversationService(
+        get_conversation_repository(session),
+        get_listing_repository(session),
+        get_user_repository(session),
+        get_activity_service(session),
+        ChatSettings.from_env(),
     )
 
 
