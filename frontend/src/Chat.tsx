@@ -523,6 +523,8 @@ function useChatFullscreen() {
   }, []);
 }
 
+const MAX_LOOKUP_PAGES = 20;
+
 export function ChatPage({ onError, onNotice }: { onError: (message: string) => void; onNotice: (message: string) => void }) {
   const { conversationId } = useParams();
   const [items, setItems] = useState<ChatConversation[]>([]);
@@ -535,10 +537,9 @@ export function ChatPage({ onError, onNotice }: { onError: (message: string) => 
     try {
       const page = await getConversations();
       setItems((current) => {
-        // Раніше підвантажені «старіші» сторінки лишаються після оновлення першої.
+        // Усе, що не потрапило в оновлену першу сторінку (і підвантажені старіші, і витіснені), лишається.
         const fresh = new Set(page.items.map((item) => item.conversation_id));
-        const tail = current.slice(page.items.length).filter((item) => !fresh.has(item.conversation_id));
-        return [...page.items, ...tail];
+        return [...page.items, ...current.filter((item) => !fresh.has(item.conversation_id))];
       });
       if (!loadedMore.current) setCursor(page.next_cursor);
     } catch (requestError) { onError(errorText(requestError)); }
@@ -572,9 +573,30 @@ export function ChatPage({ onError, onNotice }: { onError: (message: string) => 
   useEffect(() => {
     if (!conversationId || loading || active) return;
     let cancelled = false;
-    void reload().then(() => { if (!cancelled) setCheckedId(conversationId); });
+    void (async () => {
+      try {
+        // Розмова може лежати за межами першої сторінки: гортаємо курсори, доки не знайдемо.
+        let page = await getConversations();
+        let all = [...page.items];
+        let next = page.next_cursor;
+        let extra = false;
+        for (let step = 0; step < MAX_LOOKUP_PAGES && next && !all.some((item) => item.conversation_id === conversationId); step += 1) {
+          page = await getConversations(next);
+          extra = true;
+          all = [...all, ...page.items];
+          next = page.next_cursor;
+        }
+        if (cancelled) return;
+        setItems((current) => {
+          const known = new Set(current.map((item) => item.conversation_id));
+          return [...current, ...all.filter((item) => !known.has(item.conversation_id))];
+        });
+        if (extra) { loadedMore.current = true; setCursor(next); }
+      } catch (requestError) { if (!cancelled) onError(errorText(requestError)); }
+      finally { if (!cancelled) setCheckedId(conversationId); }
+    })();
     return () => { cancelled = true; };
-  }, [conversationId, loading, active, reload]);
+  }, [conversationId, loading, active, onError]);
   return (
     <main className={`page-main chat-page${conversationId ? " has-thread" : ""}`}>
       <div className="chat-layout">
@@ -588,7 +610,7 @@ export function ChatPage({ onError, onNotice }: { onError: (message: string) => 
           ) : conversationId && !active ? (
             <div className="chat-thread chat-thread-empty"><p>Завантажуємо…</p></div>
           ) : (
-            <Thread conversation={active} onError={onError} onNotice={onNotice} />
+            <Thread key={conversationId ?? ""} conversation={active} onError={onError} onNotice={onNotice} />
           )}
         </section>
       </div>
