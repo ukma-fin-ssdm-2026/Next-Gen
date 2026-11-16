@@ -732,6 +732,8 @@ def test_all_tables_created(engine):
         "listing_images",
         "favorites",
         "moderation_actions",
+        "conversations",
+        "messages",
     }
     missing = expected - tables
     assert not missing, f"Відсутні таблиці: {missing}"
@@ -775,6 +777,8 @@ def test_alembic_migration_round_trip(monkeypatch):
             "favorites",
             "moderation_actions",
             "seller_reviews",
+            "conversations",
+            "messages",
         }
         assert (
             expected <= tables_after_upgrade
@@ -1573,3 +1577,286 @@ def test_postgres_seller_review_api_persists_across_requests(
         }
         assert client.delete(f"{path}/review").status_code == 204
         assert client.get(f"{path}/rating").json()["count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Conversation / Message (ADR-005)
+# ---------------------------------------------------------------------------
+
+from tests.test_conversations import (  # noqa: E402
+    T0,
+    ConversationRepositoryContract,
+)
+
+
+class TestPostgresConversationRepository(ConversationRepositoryContract):
+    """[TP-052] Контракт сховища розмов на SQLAlchemy-адаптері (SQLite у CI)."""
+
+    @pytest.fixture
+    def repo(self, session):
+        from src.repositories.postgres_conversations import (
+            PostgresConversationRepository,
+        )
+
+        return PostgresConversationRepository(session)
+
+    @pytest.fixture
+    def new_user(self, user_repo):
+        return lambda: user_repo.save(make_user()).user_id
+
+    def test_check_constraints_reject_unordered_pair_and_bad_body(
+        self, session, user_repo
+    ):
+        """[TP-052]
+        БД сама не приймає невпорядковану пару й порожній чи задовгий текст, навіть
+        якщо доменні перевірки обійдено.
+        """
+        from sqlalchemy.exc import IntegrityError
+
+        from src.db.models import ConversationRow, MessageRow
+
+        low, high = sorted([make_user().user_id, make_user().user_id])
+        for user_id in (low, high):
+            user_repo.save(make_user(user_id=user_id))
+        nested = session.begin_nested()
+        session.add(
+            ConversationRow(
+                user_low_id=high, user_high_id=low, created_at=T0, last_message_at=T0
+            )
+        )
+        with pytest.raises(IntegrityError):
+            session.flush()
+        nested.rollback()
+
+        conversation = ConversationRow(
+            user_low_id=low, user_high_id=high, created_at=T0, last_message_at=T0
+        )
+        session.add(conversation)
+        session.flush()
+        for body in ("", "я" * 1001):
+            nested = session.begin_nested()
+            session.add(
+                MessageRow(
+                    conversation_id=conversation.conversation_id,
+                    sender_id=low,
+                    body=body,
+                    created_at=T0,
+                )
+            )
+            with pytest.raises(IntegrityError):
+                session.flush()
+            nested.rollback()
+
+
+requires_postgres = pytest.mark.skipif(
+    not os.getenv("DATABASE_URL", "").startswith("postgresql"),
+    reason="Потрібен реальний PostgreSQL (DATABASE_URL).",
+)
+
+
+@pytest.fixture(scope="module")
+def pg_engine():
+    from alembic import command
+    from alembic.config import Config
+
+    url = os.environ["DATABASE_URL"]
+    cfg = Config()
+    cfg.set_main_option("script_location", "alembic")
+    cfg.set_main_option("sqlalchemy.url", url)
+    command.upgrade(cfg, "head")
+    eng = create_engine(url)
+    yield eng
+    eng.dispose()
+
+
+@pytest.fixture()
+def pg_session(pg_engine):
+    """Сесія реального PostgreSQL з відкатом після тесту."""
+    connection = pg_engine.connect()
+    transaction = connection.begin()
+    sess = sessionmaker(bind=connection, join_transaction_mode="create_savepoint")()
+    yield sess
+    sess.close()
+    transaction.rollback()
+    connection.close()
+
+
+@requires_postgres
+class TestRealPostgresConversationRepository(ConversationRepositoryContract):
+    """[TP-052] Той самий контракт на реальному PostgreSQL 16."""
+
+    @pytest.fixture
+    def repo(self, pg_session):
+        from src.repositories.postgres_conversations import (
+            PostgresConversationRepository,
+        )
+
+        return PostgresConversationRepository(pg_session)
+
+    @pytest.fixture
+    def new_user(self, pg_session):
+        users = PostgresUserRepository(pg_session)
+        return lambda: users.save(make_user()).user_id
+
+    def test_listing_delete_keeps_message_with_null_listing(self, repo, pg_session):
+        """[TP-052]
+        Видалення оголошення не видаляє повідомлення: listing_id стає NULL
+        (ON DELETE SET NULL), історія розмови зберігається.
+        """
+        from src.domain.conversations import Conversation, Message
+
+        users = PostgresUserRepository(pg_session)
+        seller = users.save(make_user()).user_id
+        buyer = users.save(make_user()).user_id
+        category = PostgresCategoryRepository(pg_session).add(make_category())
+        listings = PostgresListingRepository(pg_session)
+        listing = listings.add(make_listing(seller, category.id))
+        low, high = sorted([seller, buyer])
+        conversation, _ = repo.get_or_create(
+            Conversation(user_low_id=low, user_high_id=high, created_at=T0)
+        )
+        message = repo.add_message(
+            Message(
+                conversation_id=conversation.conversation_id,
+                sender_id=buyer,
+                body="Ще актуально?",
+                listing_id=listing.id,
+                created_at=T0,
+            )
+        )
+        assert listings.delete(listing.id)
+        pg_session.expire_all()
+        stored = repo.list_messages(conversation.conversation_id, limit=10)
+        assert [(m.message_id, m.listing_id) for m in stored] == [
+            (message.message_id, None)
+        ]
+
+
+@requires_postgres
+def test_concurrent_get_or_create_does_not_duplicate_conversation(pg_engine):
+    """[TP-052]
+    Дві паралельні транзакції створюють розмову для тієї самої пари: створює
+    лише одна, друга чекає на унікальний індекс і отримує ту саму розмову.
+    """
+    import threading
+    import time
+
+    from sqlalchemy import delete, func, select
+
+    from src.db.models import ConversationRow, UserRow
+    from src.domain.conversations import Conversation
+    from src.repositories.postgres_conversations import (
+        PostgresConversationRepository,
+    )
+
+    with sessionmaker(bind=pg_engine)() as setup:
+        users = PostgresUserRepository(setup)
+        low, high = sorted(
+            [users.save(make_user()).user_id, users.save(make_user()).user_id]
+        )
+        setup.commit()
+
+    start = threading.Barrier(2)
+    results: list[tuple[uuid.UUID, bool]] = []
+
+    def worker(delay: float) -> None:
+        with sessionmaker(bind=pg_engine)() as sess:
+            start.wait()
+            time.sleep(delay)
+            conversation, created = PostgresConversationRepository(sess).get_or_create(
+                Conversation(user_low_id=low, user_high_id=high)
+            )
+            time.sleep(0.3)  # тримаємо транзакцію відкритою
+            sess.commit()
+            results.append((conversation.conversation_id, created))
+
+    threads = [threading.Thread(target=worker, args=(d,)) for d in (0.0, 0.1)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    pair = (ConversationRow.user_low_id == low, ConversationRow.user_high_id == high)
+    with sessionmaker(bind=pg_engine)() as check:
+        count = check.scalar(select(func.count()).where(*pair))
+        # Прибираємо закомічені дані, щоб не впливати на інші тести цієї БД.
+        check.execute(delete(ConversationRow).where(*pair))
+        check.execute(delete(UserRow).where(UserRow.user_id.in_([low, high])))
+        check.commit()
+
+    assert sorted(created for _, created in results) == [False, True]
+    assert len({cid for cid, _ in results}) == 1
+    assert count == 1
+
+
+@pytest.mark.parametrize("existing", ["0005_seller_reviews", "0006_chat_tables"])
+def test_seller_review_migration_upgrades_existing_branch(
+    tmp_path, monkeypatch, existing
+):
+    """[FR-019] [TP-044] Від 0005 або 0006 можна дійти до єдиної голови."""
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import inspect
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    url = f"sqlite:///{tmp_path / 'chat.db'}"
+    cfg = Config()
+    cfg.set_main_option("script_location", "alembic")
+    cfg.set_main_option("sqlalchemy.url", url)
+    command.upgrade(cfg, existing)
+
+    engine = create_engine(url)
+    try:
+        with engine.connect() as connection:
+            inspector = inspect(connection)
+            assert inspector.has_table("messages") == (existing == "0006_chat_tables")
+            assert inspector.has_table("seller_reviews") == (
+                existing == "0005_seller_reviews"
+            )
+
+        command.upgrade(cfg, "head")
+        with engine.connect() as connection:
+            inspector = inspect(connection)
+            assert inspector.has_table("messages")
+            assert inspector.has_table("seller_reviews")
+            event_columns = inspector.get_columns("activity_events")
+            assert "moderation_reason" in {column["name"] for column in event_columns}
+    finally:
+        engine.dispose()
+
+
+def test_postgres_hidden_review_tombstone_and_complete_audit(seller_reviews_postgres):
+    """[FR-020] [TP-043] PostgreSQL утримує приховування та повну причину."""
+    engine, author, seller, moderator = seller_reviews_postgres
+    actor, admin = _review_actor(author), _review_actor(moderator)
+    reason = "а" * 499 + "!"
+    with Session(engine) as session, session.begin():
+        service = _pg_review_service(session)
+        review, _ = service.set_review(actor, seller.user_id, 1, None)
+        service.moderate(admin, review.review_id, hide_reason=reason)
+        service.remove_review(actor, seller.user_id)
+
+    with Session(engine) as session, session.begin():
+        service = _pg_review_service(session)
+        assert service.get_rating(seller.user_id, actor)[1] is None
+        recreated, created = service.set_review(actor, seller.user_id, 5, None)
+        assert not created
+        assert recreated.review_id == review.review_id
+        assert recreated.status == SellerReviewStatus.HIDDEN
+        assert recreated.deleted_at is None
+        assert service.summary(seller.user_id).count == 0
+        service.remove_review(actor, seller.user_id)
+        service.moderate(admin, review.review_id, hide_reason=None)
+
+    with Session(engine) as session, session.begin():
+        service = _pg_review_service(session)
+        assert service.get_rating(seller.user_id, actor)[1] is None
+        events = PostgresActivityRepository(session).list_events(admin_only=True)
+        (audit,) = [
+            event
+            for event in events
+            if event.actor_id == moderator.user_id
+            and event.moderation_reason is not None
+        ]
+        assert audit.moderation_reason == reason
+        assert service.set_review(actor, seller.user_id, 5, None)[1]

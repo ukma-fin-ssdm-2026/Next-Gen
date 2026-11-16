@@ -3338,6 +3338,13 @@ components:
           - type: string
           - type: 'null'
           title: Hidden Reason
+        deleted_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Deleted At
+          description: Час видалення автором, якщо запис утримано для модерації
         author_stats:
           $ref: '#/components/schemas/ReviewAuthorStatsResponse'
       type: object
@@ -3353,6 +3360,7 @@ components:
       - hidden_by
       - hidden_at
       - hidden_reason
+      - deleted_at
       - author_stats
       title: AdminSellerReviewResponse
     ApiValidationErrorResponse:
@@ -4533,6 +4541,13 @@ components:
           - type: string
           - type: 'null'
           title: Hidden Reason
+        deleted_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Deleted At
+          description: Час видалення автором, якщо запис утримано для модерації
       type: object
       required:
       - review_id
@@ -4546,6 +4561,7 @@ components:
       - hidden_by
       - hidden_at
       - hidden_reason
+      - deleted_at
       title: ModeratedSellerReviewResponse
     ModerationActionResponse:
       properties:

@@ -6,6 +6,7 @@ from enum import Enum
 from uuid import UUID, uuid4
 
 from src.domain.listings import utc_now
+from src.domain.moderation import normalize_moderation_reason
 from src.domain.users import UserRole
 
 ACTIVITY_DETAILS_MAX_LENGTH = 300
@@ -61,8 +62,15 @@ class ActivityEvent:
     details: str = ""
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=utc_now)
+    moderation_reason: str | None = None
 
     def __post_init__(self) -> None:
+        if self.moderation_reason is not None:
+            object.__setattr__(
+                self,
+                "moderation_reason",
+                normalize_moderation_reason(self.moderation_reason),
+            )
         if len(self.details) > ACTIVITY_DETAILS_MAX_LENGTH:
             object.__setattr__(
                 self, "details", self.details[:ACTIVITY_DETAILS_MAX_LENGTH]

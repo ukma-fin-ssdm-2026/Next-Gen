@@ -27,7 +27,9 @@ class SellerReviewRepository(Protocol):
 
     def upsert(self, review: SellerReview) -> tuple[SellerReview, bool]: ...
 
-    def delete(self, author_id: UUID, seller_id: UUID) -> SellerReview | None: ...
+    def delete(
+        self, author_id: UUID, seller_id: UUID, at: datetime
+    ) -> SellerReview | None: ...
 
     def save_moderation(self, review: SellerReview) -> None: ...
 
@@ -66,7 +68,8 @@ class InMemorySellerReviewRepository:
 
     def find(self, author_id: UUID, seller_id: UUID) -> SellerReview | None:
         with self._lock:
-            return self._reviews.get((author_id, seller_id))
+            review = self._reviews.get((author_id, seller_id))
+            return review if review is not None and review.deleted_at is None else None
 
     def upsert(self, review: SellerReview) -> tuple[SellerReview, bool]:
         key = (review.author_id, review.seller_id)
@@ -79,19 +82,37 @@ class InMemorySellerReviewRepository:
                     previous,
                     rating=review.rating,
                     listing_id=review.listing_id,
+                    deleted_at=None,
                     updated_at=review.updated_at,
                 )
             )
             self._reviews[key] = saved
             return saved, previous is None
 
-    def delete(self, author_id: UUID, seller_id: UUID) -> SellerReview | None:
+    def delete(
+        self, author_id: UUID, seller_id: UUID, at: datetime
+    ) -> SellerReview | None:
+        key = (author_id, seller_id)
         with self._lock:
-            return self._reviews.pop((author_id, seller_id), None)
+            review = self.find(author_id, seller_id)
+            if review is None:
+                return None
+            if review.status == SellerReviewStatus.HIDDEN:
+                self._reviews[key] = replace(review, deleted_at=at, updated_at=at)
+            else:
+                del self._reviews[key]
+            return review
 
     def save_moderation(self, review: SellerReview) -> None:
+        key = (review.author_id, review.seller_id)
         with self._lock:
-            self._reviews[(review.author_id, review.seller_id)] = review
+            if (
+                review.deleted_at is not None
+                and review.status == SellerReviewStatus.VISIBLE
+            ):
+                del self._reviews[key]
+            else:
+                self._reviews[key] = review
 
     def visible_distribution(self, seller_id: UUID) -> dict[int, int]:
         with self._lock:
@@ -125,7 +146,7 @@ class InMemorySellerReviewRepository:
         recent_one_star: Counter[UUID] = Counter()
         with self._lock:
             for review in self._reviews.values():
-                if review.author_id in author_ids:
+                if review.author_id in author_ids and review.deleted_at is None:
                     totals[review.author_id] += 1
                     if review.created_at > since:
                         recent[review.author_id] += 1

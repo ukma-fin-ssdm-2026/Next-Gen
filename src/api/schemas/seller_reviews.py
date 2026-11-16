@@ -62,6 +62,9 @@ class ModeratedSellerReviewResponse(OwnSellerReviewResponse):
     hidden_by: UUID | None
     hidden_at: datetime | None
     hidden_reason: str | None
+    deleted_at: datetime | None = Field(
+        ..., description="Час видалення автором, якщо запис утримано для модерації"
+    )
 
 
 class ReviewAuthorStatsResponse(BaseModel):

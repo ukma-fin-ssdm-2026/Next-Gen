@@ -50,6 +50,7 @@ class PostgresSellerReviewRepository:
             select(SellerReviewRow).where(
                 SellerReviewRow.author_id == author_id,
                 SellerReviewRow.seller_id == seller_id,
+                SellerReviewRow.deleted_at.is_(None),
             )
         ).scalar_one_or_none()
         return seller_review_row_to_domain(row) if row is not None else None
@@ -62,6 +63,7 @@ class PostgresSellerReviewRepository:
                 "rating": stmt.excluded.rating,
                 "listing_id": stmt.excluded.listing_id,
                 "updated_at": stmt.excluded.updated_at,
+                "deleted_at": None,
             },
         ).returning(SellerReviewRow)
         row = self._session.execute(
@@ -69,18 +71,41 @@ class PostgresSellerReviewRepository:
         ).scalar_one()
         return seller_review_row_to_domain(row), row.review_id == review.review_id
 
-    def delete(self, author_id: UUID, seller_id: UUID) -> SellerReview | None:
+    def delete(
+        self, author_id: UUID, seller_id: UUID, at: datetime
+    ) -> SellerReview | None:
         row = self._session.execute(
-            delete(SellerReviewRow)
+            select(SellerReviewRow)
             .where(
                 SellerReviewRow.author_id == author_id,
                 SellerReviewRow.seller_id == seller_id,
+                SellerReviewRow.deleted_at.is_(None),
             )
-            .returning(SellerReviewRow)
+            .with_for_update()
         ).scalar_one_or_none()
-        return seller_review_row_to_domain(row) if row is not None else None
+        if row is None:
+            return None
+
+        review = seller_review_row_to_domain(row)
+        if review.status == SellerReviewStatus.HIDDEN:
+            row.deleted_at = at
+            row.updated_at = at
+        else:
+            self._session.delete(row)
+        self._session.flush()
+        return review
 
     def save_moderation(self, review: SellerReview) -> None:
+        if (
+            review.deleted_at is not None
+            and review.status == SellerReviewStatus.VISIBLE
+        ):
+            self._session.execute(
+                delete(SellerReviewRow).where(
+                    SellerReviewRow.review_id == review.review_id
+                )
+            )
+            return
         self._session.execute(
             update(SellerReviewRow)
             .where(SellerReviewRow.review_id == review.review_id)
@@ -135,7 +160,10 @@ class PostgresSellerReviewRepository:
                     SellerReviewRow.created_at > since, SellerReviewRow.rating == 1
                 ),
             )
-            .where(SellerReviewRow.author_id.in_(author_ids))
+            .where(
+                SellerReviewRow.author_id.in_(author_ids),
+                SellerReviewRow.deleted_at.is_(None),
+            )
             .group_by(SellerReviewRow.author_id)
         )
         return {

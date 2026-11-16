@@ -284,3 +284,60 @@ def test_review_moderation_roles_filters_and_audit(client, login_as, setup_revie
         "REVIEW_RESTORED",
         "REVIEW_HIDDEN",
     ]
+
+
+@pytest.mark.parametrize("recreate_before_restore", [True, False])
+def test_deleted_hidden_review_requires_admin_restore(
+    client, login_as, setup_reviews, recreate_before_restore
+):
+    """[FR-020] [TP-041] Видалення не скидає приховування або причину в аудиті."""
+    seller, _, _ = setup_reviews
+    listing_path = _review_path(seller.user_id)
+    rating_path = _rating_path(seller.user_id)
+    author = login_as()
+    review_id = client.put(listing_path, json={"rating": 1}).json()["review_id"]
+    admin = login_as(UserRole.ADMIN)
+    review_path = f"{API}/admin/reviews/{review_id}"
+    reason = "я" * 499 + "!"
+    assert (
+        client.post(f"{review_path}/hide", json={"reason": reason}).status_code == 200
+    )
+    login_as(user_id=author.user_id)
+    assert client.delete(listing_path).status_code == 204
+    assert client.delete(listing_path).status_code == 404
+    assert client.get(rating_path).json() == {
+        "average": None,
+        "count": 0,
+        "distribution": None,
+    }
+
+    login_as(UserRole.ADMIN, user_id=admin.user_id)
+    (row,) = client.get(f"{API}/admin/reviews").json()
+    assert row["review_id"] == review_id
+    assert row["status"] == "HIDDEN"
+    assert row["deleted_at"] is not None
+    assert row["author_stats"]["total_count"] == 0
+    assert row["hidden_reason"] == reason
+
+    if recreate_before_restore:
+        login_as(user_id=author.user_id)
+        response = client.put(listing_path, json={"rating": 5})
+        assert response.status_code == 200
+        assert response.json()["review_id"] == review_id
+        assert response.json()["status"] == "HIDDEN"
+        assert client.get(rating_path).json()["count"] == 0
+        login_as(UserRole.ADMIN, user_id=admin.user_id)
+
+    assert client.post(f"{review_path}/restore").status_code == 200
+    assert client.get(rating_path).json()["count"] == int(recreate_before_restore)
+    logs = client.get(f"{API}/admin/logs/admins").json()
+    (hide,) = [log for log in logs if log["action_type"] == "REVIEW_HIDDEN"]
+    assert hide["details"].endswith(f"; reason={reason}")
+
+    if not recreate_before_restore:
+        assert client.get(f"{API}/admin/reviews").json() == []
+        login_as(user_id=author.user_id)
+        assert client.delete(listing_path).status_code == 404
+        first = client.put(listing_path, json={"rating": 5})
+        assert first.status_code == 201
+        assert first.json()["status"] == "VISIBLE"

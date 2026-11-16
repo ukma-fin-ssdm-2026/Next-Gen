@@ -73,7 +73,7 @@ class SellerReviewService:
             self._require_active_actor(actor)
             now = utc_now()
             self._check_quota(actor.user_id, now)
-            review = self._reviews.delete(actor.user_id, seller_id)
+            review = self._reviews.delete(actor.user_id, seller_id, now)
             if review is None:
                 raise SellerReviewNotFoundError("Оцінку не знайдено")
             self._record(actor, ActivityType.REVIEW_REMOVED, review, now)
@@ -195,8 +195,6 @@ class SellerReviewService:
         reason: str | None = None,
     ) -> None:
         details = f"review_id={review.review_id}; seller_id={review.seller_id}"
-        if reason is not None:
-            details = f"{details}; reason={reason}"
         self._events.add(
             ActivityEvent(
                 actor_id=actor.user_id,
@@ -204,6 +202,7 @@ class SellerReviewService:
                 action_type=action,
                 listing_id=review.listing_id,
                 details=details,
+                moderation_reason=reason,
                 created_at=now,
             )
         )

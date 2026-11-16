@@ -29,6 +29,7 @@ class SellerReview:
     hidden_by: UUID | None = None
     hidden_at: datetime | None = None
     hidden_reason: str | None = None
+    deleted_at: datetime | None = None
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
 
