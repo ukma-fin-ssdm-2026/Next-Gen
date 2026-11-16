@@ -1,11 +1,16 @@
 """HTTP-роутер приватного чату між користувачами (ADR-005, FR-021, FR-022, SEC-003)."""
 
-from collections.abc import Iterator
+from collections.abc import Callable, Coroutine, Iterator
 from contextlib import contextmanager
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.api.deps import get_conversation_service, require_current_user
 from src.api.schemas.conversations import (
@@ -36,7 +41,34 @@ from src.services.conversations import (
     ConversationService,
 )
 
-router = APIRouter(tags=["Conversations"])
+
+class _NoStoreRoute(APIRoute):
+    """Додає `Cache-Control: no-store` до всіх відповідей чату включно з помилками."""
+
+    def get_route_handler(
+        self,
+    ) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+        original_handler = super().get_route_handler()
+
+        async def handler(request: Request) -> Response:
+            try:
+                response = await original_handler(request)
+            except StarletteHTTPException as exc:
+                exc.headers = {**(exc.headers or {}), "Cache-Control": "no-store"}
+                raise
+            except RequestValidationError as exc:
+                return JSONResponse(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    content={"detail": jsonable_encoder(exc.errors())},
+                    headers={"Cache-Control": "no-store"},
+                )
+            response.headers["Cache-Control"] = "no-store"
+            return response
+
+        return handler
+
+
+router = APIRouter(tags=["Conversations"], route_class=_NoStoreRoute)
 
 Actor = Annotated[CurrentUser, Depends(require_current_user)]
 Service = Annotated[ConversationService, Depends(get_conversation_service)]
@@ -128,7 +160,6 @@ def start_listing_conversation(
 ) -> StartConversationResponse:
     with _chat_errors():
         result = service.start_from_listing(actor, listing_id, payload.body)
-    response.headers["Cache-Control"] = "no-store"
     if result.created:
         response.status_code = status.HTTP_201_CREATED
     return StartConversationResponse.model_validate(result)
@@ -149,7 +180,6 @@ def start_listing_conversation(
     },
 )
 def list_conversations(
-    response: Response,
     actor: Actor,
     service: Service,
     limit: Annotated[
@@ -159,7 +189,6 @@ def list_conversations(
 ) -> ConversationPageResponse:
     with _chat_errors(cursor_field="cursor"):
         page = service.list_conversations(actor, limit=limit, cursor=cursor)
-    response.headers["Cache-Control"] = "no-store"
     return ConversationPageResponse.model_validate(page)
 
 
@@ -177,13 +206,11 @@ def list_conversations(
     },
 )
 def get_unread_count(
-    response: Response,
     actor: Actor,
     service: Service,
 ) -> UnreadCountResponse:
     with _chat_errors():
         count = service.unread_count(actor)
-    response.headers["Cache-Control"] = "no-store"
     return UnreadCountResponse(unread_count=count)
 
 
@@ -205,7 +232,6 @@ def get_unread_count(
 )
 def list_conversation_messages(
     conversation_id: UUID,
-    response: Response,
     actor: Actor,
     service: Service,
     after: Annotated[str | None, Query()] = None,
@@ -221,7 +247,6 @@ def list_conversation_messages(
         page = service.list_messages(
             actor, conversation_id, after=after, before=before, limit=limit
         )
-    response.headers["Cache-Control"] = "no-store"
     return MessagePageResponse.model_validate(page)
 
 
@@ -249,7 +274,6 @@ def list_conversation_messages(
 def send_conversation_message(
     conversation_id: UUID,
     payload: SendMessageRequest,
-    response: Response,
     actor: Actor,
     service: Service,
 ) -> MessageResponse:
@@ -260,7 +284,6 @@ def send_conversation_message(
             payload.body,
             listing_id=payload.listing_id,
         )
-    response.headers["Cache-Control"] = "no-store"
     return MessageResponse.model_validate(message)
 
 
@@ -281,10 +304,8 @@ def send_conversation_message(
 )
 def mark_conversation_read(
     conversation_id: UUID,
-    response: Response,
     actor: Actor,
     service: Service,
 ) -> None:
     with _chat_errors():
         service.mark_read(actor, conversation_id)
-    response.headers["Cache-Control"] = "no-store"

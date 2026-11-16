@@ -202,14 +202,17 @@ def test_anonymous_gets_401_on_every_chat_endpoint(client, chat_env: ChatEnv) ->
     for make_call in calls:
         anon_res = make_call({})
         assert anon_res.status_code == 401
+        assert anon_res.headers.get("cache-control") == "no-store"
         spoofed_res = make_call(
             {"X-Actor-Id": str(seller.user_id), "X-Actor-Role": "ADMIN"}
         )
         assert spoofed_res.status_code == 401
+        assert spoofed_res.headers.get("cache-control") == "no-store"
 
         client.cookies.set(SESSION_COOKIE_NAME, "forged-session-token")
         forged_res = make_call({})
         assert forged_res.status_code == 401
+        assert forged_res.headers.get("cache-control") == "no-store"
         client.cookies.clear()
 
 
@@ -236,6 +239,7 @@ def test_client_identity_fields_in_body_are_rejected_with_422(
         json={"body": "Добрий день", extra_field: str(seller.user_id)},
     )
     assert start_res.status_code == 422
+    assert start_res.headers.get("cache-control") == "no-store"
 
     ok = client.post(
         f"{API}/listings/{listing.id}/conversation",
@@ -249,6 +253,11 @@ def test_client_identity_fields_in_body_are_rejected_with_422(
         json={"body": "Ще одне", extra_field: "ADMIN"},
     )
     assert msg_res.status_code == 422
+    assert msg_res.headers.get("cache-control") == "no-store"
+
+    invalid_uuid = client.get(f"{API}/conversations/not-a-uuid/messages")
+    assert invalid_uuid.status_code == 422
+    assert invalid_uuid.headers.get("cache-control") == "no-store"
 
 
 def test_blocked_user_cannot_use_any_chat_endpoint(client, chat_env: ChatEnv) -> None:
@@ -291,6 +300,7 @@ def test_blocked_user_cannot_use_any_chat_endpoint(client, chat_env: ChatEnv) ->
         chat_env.authenticate(client, buyer)
         res = call()
         assert res.status_code == 403
+        assert res.headers.get("cache-control") == "no-store"
 
 
 # ---------------------------------------------------------------------------
@@ -344,21 +354,20 @@ def test_start_conversation_201_then_200_self_chat_and_audit(
         json={"body": "Напишу собі"},
     )
     assert self_res.status_code == 403
+    assert self_res.headers.get("cache-control") == "no-store"
 
     # Перше повідомлення обов'язкове (відсутнє, порожнє або лише з пробілів -> 422).
     chat_env.authenticate(client, buyer)
-    assert (
-        client.post(
-            f"{API}/listings/{listing_one.id}/conversation", json={}
-        ).status_code
-        == 422
-    )
+    missing_body = client.post(f"{API}/listings/{listing_one.id}/conversation", json={})
+    assert missing_body.status_code == 422
+    assert missing_body.headers.get("cache-control") == "no-store"
     for empty_body in ("", "   "):
         bad = client.post(
             f"{API}/listings/{listing_one.id}/conversation",
             json={"body": empty_body},
         )
         assert bad.status_code == 422
+        assert bad.headers.get("cache-control") == "no-store"
     assert (
         chat_env.conversations.get_by_pair(*sorted((buyer.user_id, seller.user_id)))
         is None
@@ -473,6 +482,8 @@ def test_idor_non_participant_and_unknown_conversation_return_identical_404(
         get_unknown = client.get(f"{API}/conversations/{unknown_id}/messages")
         assert get_foreign.status_code == 404
         assert get_unknown.status_code == 404
+        assert get_foreign.headers.get("cache-control") == "no-store"
+        assert get_unknown.headers.get("cache-control") == "no-store"
         assert get_foreign.json() == get_unknown.json()
         assert "Приватний текст" not in get_foreign.text
 
@@ -484,12 +495,16 @@ def test_idor_non_participant_and_unknown_conversation_return_identical_404(
         )
         assert post_foreign.status_code == 404
         assert post_unknown.status_code == 404
+        assert post_foreign.headers.get("cache-control") == "no-store"
+        assert post_unknown.headers.get("cache-control") == "no-store"
         assert post_foreign.json() == post_unknown.json()
 
         read_foreign = client.post(f"{API}/conversations/{conv_id}/read")
         read_unknown = client.post(f"{API}/conversations/{unknown_id}/read")
         assert read_foreign.status_code == 404
         assert read_unknown.status_code == 404
+        assert read_foreign.headers.get("cache-control") == "no-store"
+        assert read_unknown.headers.get("cache-control") == "no-store"
         assert read_foreign.json() == read_unknown.json()
 
 
@@ -539,6 +554,8 @@ def test_attach_listing_validation_and_withdrawn_listing_card_privacy(
     )
     assert start_withdrawn.status_code == 404
     assert start_missing.status_code == 404
+    assert start_withdrawn.headers.get("cache-control") == "no-store"
+    assert start_missing.headers.get("cache-control") == "no-store"
     assert start_withdrawn.json() == start_missing.json()
 
     # Створюємо розмову з активного оголошення.
@@ -571,6 +588,9 @@ def test_attach_listing_validation_and_withdrawn_listing_card_privacy(
         404,
         404,
     )
+    assert bad_foreign.headers.get("cache-control") == "no-store"
+    assert bad_withdrawn.headers.get("cache-control") == "no-store"
+    assert bad_missing.headers.get("cache-control") == "no-store"
     assert bad_foreign.json() == bad_withdrawn.json() == bad_missing.json()
     _assert_no_secrets(
         bad_foreign.text + bad_withdrawn.text,
@@ -817,27 +837,25 @@ def test_cursors_pagination_boundaries_invalid_cursors_and_equal_timestamps(
         },
     )
     assert both.status_code == 422
+    assert both.headers.get("cache-control") == "no-store"
 
     # Невалідні / підроблені / порожні / задовгі курсори -> 422 (не 500).
     for bad_cursor in ("", "not-base64!", "a" * 200, "invalid|cursor"):
-        assert (
-            client.get(
-                f"{API}/conversations", params={"cursor": bad_cursor}
-            ).status_code
-            == 422
+        bad_list = client.get(f"{API}/conversations", params={"cursor": bad_cursor})
+        assert bad_list.status_code == 422
+        assert bad_list.headers.get("cache-control") == "no-store"
+
+        bad_after = client.get(
+            f"{API}/conversations/{conv_a}/messages", params={"after": bad_cursor}
         )
-        assert (
-            client.get(
-                f"{API}/conversations/{conv_a}/messages", params={"after": bad_cursor}
-            ).status_code
-            == 422
+        assert bad_after.status_code == 422
+        assert bad_after.headers.get("cache-control") == "no-store"
+
+        bad_before = client.get(
+            f"{API}/conversations/{conv_a}/messages", params={"before": bad_cursor}
         )
-        assert (
-            client.get(
-                f"{API}/conversations/{conv_a}/messages", params={"before": bad_cursor}
-            ).status_code
-            == 422
-        )
+        assert bad_before.status_code == 422
+        assert bad_before.headers.get("cache-control") == "no-store"
 
 
 # ---------------------------------------------------------------------------
@@ -864,6 +882,7 @@ def test_text_validation_plain_string_xss_sql_and_log_safety(
             json={"body": secret_bad_body},
         )
     assert res.status_code == 422
+    assert res.headers.get("cache-control") == "no-store"
     _assert_no_secrets(res.text + caplog.text, (secret_bad_body, token))
 
     for invalid_body in ("hi\x07there", "rtl\u202espoof", "я" * 1001):
@@ -872,6 +891,7 @@ def test_text_validation_plain_string_xss_sql_and_log_safety(
             json={"body": invalid_body},
         )
         assert r.status_code == 422
+        assert r.headers.get("cache-control") == "no-store"
 
     # Валідне створення та перевірка XSS, URL і SQL-подібного вводу як тексту.
     xss_payload = "<script>alert(1)</script> https://naukma.edu.ua"
@@ -927,6 +947,7 @@ def test_rate_limits_return_429_with_retry_after(client, chat_env: ChatEnv) -> N
     )
     assert too_many_starts.status_code == 429
     assert too_many_starts.headers["retry-after"] == "86400"
+    assert too_many_starts.headers.get("cache-control") == "no-store"
 
     # Друге повідомлення у наявну розмову дозволене (ліміт за хвилину = 2).
     chat_env.advance(seconds=1)
@@ -944,6 +965,7 @@ def test_rate_limits_return_429_with_retry_after(client, chat_env: ChatEnv) -> N
     )
     assert third.status_code == 429
     assert third.headers["retry-after"] == "60"
+    assert third.headers.get("cache-control") == "no-store"
 
     # Після завершення хвилинного вікна знову дозволено.
     chat_env.advance(seconds=61)
