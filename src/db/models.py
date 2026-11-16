@@ -531,3 +531,97 @@ class ActivityEventRow(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
+
+
+# ---------------------------------------------------------------------------
+# Conversation / Message (ADR-005)
+# ---------------------------------------------------------------------------
+
+
+class ConversationRow(Base):
+    """Розмова двох користувачів; пара зберігається впорядкованою (low < high)."""
+
+    __tablename__ = "conversations"
+    __table_args__ = (
+        UniqueConstraint("user_low_id", "user_high_id", name="uq_conversations_pair"),
+        CheckConstraint(
+            "user_low_id < user_high_id", name="ck_conversations_pair_order"
+        ),
+        Index("ix_conversations_low_activity", "user_low_id", "last_message_at"),
+        Index("ix_conversations_high_activity", "user_high_id", "last_message_at"),
+    )
+
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_low_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_high_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+    last_message_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+    # Позначка прочитаного для кожного учасника: час і id повідомлення (без FK,
+    # бо повідомлення може бути видалене політикою зберігання).
+    low_last_read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    low_last_read_message_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    high_last_read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    high_last_read_message_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+
+
+class MessageRow(Base):
+    """Незмінне повідомлення розмови; порядок — `(created_at, message_id)`."""
+
+    __tablename__ = "messages"
+    __table_args__ = (
+        CheckConstraint(
+            "length(body) BETWEEN 1 AND 1000", name="ck_messages_body_length"
+        ),
+        Index(
+            "ix_messages_conversation_order",
+            "conversation_id",
+            "created_at",
+            "message_id",
+        ),
+        Index("ix_messages_sender_created", "sender_id", "created_at"),
+    )
+
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("conversations.conversation_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    sender_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    listing_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("listings.listing_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
