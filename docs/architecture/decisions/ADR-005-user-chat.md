@@ -63,6 +63,8 @@
 | `body` | text | 1–1000 символів після `trim`, без керівних символів (крім переносу рядка) | Текст |
 | `listing_id` | UUID | FK → `Listing`, Nullable, `ON DELETE SET NULL` | Оголошення, з яким пов'язане повідомлення |
 | `reply_to_id` | UUID | FK → `Message`, Nullable, `ON DELETE SET NULL` | Повідомлення тієї ж розмови, на яке це є відповіддю; цитата (до 140 символів) обчислюється під час читання й не зберігається |
+
+**Скарги на повідомлення (`message_reports`).** Окрема таблиця, а не розширення `complaints`, бо скарги на оголошення прив'язані до `listing_id`. Поля: `report_id`, `message_id`, `conversation_id` (без зовнішніх ключів, щоб скарга пережила видалення повідомлення), `reporter_id`, `reported_user_id`, `body_snapshot` (знімок тексту), `reason` (`SPAM`/`FRAUD`/`ABUSE`/`OTHER`), `details` (до 300), `status` (`OPEN`/`RESOLVED`/`DISMISSED`), `resolved_by`, `resolved_at`, `resolution_note`. Унікальна пара `(message_id, reporter_id)`. Блокування порушника адміністратор виконує наявним потоком блокування користувачів.
 | `created_at` | datetime | Required | Час (UTC) |
 
 Індекси `(conversation_id, created_at, message_id)` і `(sender_id, created_at)`. Повідомлення незмінні: у v1 немає редагування й ручного видалення.

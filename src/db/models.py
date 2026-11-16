@@ -479,6 +479,56 @@ class ComplaintRow(Base):
     resolution_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
 
+class MessageReportRow(Base):
+    """Скарга на повідомлення чату зі знімком тексту (ADR-005).
+
+    `message_id` і `conversation_id` без зовнішніх ключів: повідомлення й розмову
+    може видалити політика зберігання, а скарга та її знімок мають лишитися.
+    """
+
+    __tablename__ = "message_reports"
+    __table_args__ = (
+        UniqueConstraint(
+            "message_id", "reporter_id", name="uq_message_reports_message_reporter"
+        ),
+        Index("ix_message_reports_status", "status"),
+    )
+
+    report_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    message_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    reporter_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    reported_user_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    body_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str] = mapped_column(String(20), nullable=False)
+    details: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="OPEN")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+    resolved_by: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    resolution_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
 class FeedbackRow(Base):
     """Звернення користувача до адміністрації (FR-017)."""
 

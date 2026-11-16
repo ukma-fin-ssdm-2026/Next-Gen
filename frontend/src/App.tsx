@@ -52,6 +52,7 @@ import {
   BlockedUsersPanel,
   ComplaintDialog,
   ComplaintsPanel,
+  MessageReportsPanel,
   FeedbackAdminPanel,
   FeedbackPage,
 } from "./SupportPanels";
@@ -353,8 +354,8 @@ function App() {
         <Route path="/listings/new" element={<CreateListingPage user={user} authChecked={authChecked} categories={categories} onError={setError} onNotice={setNotice} />} />
         <Route path="/listings/:listingId/edit" element={<EditListingPage user={user} authChecked={authChecked} categories={categories} onError={setError} onNotice={setNotice} />} />
         <Route path="/sellers/:userId" element={<SellerPage user={user} authChecked={authChecked} categoryNames={categoryNames} favorites={favorites} busy={busy} onFavorite={(id) => void toggleFavorite(id)} onError={setError} onNotice={setNotice} />} />
-        <Route path="/messages" element={authChecked && !user ? <SignInRequired title="Повідомлення доступні після входу" /> : <ChatPage onError={setError} />} />
-        <Route path="/messages/:conversationId" element={authChecked && !user ? <SignInRequired title="Повідомлення доступні після входу" /> : <ChatPage onError={setError} />} />
+        <Route path="/messages" element={authChecked && !user ? <SignInRequired title="Повідомлення доступні після входу" /> : <ChatPage onError={setError} onNotice={setNotice} />} />
+        <Route path="/messages/:conversationId" element={authChecked && !user ? <SignInRequired title="Повідомлення доступні після входу" /> : <ChatPage onError={setError} onNotice={setNotice} />} />
         <Route path="/my" element={<MyListingsPage user={user} authChecked={authChecked} categoryNames={categoryNames} onError={setError} onNotice={setNotice} />} />
         <Route
           path="/listings/:listingId"
@@ -2037,12 +2038,13 @@ function ProfilePage({ user, authChecked, onUserChange, onError, onNotice }: {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UKMA_EMAIL_PATTERN = /^[^@\s]+@ukma\.edu\.ua$/i;
 
-type AdminTab = "moderation" | "categories" | "complaints" | "feedback" | "blocked" | "user-log" | "admin-log" | "reviews";
+type AdminTab = "moderation" | "categories" | "complaints" | "message-reports" | "feedback" | "blocked" | "user-log" | "admin-log" | "reviews";
 /** Кожна вкладка має власну адресу, щоб на неї можна було посилатися. */
 const ADMIN_TABS: { id: AdminTab; label: string; path: string }[] = [
   { id: "moderation", label: "Модерація", path: "/admin" },
   { id: "categories", label: "Категорії", path: "/admin/categories" },
   { id: "complaints", label: "Скарги", path: "/admin/complaints" },
+  { id: "message-reports", label: "Скарги на чат", path: "/admin/message-reports" },
   { id: "feedback", label: "Звернення", path: "/admin/feedback" },
   { id: "blocked", label: "Заблоковані", path: "/admin/blocked" },
   { id: "user-log", label: "Журнал", path: "/admin/logs/users" },
@@ -2121,6 +2123,7 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
         <CategorySuggestionsPanel onError={onError} onNotice={onNotice} onCategoriesChanged={onCategoriesChanged} />
       </>)}
       {tab === "complaints" && <ComplaintsPanel onError={onError} onNotice={onNotice} />}
+      {tab === "message-reports" && <MessageReportsPanel onError={onError} onNotice={onNotice} />}
       {tab === "feedback" && <FeedbackAdminPanel onError={onError} onNotice={onNotice} />}
       {tab === "blocked" && <BlockedUsersPanel onError={onError} onNotice={onNotice} />}
       {tab === "user-log" && <ActivityLogPanel kind="users" onError={onError} />}

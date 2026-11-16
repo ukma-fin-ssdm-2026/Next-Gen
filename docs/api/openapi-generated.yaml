@@ -3336,6 +3336,250 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/conversations/{conversation_id}/messages/{message_id}/report:
+    post:
+      tags:
+      - Chat reports
+      summary: Поскаржитися на повідомлення
+      description: Учасник розмови скаржиться на повідомлення співрозмовника. Одна
+        скарга від користувача на повідомлення; не-учасник і невідоме повідомлення
+        дають однакову 404.
+      operationId: report_message_api_v1_conversations__conversation_id__messages__message_id__report_post
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Conversation Id
+      - name: message_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Message Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageReportCreateRequest'
+      responses:
+        '204':
+          description: Successful Response
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає прав
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Конфлікт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: База даних тимчасово недоступна (REL-03); повторіть запит пізніше
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 5
+          content:
+            application/json:
+              example:
+                detail: База даних тимчасово недоступна. Спробуйте за кілька секунд.
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/message-reports:
+    get:
+      tags:
+      - Chat reports
+      summary: Список скарг на повідомлення (адміністратор)
+      description: Відкриті скарги першими; необов'язковий фільтр `status`.
+      operationId: list_message_reports_api_v1_admin_message_reports_get
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/ComplaintStatus'
+          - type: 'null'
+          title: Status
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MessageReportResponse'
+                title: Response List Message Reports Api V1 Admin Message Reports
+                  Get
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає прав
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Конфлікт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: База даних тимчасово недоступна (REL-03); повторіть запит пізніше
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 5
+          content:
+            application/json:
+              example:
+                detail: База даних тимчасово недоступна. Спробуйте за кілька секунд.
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/message-reports/{report_id}/resolve:
+    post:
+      tags:
+      - Chat reports
+      summary: Розглянути скаргу на повідомлення (адміністратор)
+      description: Позначає скаргу RESOLVED або DISMISSED із необов'язковою приміткою.
+      operationId: resolve_message_report_api_v1_admin_message_reports__report_id__resolve_post
+      parameters:
+      - name: report_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Report Id
+      - name: baraholka_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Непрозорий ID серверної сесії
+          title: Baraholka Session
+        description: Непрозорий ID серверної сесії
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageReportResolveRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageReportResponse'
+        '401':
+          description: Немає валідної сесії
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає прав
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Конфлікт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: База даних тимчасово недоступна (REL-03); повторіть запит пізніше
+          headers:
+            Retry-After:
+              description: Через скільки секунд варто повторити запит
+              schema:
+                type: integer
+                example: 5
+          content:
+            application/json:
+              example:
+                detail: База даних тимчасово недоступна. Спробуйте за кілька секунд.
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/feedback:
     post:
       tags:
@@ -5073,6 +5317,115 @@ components:
       - has_more
       title: MessagePageResponse
       description: Сторінка повідомлень розмови з курсорами гортання і polling.
+    MessageReportCreateRequest:
+      properties:
+        reason:
+          $ref: '#/components/schemas/MessageReportReason'
+        details:
+          type: string
+          maxLength: 300
+          title: Details
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - reason
+      title: MessageReportCreateRequest
+      description: Тіло скарги на повідомлення; автор береться із сесії.
+    MessageReportReason:
+      type: string
+      enum:
+      - SPAM
+      - FRAUD
+      - ABUSE
+      - OTHER
+      title: MessageReportReason
+      description: Причини скарги на повідомлення.
+    MessageReportResolveRequest:
+      properties:
+        status:
+          $ref: '#/components/schemas/ComplaintStatus'
+        note:
+          type: string
+          maxLength: 500
+          title: Note
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - status
+      title: MessageReportResolveRequest
+      description: Рішення адміністратора за скаргою.
+    MessageReportResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        message_id:
+          type: string
+          format: uuid
+          title: Message Id
+        conversation_id:
+          type: string
+          format: uuid
+          title: Conversation Id
+        reporter_id:
+          type: string
+          format: uuid
+          title: Reporter Id
+        reporter_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reporter Name
+        reported_user_id:
+          type: string
+          format: uuid
+          title: Reported User Id
+        reported_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reported Name
+        body_snapshot:
+          type: string
+          title: Body Snapshot
+        reason:
+          $ref: '#/components/schemas/MessageReportReason'
+        details:
+          type: string
+          title: Details
+        status:
+          $ref: '#/components/schemas/ComplaintStatus'
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        resolved_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Resolved At
+        resolution_note:
+          type: string
+          title: Resolution Note
+          default: ''
+      type: object
+      required:
+      - id
+      - message_id
+      - conversation_id
+      - reporter_id
+      - reported_user_id
+      - body_snapshot
+      - reason
+      - details
+      - status
+      - created_at
+      title: MessageReportResponse
+      description: Скарга на повідомлення для адмін-панелі.
     MessageResponse:
       properties:
         message_id:

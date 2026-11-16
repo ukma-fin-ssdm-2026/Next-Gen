@@ -37,6 +37,7 @@ from src.api.routers import (
     categories,
     category_suggestions,
     complaints,
+    message_reports,
     contacts,
     conversations,
     favorites,
@@ -191,6 +192,7 @@ for _router in (
     users.router,
     seller_reviews.router,
     complaints.router,
+    message_reports.router,
     feedback.router,
     activity.router,
 ):

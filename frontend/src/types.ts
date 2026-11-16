@@ -119,6 +119,24 @@ export interface ModerationAction {
 
 export type ComplaintReason = "SPAM" | "FRAUD" | "PROHIBITED" | "INAPPROPRIATE" | "WRONG_CATEGORY" | "OTHER";
 export type ComplaintStatus = "OPEN" | "RESOLVED" | "DISMISSED";
+export type MessageReportReason = "SPAM" | "FRAUD" | "ABUSE" | "OTHER";
+
+export interface MessageReport {
+  id: string;
+  message_id: string;
+  conversation_id: string;
+  reporter_id: string;
+  reporter_name: string | null;
+  reported_user_id: string;
+  reported_name: string | null;
+  body_snapshot: string;
+  reason: MessageReportReason;
+  details: string;
+  status: ComplaintStatus;
+  created_at: string;
+  resolved_at: string | null;
+  resolution_note: string;
+}
 
 export interface Complaint {
   id: string;

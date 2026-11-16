@@ -1235,3 +1235,90 @@ def test_reply_to_message_returns_quote_and_rejects_foreign_id(
         )
         assert bad.status_code == 422
         assert bad.headers.get("cache-control") == "no-store"
+
+
+@pytest.fixture
+def report_env(chat_env: ChatEnv, monkeypatch):
+    """Підключає сервіс скарг на повідомлення до сховища розмов `chat_env`."""
+    from src.api.deps import get_message_report_service
+    from src.repositories.message_reports import InMemoryMessageReportRepository
+    from src.services.message_reports import MessageReportService
+
+    reports = InMemoryMessageReportRepository()
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_message_report_service,
+        lambda: MessageReportService(reports, chat_env.conversations, chat_env.users),
+    )
+    return chat_env
+
+
+def test_message_report_flow_snapshot_duplicates_and_admin_resolution(
+    client, report_env: ChatEnv
+) -> None:
+    """[TP-055] [FR-022] [SEC-003]
+    Учасник скаржиться на чуже повідомлення; дублікат 409, власне чи чуже
+    повідомлення 422/404; адміністратор бачить знімок і розглядає скаргу.
+    """
+    seller = report_env.make_user(display_name="Продавець", email="s.rep@ukma.edu.ua")
+    buyer = report_env.make_user(display_name="Покупець", email="b.rep@ukma.edu.ua")
+    stranger = report_env.make_user(display_name="Сторонній", email="x.rep@ukma.edu.ua")
+    admin = report_env.make_user(
+        display_name="Адмін", email="a.rep@ukma.edu.ua", role=UserRole.ADMIN
+    )
+    listing = report_env.add_listing(seller, title="Лампа", price=100.0)
+
+    report_env.authenticate(client, buyer)
+    started = client.post(
+        f"{API}/listings/{listing.id}/conversation", json={"body": "Купи в мене крипту"}
+    ).json()
+    conversation_id = started["conversation_id"]
+    own_id = started["message"]["message_id"]
+
+    report_env.authenticate(client, seller)
+    path = f"{API}/conversations/{conversation_id}/messages/{own_id}/report"
+    assert client.post(path, json={"reason": "OTHER"}).status_code == 422
+    first = client.post(path, json={"reason": "SPAM", "details": "реклама"})
+    assert first.status_code == 204
+    assert first.headers.get("cache-control") == "no-store"
+    assert client.post(path, json={"reason": "SPAM"}).status_code == 409
+
+    # Власне повідомлення: 422; сторонній і вигадане повідомлення: однакова 404.
+    reply = client.post(
+        f"{API}/conversations/{conversation_id}/messages", json={"body": "Ні"}
+    ).json()
+    own_path = f"{API}/conversations/{conversation_id}/messages/{reply['message_id']}"
+    assert client.post(own_path + "/report", json={"reason": "SPAM"}).status_code == 422
+    report_env.authenticate(client, stranger)
+    foreign = client.post(path, json={"reason": "SPAM"})
+    missing = client.post(
+        f"{API}/conversations/{conversation_id}/messages/{uuid4()}/report",
+        json={"reason": "SPAM"},
+    )
+    assert foreign.status_code == missing.status_code == 404
+    assert foreign.json() == missing.json()
+
+    # Звичайний користувач не бачить адмінського списку.
+    assert client.get(f"{API}/admin/message-reports").status_code == 403
+
+    report_env.authenticate(client, admin)
+    listed = client.get(f"{API}/admin/message-reports")
+    assert listed.status_code == 200
+    item = listed.json()[0]
+    assert item["body_snapshot"] == "Купи в мене крипту"
+    assert item["reporter_name"] == "Продавець"
+    assert item["reported_name"] == "Покупець"
+    assert item["status"] == "OPEN"
+
+    resolve = client.post(
+        f"{API}/admin/message-reports/{item['id']}/resolve",
+        json={"status": "RESOLVED", "note": "попередження"},
+    )
+    assert resolve.status_code == 200
+    assert resolve.json()["status"] == "RESOLVED"
+    again = client.post(
+        f"{API}/admin/message-reports/{item['id']}/resolve",
+        json={"status": "DISMISSED"},
+    )
+    assert again.status_code == 409
+    assert client.get(f"{API}/admin/message-reports?status=OPEN").json() == []

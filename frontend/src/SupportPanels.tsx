@@ -7,7 +7,10 @@ import {
   getBlockedUsers,
   getComplaints,
   getFeedback,
+  getMessageReports,
+  reportChatMessage,
   resolveComplaint,
+  resolveMessageReport,
   resolveFeedback,
   submitComplaint,
   submitFeedback,
@@ -21,6 +24,8 @@ import type {
   CurrentUser,
   FeedbackMessage,
   LogEntry,
+  MessageReport,
+  MessageReportReason,
 } from "./types";
 
 function describe(error: unknown): string {
@@ -44,6 +49,13 @@ export const COMPLAINT_REASON_LABELS: Record<ComplaintReason, string> = {
   PROHIBITED: "Заборонений товар",
   INAPPROPRIATE: "Неприйнятний вміст",
   WRONG_CATEGORY: "Хибна категорія",
+  OTHER: "Інше",
+};
+
+export const MESSAGE_REPORT_REASON_LABELS: Record<MessageReportReason, string> = {
+  SPAM: "Спам або реклама",
+  FRAUD: "Підозра на шахрайство",
+  ABUSE: "Образи чи тиск",
   OTHER: "Інше",
 };
 
@@ -245,6 +257,109 @@ export function ComplaintsPanel({ onError, onNotice }: { onError: (m: string) =>
             </div>
             <p className="form-hint">{COMPLAINT_REASON_LABELS[item.reason]} · від {item.reporter_email ?? "невідомо"} · {formatDateTime(item.created_at)}</p>
             {item.details && <p className="log-details">{item.details}</p>}
+            {item.status === "OPEN" ? (
+              <>
+                <label><span>Примітка <small>необов'язково</small></span><input value={notes[item.id] ?? ""} maxLength={500} onChange={(event) => setNotes((current) => ({ ...current, [item.id]: event.target.value }))} /></label>
+                <div className="form-actions">
+                  <button className="button button-primary" type="button" disabled={busyId === item.id} onClick={() => void resolve(item, "RESOLVED")}>Розглянуто</button>
+                  <button className="button button-light" type="button" disabled={busyId === item.id} onClick={() => void resolve(item, "DISMISSED")}>Відхилити</button>
+                </div>
+              </>
+            ) : item.resolution_note ? <p className="form-hint">Примітка: {item.resolution_note}</p> : null}
+          </li>
+        ))}
+      </ul>
+      <Pagination page={paged.page} totalPages={paged.totalPages} onChange={paged.setPage} />
+    </section>
+  );
+}
+
+export function MessageReportDialog({ conversationId, messageId, onClose, onDone, onError }: {
+  conversationId: string;
+  messageId: string;
+  onClose: () => void;
+  onDone: () => void;
+  onError: (message: string) => void;
+}) {
+  const [reason, setReason] = useState<MessageReportReason>("SPAM");
+  const [details, setDetails] = useState("");
+  const [sending, setSending] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (reason === "OTHER" && details.trim().length === 0) { setFormError("Опишіть проблему, якщо обрана причина «Інше»"); return; }
+    setSending(true);
+    setFormError(null);
+    try {
+      await reportChatMessage(conversationId, messageId, reason, details.trim());
+      onDone();
+    } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.status === 409) { onError(describe(requestError)); onClose(); }
+      else setFormError(describe(requestError));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <form className="dialog-card" role="dialog" aria-modal="true" aria-labelledby="message-report-title" onSubmit={(event) => void submit(event)}>
+        <h2 id="message-report-title">Поскаржитись на повідомлення</h2>
+        <p className="form-hint">Скаргу побачать адміністратори разом із текстом повідомлення. Від одного користувача на повідомлення приймається одна скарга.</p>
+        <label><span>Причина</span>
+          <select value={reason} onChange={(event) => setReason(event.target.value as MessageReportReason)}>
+            {(Object.keys(MESSAGE_REPORT_REASON_LABELS) as MessageReportReason[]).map((key) => <option key={key} value={key}>{MESSAGE_REPORT_REASON_LABELS[key]}</option>)}
+          </select>
+        </label>
+        <label><span>Деталі <small>{reason === "OTHER" ? "обов'язково, до 300 символів" : "необов'язково, до 300 символів"}</small></span>
+          <textarea value={details} maxLength={300} rows={4} onChange={(event) => setDetails(event.target.value)} />
+        </label>
+        {formError && <p className="form-error" role="alert">{formError}</p>}
+        <div className="form-actions">
+          <button className="button button-danger" type="submit" disabled={sending}>Надіслати скаргу</button>
+          <button className="button button-light" type="button" onClick={onClose}>Скасувати</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+export function MessageReportsPanel({ onError, onNotice }: { onError: (m: string) => void; onNotice: (m: string) => void }) {
+  const loader = useCallback(() => getMessageReports(), []);
+  const { items, reload } = useList<MessageReport>(loader, onError);
+  const paged = usePaged(items ?? [], PANEL_PAGE_SIZE);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function resolve(item: MessageReport, status: "RESOLVED" | "DISMISSED") {
+    setBusyId(item.id);
+    try {
+      await resolveMessageReport(item.id, status, (notes[item.id] ?? "").trim());
+      onNotice(status === "RESOLVED" ? "Скаргу позначено розглянутою" : "Скаргу відхилено");
+      await reload();
+    } catch (requestError) {
+      onError(describe(requestError));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <section className="form-block">
+      <div className="form-block-head"><div><h2>Скарги на повідомлення</h2><p className="form-hint">Нові скарги першими. Текст повідомлення збережено на момент скарги. Заблокувати користувача можна у вкладці «Заблоковані».</p></div></div>
+      {items === null && <p className="form-hint">Завантажуємо…</p>}
+      {items?.length === 0 && <p className="form-hint">Скарг поки немає.</p>}
+      <ul className="suggestion-list">
+        {paged.slice.map((item) => (
+          <li key={item.id}>
+            <div className="suggestion-head">
+              <strong>{item.reported_name ?? "Користувач"}</strong>
+              <span className={`status-chip status-${item.status.toLowerCase()}`}>{COMPLAINT_STATUS_LABELS[item.status]}</span>
+            </div>
+            <p className="form-hint">{MESSAGE_REPORT_REASON_LABELS[item.reason]} · від {item.reporter_name ?? "невідомо"} · {formatDateTime(item.created_at)}</p>
+            <p className="log-details report-snapshot">{item.body_snapshot}</p>
+            {item.details && <p className="form-hint">Коментар: {item.details}</p>}
             {item.status === "OPEN" ? (
               <>
                 <label><span>Примітка <small>необов'язково</small></span><input value={notes[item.id] ?? ""} maxLength={500} onChange={(event) => setNotes((current) => ({ ...current, [item.id]: event.target.value }))} /></label>

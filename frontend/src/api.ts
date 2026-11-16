@@ -4,6 +4,8 @@ import type {
   Complaint,
   ComplaintReason,
   ComplaintStatus,
+  MessageReport,
+  MessageReportReason,
   FeedbackMessage,
   FeedbackStatus,
   LogEntry,
@@ -304,6 +306,18 @@ export function getComplaints(status?: ComplaintStatus): Promise<Complaint[]> {
 
 export function resolveComplaint(complaintId: string, status: Exclude<ComplaintStatus, "OPEN">, note: string): Promise<Complaint> {
   return apiFetch<Complaint>(`/admin/complaints/${segment(complaintId)}/resolve`, { method: "POST", body: JSON.stringify({ status, note }) });
+}
+
+export function reportChatMessage(conversationId: string, messageId: string, reason: MessageReportReason, details: string): Promise<void> {
+  return apiFetch<void>(`/conversations/${segment(conversationId)}/messages/${segment(messageId)}/report`, { method: "POST", body: JSON.stringify({ reason, details }) });
+}
+
+export function getMessageReports(): Promise<MessageReport[]> {
+  return apiFetch<MessageReport[]>("/admin/message-reports");
+}
+
+export function resolveMessageReport(reportId: string, status: Exclude<ComplaintStatus, "OPEN">, note: string): Promise<MessageReport> {
+  return apiFetch<MessageReport>(`/admin/message-reports/${segment(reportId)}/resolve`, { method: "POST", body: JSON.stringify({ status, note }) });
 }
 
 export function submitFeedback(subject: string, message: string): Promise<FeedbackMessage> {

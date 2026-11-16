@@ -72,14 +72,25 @@
 /* Значок у шапці */
 .msg-button .badge { top: -7px; right: -7px; }
 
+.chat-sidebar h1 { display: flex; align-items: center; gap: 8px; }
+.chat-home-back { padding: 0 6px 0 0; }
+
+/* Телефон: чат на весь екран, як у месенджерах. Висота й зсув — з visualViewport
+   (змінні --vv-*), щоб екранна клавіатура піднімала поле вводу. */
 @media (max-width: 860px) {
-  .chat-page { padding: 18px 12px 24px; }
-  .chat-layout { grid-template-columns: 1fr; height: calc(100vh - 150px); min-height: 420px; }
+  html.chat-fullscreen, html.chat-fullscreen body { overflow: hidden; overscroll-behavior: none; }
+  .page-main.chat-page { position: fixed; z-index: 70; left: 0; right: 0; top: var(--vv-top, 0px); height: var(--vv-height, 100dvh); min-height: 0; max-width: none; margin: 0; padding: 0; background: #f4f7ff; }
+  .chat-layout { grid-template-columns: 1fr; height: 100%; min-height: 0; gap: 0; }
+  .chat-sidebar, .chat-main { border: 0; border-radius: 0; box-shadow: none; background: #fff; backdrop-filter: none; -webkit-backdrop-filter: none; }
   .chat-page.has-thread .chat-sidebar { display: none; }
   .chat-page:not(.has-thread) .chat-main { display: none; }
-  .chat-back { display: inline-block; }
-  .chat-messages { padding: 14px 12px; }
-  .chat-bubble { max-width: 90%; }
-  .chat-composer { padding: 10px 12px; }
+  .chat-back { display: inline-block; font-size: 26px; padding: 4px 10px 4px 0; }
+  .chat-thread-head { padding: 10px 14px; padding-top: max(10px, env(safe-area-inset-top)); }
+  .chat-sidebar h1 { padding-top: max(18px, env(safe-area-inset-top)); }
+  .chat-messages { padding: 12px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  .chat-bubble { max-width: 88%; }
+  .chat-composer { padding: 8px 10px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+  .chat-composer textarea { font-size: 16px; }
   .chat-composer .button { padding: 11px 16px; }
+  .chat-reply-bar { padding: 8px 12px; }
 }

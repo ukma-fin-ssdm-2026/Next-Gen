@@ -9,6 +9,7 @@ import {
   sendChatMessage,
   startConversation,
 } from "./api";
+import { MessageReportDialog } from "./SupportPanels";
 import type { ChatConversation, ChatListingCard, ChatMessage, CurrentUser } from "./types";
 import "./chat.css";
 
@@ -201,7 +202,7 @@ function ConversationList({ conversations, activeId, loading, hasMore, onMore }:
   );
 }
 
-function Thread({ conversation, onError }: { conversation: ChatConversation | null; onError: (message: string) => void }) {
+function Thread({ conversation, onError, onNotice }: { conversation: ChatConversation | null; onError: (message: string) => void; onNotice: (message: string) => void }) {
   const conversationId = conversation?.conversation_id ?? "";
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -318,7 +319,8 @@ function Thread({ conversation, onError }: { conversation: ChatConversation | nu
   // Shift+Enter додає рядок, який не видно: поле лишається однорядковим.
   const composer = useRef<HTMLTextAreaElement>(null);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
-  useEffect(() => setReplyTo(null), [conversationId]);
+  const [reporting, setReporting] = useState<ChatMessage | null>(null);
+  useEffect(() => { setReplyTo(null); setReporting(null); }, [conversationId]);
 
   function startReply(message: ChatMessage) {
     setReplyTo(message);
@@ -338,6 +340,18 @@ function Thread({ conversation, onError }: { conversation: ChatConversation | nu
     field.style.height = "auto";
     field.style.height = `${Math.min(field.scrollHeight, 140)}px`;
   }, [text]);
+
+  // Коли клавіатура змінює висоту екрана, лишаємо останні повідомлення на виду.
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const keepBottom = () => {
+      const node = scroller.current;
+      if (node && stickToBottom.current) node.scrollTop = node.scrollHeight;
+    };
+    viewport.addEventListener("resize", keepBottom);
+    return () => viewport.removeEventListener("resize", keepBottom);
+  }, []);
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); }
@@ -370,6 +384,7 @@ function Thread({ conversation, onError }: { conversation: ChatConversation | nu
                 <p>{message.body}</p>
                 <div className="chat-meta">
                   <button type="button" className="chat-reply-btn" onClick={() => startReply(message)} aria-label="Відповісти на повідомлення">Відповісти</button>
+                  {!message.is_own && <button type="button" className="chat-reply-btn" onClick={() => setReporting(message)} aria-label="Поскаржитись на повідомлення">Поскаржитись</button>}
                   <time dateTime={message.created_at}>{new Date(message.created_at).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</time>
                 </div>
               </div>
@@ -377,6 +392,15 @@ function Thread({ conversation, onError }: { conversation: ChatConversation | nu
           );
         })}
       </div>
+      {reporting && conversationId && (
+        <MessageReportDialog
+          conversationId={conversationId}
+          messageId={reporting.message_id}
+          onClose={() => setReporting(null)}
+          onDone={() => { setReporting(null); onNotice("Скаргу надіслано адміністраторам"); }}
+          onError={onError}
+        />
+      )}
       {replyTo && (
         <div className="chat-reply-bar">
           <div>
@@ -395,7 +419,46 @@ function Thread({ conversation, onError }: { conversation: ChatConversation | nu
 }
 
 /** Сторінка «Повідомлення»: список розмов і відкрита розмова, на вузьких екранах по черзі. */
-export function ChatPage({ onError }: { onError: (message: string) => void }) {
+/**
+ * На телефоні чат займає весь екран, як у месенджерах: сторінка не прокручується,
+ * а висота й зсув беруться з visualViewport, тож екранна клавіатура піднімає поле
+ * вводу (iOS Safari не зменшує layout viewport, коли з'являється клавіатура).
+ */
+function useChatFullscreen() {
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 860px)");
+    const root = document.documentElement;
+    const viewport = window.visualViewport;
+    const apply = () => {
+      if (!query.matches) {
+        root.classList.remove("chat-fullscreen");
+        root.style.removeProperty("--vv-height");
+        root.style.removeProperty("--vv-top");
+        return;
+      }
+      root.classList.add("chat-fullscreen");
+      if (viewport) {
+        root.style.setProperty("--vv-height", `${viewport.height}px`);
+        root.style.setProperty("--vv-top", `${viewport.offsetTop}px`);
+      }
+      window.scrollTo(0, 0);
+    };
+    apply();
+    viewport?.addEventListener("resize", apply);
+    viewport?.addEventListener("scroll", apply);
+    query.addEventListener("change", apply);
+    return () => {
+      viewport?.removeEventListener("resize", apply);
+      viewport?.removeEventListener("scroll", apply);
+      query.removeEventListener("change", apply);
+      root.classList.remove("chat-fullscreen");
+      root.style.removeProperty("--vv-height");
+      root.style.removeProperty("--vv-top");
+    };
+  }, []);
+}
+
+export function ChatPage({ onError, onNotice }: { onError: (message: string) => void; onNotice: (message: string) => void }) {
   const { conversationId } = useParams();
   const [items, setItems] = useState<ChatConversation[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -437,6 +500,7 @@ export function ChatPage({ onError }: { onError: (message: string) => void }) {
     } catch (requestError) { onError(errorText(requestError)); }
   }
 
+  useChatFullscreen();
   const active = items.find((item) => item.conversation_id === conversationId) ?? null;
 
   // Щойно створеної розмови ще може не бути в списку: оновлюємо його і лише потім кажемо «не знайдено».
@@ -450,7 +514,7 @@ export function ChatPage({ onError }: { onError: (message: string) => void }) {
     <main className={`page-main chat-page${conversationId ? " has-thread" : ""}`}>
       <div className="chat-layout">
         <aside className="chat-sidebar" aria-label="Розмови">
-          <h1>Повідомлення</h1>
+          <h1><Link className="chat-back chat-home-back" to="/" aria-label="На головну">←</Link>Повідомлення</h1>
           <ConversationList conversations={items} activeId={conversationId} loading={loading} hasMore={cursor !== null} onMore={() => void loadMore()} />
         </aside>
         <section className="chat-main">
@@ -459,7 +523,7 @@ export function ChatPage({ onError }: { onError: (message: string) => void }) {
           ) : conversationId && !active ? (
             <div className="chat-thread chat-thread-empty"><p>Завантажуємо…</p></div>
           ) : (
-            <Thread conversation={active} onError={onError} />
+            <Thread conversation={active} onError={onError} onNotice={onNotice} />
           )}
         </section>
       </div>
