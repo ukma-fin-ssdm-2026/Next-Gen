@@ -25,6 +25,7 @@ class ActivityType(str, Enum):
     FEEDBACK_SUBMITTED = "FEEDBACK_SUBMITTED"
     FEEDBACK_RESOLVED = "FEEDBACK_RESOLVED"
     PROFILE_UPDATED = "PROFILE_UPDATED"
+    CONVERSATION_STARTED = "CONVERSATION_STARTED"
 
 
 # Дії, які можуть виконувати лише адміністратори: вони потрапляють у журнал

@@ -148,3 +148,35 @@ class FeedbackNotFoundError(FeedbackError):
 
 class FeedbackConflictError(FeedbackError):
     """Звернення вже опрацьовано."""
+
+
+class ConversationError(Exception):
+    """Базова помилка чату між користувачами (ADR-005, FR-021, FR-022)."""
+
+
+class ConversationNotFoundError(ConversationError):
+    """Розмови немає або користувач не є її учасником.
+
+    Обидва випадки свідомо не розрізняються, щоб не розкривати існування
+    чужої розмови (SEC-003, захист від IDOR).
+    """
+
+
+class ConversationForbiddenError(ConversationError):
+    """Дію в чаті заборонено: розмова із собою або заблокований користувач."""
+
+
+class InvalidMessageError(ConversationError):
+    """Порожній, задовгий або з керівними символами текст повідомлення."""
+
+
+class InvalidChatCursorError(ConversationError):
+    """Пошкоджений курсор або `after` і `before` передано одночасно."""
+
+
+class ChatRateLimitError(ConversationError):
+    """Перевищено ліміт повідомлень за хвилину чи нових розмов за добу."""
+
+    def __init__(self, message: str, *, retry_after_seconds: int) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
