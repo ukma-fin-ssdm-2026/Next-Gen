@@ -22,10 +22,14 @@
 | FR-018   | Окремі журнали дій користувачів та адміністраторів  | React SPA, Activity Log Service, Moderation Service, Data Access Layer (ORM), ActivityEvent, ModerationAction | TP-033, TP-034 |
 | FR-019   | Власна оцінка й агрегат продавця | API Router, Seller Review Service, PostgreSQL, SellerReview, ActivityEvent, ListingDetailPublicResponse | TP-039, TP-040, TP-042, TP-043, TP-044 |
 | FR-020   | Модерація оцінок і статистика за автором | API Router, Auth Service, Seller Review Service, SellerReview, ActivityEvent | TP-041, TP-043 |
+| FR-021   | Початок розмови чату зі сторінки оголошення | API Router (`conversations`), Conversation Service, Activity Log Service, Data Access Layer (ORM), PostgreSQL (`Conversation`, `Message`, `ActivityEvent`) | TP-050, TP-051, TP-052, TP-053, TP-054, TP-055 |
+| FR-022   | Обмін повідомленнями, курсори, непрочитані та безпечна картка оголошення | API Router (`conversations`), Conversation Service, Data Access Layer (ORM), PostgreSQL (`Conversation`, `Message`, `Listing`) | TP-050, TP-051, TP-052, TP-053, TP-054, TP-055 |
 | PERF-001 | Час завантаження ≤300мс при 50 користувачах         | React SPA, API Router, Listing Service, Data Access Layer (ORM), PostgreSQL (Listing) | Навантажувальний тест |
+| PERF-002 | Своєчасність polling чату ≤10 с (опитування кожні 5 с; p95 ≤300 мс при 50 користувачах) | API Router (`conversations`), Conversation Service, Data Access Layer (ORM), PostgreSQL (`Message`) | TP-056 |
 | REL-001  | Відновлення без втрати даних, RTO ≤5хв              | Data Access Layer (ORM), PostgreSQL Database | Хаос-експеримент (збій сервера) |
 | SEC-001  | Лише tenant НаУКМА та @ukma.edu.ua | Microsoft Entra ID, Auth Service, User.tenant_id/entra_object_id/email | Негативні тести tenant, issuer, audience, expiry, state/nonce і domain |
 | SEC-002  | Приховування контактів від неавторизованих          | API Router, Listing Service, Auth Service, Data Access Layer (ORM), Listing.contact | Unit-тест доступу без токена |
+| SEC-003  | Конфіденційність розмов, захист від IDOR (`404` для неучасників) та відсутність контактів і `no-store` | API Router (`conversations`), Auth Service (`require_current_user`), Conversation Service, Data Access Layer (ORM) | TP-053, TP-055 |
 
 ## Сценарії атрибутів якості
 
@@ -39,6 +43,11 @@
 - Метод перевірки: хаос-експеримент на ланцюжку API Router → Listing Service → Data Access Layer (ORM) → PostgreSQL. Гіпотеза: після збою жодне створене оголошення не зникає.
 - Критерій успіху: після рестарту всі підтверджені оголошення є в БД, сервіс відновлюється за ≤ 5 хв.
 
+### QAS-PERF-002 — Своєчасність polling чату (PERF-002, FR-022)
+- Вимога: за опитування відкритої розмови кожні 5 с нове повідомлення доставляється співрозмовнику за ≤ 10 с, а конкурентне опитування 50 користувачами має серверну затримку `p95 ≤ 300 мс`.
+- Метод перевірки: інтеграційний тест polling і конкурентний ASGI-бенчмарк (`tests/test_conversations_api.py`, `TP-056`) на ланцюжку API Router (`conversations`) → Auth Service → Conversation Service → Repository.
+- Критерій успіху: 0% помилок, доставка на наступному 5-секундному циклі опитування (`≤ 10 с`), серверний `p95 ≤ 300 мс`, `Cache-Control: no-store`.
+
 ---
 > ### Нотатка «Використання ШІ»
 > - **Інструменти:** Claude, Gemini.
@@ -46,3 +55,4 @@
 > - **Що згенеровано:** Чорновий варіант прив'язок FR/NFR до компонентів на основі high-level-design.md, components.puml, deployment.puml та data-model.md; формулювання методів верифікації; чернетка двох сценаріїв атрибутів якості за довідником курсу (цифри з requirements.md).
 > - **Що перевірено / відкинуто вручну:** Прив'язки і сценарії перевірено і підтверджено мною; звірено назви компонентів з components.puml та deployment.puml; підтверджено з Architecture Lead, що PERF-001 стосується всього ланцюжка обробки запиту; Data Access Layer додано в усі рядки після зауваження викладача; сценарії звірено з довідником про сценарії атрибутів якості.
 > - **Доповнення (Артем Солодкий, 02.11.2026):** OpenAI Codex допоміг додати архітектурну простежуваність FR-016–FR-018 після проміжного оцінювання. Компоненти, сутності та тест-кейси вручну звірено з `requirements.md`, `rtm.md`, сервісами, SQLAlchemy-моделями й тест-планом.
+> - **Доповнення (Євгеній Остапенко, ADR-005 / чат API):** ШІ-асистент допоміг додати архітектурну простежуваність `FR-021`, `FR-022`, `PERF-002`, `SEC-003` та сценарій якості `QAS-PERF-002`. Звірено з `src/api/routers/conversations.py`, `tests/test_conversations.py` і `tests/test_conversations_api.py`.
