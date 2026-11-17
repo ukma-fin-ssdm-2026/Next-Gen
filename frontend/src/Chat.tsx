@@ -11,7 +11,7 @@ import {
   startConversation,
 } from "./api";
 import { MessageReportDialog } from "./SupportPanels";
-import type { ChatConversation, ChatListingCard, ChatMessage, CurrentUser } from "./types";
+import type { ChatConversation, ChatListingCard, ChatMessage, ChatPeerRead, CurrentUser } from "./types";
 import "./chat.css";
 
 const MESSAGE_MAX = 1000;
@@ -203,6 +203,24 @@ function ConversationList({ conversations, activeId, loading, hasMore, onMore }:
   );
 }
 
+type MessagePosition = { created_at: string; message_id: string };
+
+/** Порядок як на бекенді: `(created_at, message_id)`. */
+function comparePosition(a: MessagePosition, b: MessagePosition): number {
+  return Date.parse(a.created_at) - Date.parse(b.created_at)
+    || a.created_at.localeCompare(b.created_at)
+    || a.message_id.localeCompare(b.message_id);
+}
+
+function Receipt({ read }: { read: boolean }) {
+  // Статус видно не лише за кольором: одна галочка — надіслано, дві — прочитано.
+  return (
+    <span className={`chat-receipt${read ? " is-read" : ""}`} role="img" aria-label={read ? "Прочитано" : "Надіслано"} title={read ? "Прочитано" : "Надіслано"}>
+      {read ? "✓✓" : "✓"}
+    </span>
+  );
+}
+
 function Thread({ conversation, onError, onNotice }: { conversation: ChatConversation | null; onError: (message: string) => void; onNotice: (message: string) => void }) {
   const conversationId = conversation?.conversation_id ?? "";
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -211,6 +229,7 @@ function Thread({ conversation, onError, onNotice }: { conversation: ChatConvers
   const [hasOlder, setHasOlder] = useState(false);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [peerRead, setPeerRead] = useState<ChatPeerRead | null>(null);
   const afterCursor = useRef<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -233,12 +252,7 @@ function Thread({ conversation, onError, onNotice }: { conversation: ChatConvers
       const fresh = incoming.filter((item) => !known.has(item.message_id));
       if (!fresh.length) return current;
       // Порядок як на бекенді: (created_at, message_id), а не порядок надходження.
-      return [...current, ...fresh].sort(
-        (a, b) =>
-          Date.parse(a.created_at) - Date.parse(b.created_at)
-          || a.created_at.localeCompare(b.created_at)
-          || a.message_id.localeCompare(b.message_id),
-      );
+      return [...current, ...fresh].sort(comparePosition);
     });
   }, []);
 
@@ -246,7 +260,7 @@ function Thread({ conversation, onError, onNotice }: { conversation: ChatConvers
   useEffect(() => {
     if (!conversationId) return;
     let cancelled = false;
-    setMessages([]); setLoading(true); setBeforeCursor(null); setHasOlder(false); setText("");
+    setMessages([]); setLoading(true); setBeforeCursor(null); setHasOlder(false); setText(""); setPeerRead(null);
     afterCursor.current = null; readMarked.current = null; stickToBottom.current = true;
     getMessages(conversationId)
       .then((page) => {
@@ -255,6 +269,7 @@ function Thread({ conversation, onError, onNotice }: { conversation: ChatConvers
         setBeforeCursor(page.before_cursor);
         setHasOlder(page.has_more);
         afterCursor.current = page.after_cursor;
+        setPeerRead(page.peer_read ?? null);
         markDisplayedRead(page.after_cursor);
       })
       .catch((requestError) => { if (!cancelled) onError(errorText(requestError)); })
@@ -275,6 +290,7 @@ function Thread({ conversation, onError, onNotice }: { conversation: ChatConvers
         if (cancelled) return;
         if (page.after_cursor) afterCursor.current = page.after_cursor;
         if (page.items.length) merge(page.items);
+        if (page.peer_read) setPeerRead(page.peer_read);
         markDisplayedRead(page.after_cursor);
       } catch { /* наступне опитування повторить спробу */ }
       finally { running = false; }
@@ -431,6 +447,7 @@ function Thread({ conversation, onError, onNotice }: { conversation: ChatConvers
                 <div className="chat-meta">
                   <button type="button" className="chat-reply-btn" onClick={() => startReply(message)} aria-label="Відповісти на повідомлення">Відповісти</button>
                   <button type="button" className="chat-reply-btn chat-more-btn" aria-label="Дії з повідомленням" aria-haspopup="menu" onClick={(event) => { const box = event.currentTarget.getBoundingClientRect(); openMenu(message, box.right, box.bottom); }}>⋯</button>
+                  {message.is_own && <Receipt read={peerRead !== null && comparePosition(message, peerRead) <= 0} />}
                   <time dateTime={message.created_at}>{new Date(message.created_at).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</time>
                 </div>
               </div>

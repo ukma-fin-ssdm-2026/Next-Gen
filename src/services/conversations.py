@@ -130,6 +130,14 @@ class ConversationPage:
 
 
 @dataclass(frozen=True)
+class PeerRead:
+    """Позиція останнього повідомлення, яке прочитав співрозмовник."""
+
+    created_at: datetime
+    message_id: UUID
+
+
+@dataclass(frozen=True)
 class MessagePage:
     """Сторінка повідомлень за зростанням `(created_at, message_id)`.
 
@@ -143,6 +151,7 @@ class MessagePage:
     before_cursor: str | None
     after_cursor: str | None
     has_more: bool
+    peer_read: PeerRead | None = None
 
 
 @dataclass(frozen=True)
@@ -343,7 +352,7 @@ class ConversationService:
         _check_limit(limit, MESSAGES_PAGE_MAX)
         after_key = decode_cursor(after) if after is not None else None
         before_key = decode_cursor(before) if before is not None else None
-        self._require_participant(conversation_id, user_id)
+        conversation = self._require_participant(conversation_id, user_id)
         rows = self._conversations.list_messages(
             conversation_id, limit + 1, after=after_key, before=before_key
         )
@@ -355,11 +364,13 @@ class ConversationService:
             page = rows[-limit:]
             before_cursor = encode_cursor(page[0].key) if has_more else None
         after_cursor = encode_cursor(page[-1].key) if page else after
+        peer_marker = conversation.read_marker(conversation.other_participant(user_id))
         return MessagePage(
             items=[self._message_view(item, user_id) for item in page],
             before_cursor=before_cursor,
             after_cursor=after_cursor,
             has_more=has_more,
+            peer_read=PeerRead(*peer_marker) if peer_marker else None,
         )
 
     def unread_count(self, actor: CurrentUser | None) -> int:

@@ -971,6 +971,27 @@ def test_mark_read_clears_only_own_unread(chat) -> None:
     assert chat.service.unread_count(buyer) == 0
 
 
+def test_message_page_reports_peer_read_marker(chat) -> None:
+    """[TP-053] Сторінка повідомлень віддає, до якого місця прочитав співрозмовник."""
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "Hi")
+    sent = chat.service.send_message(buyer, started.conversation_id, "Ще тут?")
+
+    before = chat.service.list_messages(buyer, started.conversation_id)
+    assert before.peer_read is None
+
+    chat.service.mark_read(seller, started.conversation_id)
+    after = chat.service.list_messages(buyer, started.conversation_id)
+    assert after.peer_read is not None
+    assert after.peer_read.message_id == sent.message_id
+    # Власна позначка читача не видається як позначка співрозмовника.
+    assert chat.service.list_messages(seller, started.conversation_id).peer_read is None
+    polled = chat.service.list_messages(
+        buyer, started.conversation_id, after=after.after_cursor
+    )
+    assert polled.items == [] and polled.peer_read == after.peer_read
+
+
 def test_mark_read_through_cursor_keeps_newer_message_unread(chat) -> None:
     """[TP-053] Повідомлення після показаного курсора не губить unread-стан."""
     seller, buyer = chat.user("Продавець"), chat.user("Покупець")

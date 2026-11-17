@@ -159,6 +159,20 @@ class ConversationPageResponse(BaseModel):
     )
 
 
+class PeerReadResponse(BaseModel):
+    """Позиція, до якої співрозмовник прочитав розмову (для статусу «прочитано»)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    created_at: datetime = Field(
+        ..., description="Час останнього прочитаного співрозмовником повідомлення"
+    )
+    message_id: UUID = Field(
+        ...,
+        description="Ідентифікатор цього повідомлення (для порядку за рівного часу)",
+    )
+
+
 class MessagePageResponse(BaseModel):
     """Сторінка повідомлень розмови з курсорами гортання і polling."""
 
@@ -178,6 +192,13 @@ class MessagePageResponse(BaseModel):
     has_more: bool = Field(
         ...,
         description="True, якщо в напрямку запиту залишилися ще повідомлення",
+    )
+    peer_read: PeerReadResponse | None = Field(
+        default=None,
+        description=(
+            "Позначка прочитаного співрозмовником: власні повідомлення не новіші "
+            "за неї мають статус «прочитано». null, якщо він ще нічого не читав"
+        ),
     )
 
 

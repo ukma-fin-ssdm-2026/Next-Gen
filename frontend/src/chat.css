@@ -39,6 +39,8 @@
 .chat-bubble { max-width: min(520px, 82%); padding: 9px 13px 7px; border-radius: 18px; display: grid; gap: 4px; overflow-wrap: anywhere; }
 .chat-bubble p { margin: 0; white-space: pre-wrap; font-size: 14.5px; line-height: 1.45; }
 .chat-bubble time { font-size: 11px; opacity: 0.65; }
+.chat-receipt { font-size: 13px; letter-spacing: -2px; opacity: 0.6; user-select: none; }
+.chat-receipt.is-read { opacity: 1; font-weight: 700; }
 .chat-meta { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .chat-reply-btn { border: 0; background: none; padding: 0; font: inherit; font-size: 11.5px; font-weight: 700; color: inherit; opacity: 0; cursor: pointer; transition: opacity 0.15s; }
 .chat-bubble:hover .chat-reply-btn, .chat-reply-btn:focus-visible { opacity: 0.8; }

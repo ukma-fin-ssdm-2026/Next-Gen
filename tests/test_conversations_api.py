@@ -1373,3 +1373,35 @@ def test_message_report_flow_snapshot_duplicates_and_admin_resolution(
     )
     assert again.status_code == 409
     assert client.get(f"{API}/admin/message-reports?status=OPEN").json() == []
+
+
+def test_messages_expose_peer_read_marker_for_read_receipts(
+    client, chat_env: ChatEnv
+) -> None:
+    """[TP-055] Відправник бачить, до якого повідомлення прочитав співрозмовник."""
+    seller = chat_env.make_user(
+        display_name="Продавець",
+        email="seller.receipt@ukma.edu.ua",
+    )
+    buyer = chat_env.make_user(
+        display_name="Покупець",
+        email="buyer.receipt@ukma.edu.ua",
+    )
+    listing = chat_env.add_listing(seller)
+
+    chat_env.authenticate(client, buyer)
+    started = client.post(
+        f"{API}/listings/{listing.id}/conversation", json={"body": "Привіт"}
+    )
+    conversation_id = started.json()["conversation_id"]
+    url = f"{API}/conversations/{conversation_id}/messages"
+    first = client.get(url).json()
+    assert first["peer_read"] is None
+
+    chat_env.authenticate(client, seller)
+    assert client.post(f"{API}/conversations/{conversation_id}/read").status_code == 204
+
+    chat_env.authenticate(client, buyer)
+    after = client.get(url).json()
+    assert after["peer_read"]["message_id"] == after["items"][-1]["message_id"]
+    assert set(after["peer_read"]) == {"created_at", "message_id"}

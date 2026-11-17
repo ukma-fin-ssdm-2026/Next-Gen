@@ -5309,6 +5309,13 @@ components:
           type: boolean
           title: Has More
           description: True, якщо в напрямку запиту залишилися ще повідомлення
+        peer_read:
+          anyOf:
+          - $ref: '#/components/schemas/PeerReadResponse'
+          - type: 'null'
+          description: 'Позначка прочитаного співрозмовником: власні повідомлення
+            не новіші за неї мають статус «прочитано». null, якщо він ще нічого не
+            читав'
       type: object
       required:
       - items
@@ -5691,6 +5698,24 @@ components:
       - display_name
       title: ParticipantResponse
       description: Публічний профіль співрозмовника без email і контактів (SEC-002).
+    PeerReadResponse:
+      properties:
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Час останнього прочитаного співрозмовником повідомлення
+        message_id:
+          type: string
+          format: uuid
+          title: Message Id
+          description: Ідентифікатор цього повідомлення (для порядку за рівного часу)
+      type: object
+      required:
+      - created_at
+      - message_id
+      title: PeerReadResponse
+      description: Позиція, до якої співрозмовник прочитав розмову (для статусу «прочитано»).
     ProfileUpdate:
       properties:
         display_name:

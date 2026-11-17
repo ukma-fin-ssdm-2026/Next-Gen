@@ -268,11 +268,18 @@ export interface ChatConversationPage {
   next_cursor: string | null;
 }
 
+export interface ChatPeerRead {
+  created_at: string;
+  message_id: string;
+}
+
 export interface ChatMessagePage {
   items: ChatMessage[];
   before_cursor: string | null;
   after_cursor: string | null;
   has_more: boolean;
+  /** Позиція, до якої співрозмовник прочитав розмову; null, якщо ще нічого. */
+  peer_read?: ChatPeerRead | null;
 }
 
 export interface ChatStartResult {
