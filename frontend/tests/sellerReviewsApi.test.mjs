@@ -80,5 +80,8 @@ test("chat requests keep UUID path segments and opaque cursors encoded", async (
   assert.deepEqual(JSON.parse(calls[2].init.body), { body: "Привіт" });
   await sendChatMessage(SELLER, "Текст");
   assert.equal(calls[3].init.method, "POST");
+  await markConversationRead(SELLER, "a+b/c=");
+  assert.equal(calls[4].url.pathname, "/api/v1/conversations/3fa85f64-5717-4562-b3fc-2c963f66afa6/read");
+  assert.equal(calls[4].url.searchParams.get("through"), "a+b/c=");
   assert.throws(() => markConversationRead("../x"), /Некоректний ідентифікатор/);
 });

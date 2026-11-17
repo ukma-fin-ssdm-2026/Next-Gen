@@ -183,7 +183,6 @@ function reviewState(review: AdminSellerReview): { label: string; tone: string }
 }
 
 const ADMIN_FETCH_LIMIT = 100;
-const ADMIN_MAX_PAGES = 50;
 
 /** Вкладка «Оцінки» в адмін-панелі: усі оцінки, статистика авторів, приховати/відновити. */
 export function AdminReviewsPanel({ onError, onNotice }: { onError: (m: string) => void; onNotice: (m: string) => void }) {
@@ -199,7 +198,7 @@ export function AdminReviewsPanel({ onError, onNotice }: { onError: (m: string) 
     try {
       // Бекенд віддає по 100: добираємо сторінки, щоб пошук і фільтри бачили всі оцінки.
       const all: AdminSellerReview[] = [];
-      for (let page = 0; page < ADMIN_MAX_PAGES; page += 1) {
+      for (let page = 0; ; page += 1) {
         const chunk = await getAdminReviews(page * ADMIN_FETCH_LIMIT, ADMIN_FETCH_LIMIT);
         all.push(...chunk);
         if (chunk.length < ADMIN_FETCH_LIMIT) break;

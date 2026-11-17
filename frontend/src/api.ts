@@ -405,6 +405,7 @@ export function sendChatMessage(conversationId: string, body: string, replyToId?
   });
 }
 
-export function markConversationRead(conversationId: string): Promise<void> {
-  return apiFetch<void>(`/conversations/${segment(conversationId)}/read`, { method: "POST" });
+export function markConversationRead(conversationId: string, through?: string | null): Promise<void> {
+  const query = through ? `?through=${encodeURIComponent(through)}` : "";
+  return apiFetch<void>(`/conversations/${segment(conversationId)}/read${query}`, { method: "POST" });
 }

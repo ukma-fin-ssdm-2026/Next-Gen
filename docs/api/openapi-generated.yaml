@@ -1002,8 +1002,10 @@ paths:
       tags:
       - Conversations
       summary: Позначити розмову прочитаною
-      description: Пересуває позначку прочитаного для поточного учасника до останнього
-        повідомлення в розмові (FR-022); для не-учасника повертає 404 (SEC-003).
+      description: Пересуває позначку прочитаного для поточного учасника до повідомлення
+        з необов'язкового курсора `through`; без курсора — до останнього повідомлення
+        в розмові (FR-022). Новіші, ще не показані повідомлення лишаються непрочитаними;
+        для не-учасника повертає 404 (SEC-003).
       operationId: mark_conversation_read_api_v1_conversations__conversation_id__read_post
       parameters:
       - name: conversation_id
@@ -1013,6 +1015,14 @@ paths:
           type: string
           format: uuid
           title: Conversation Id
+      - name: through
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Through
       - name: baraholka_session
         in: cookie
         required: false

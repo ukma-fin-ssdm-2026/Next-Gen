@@ -216,6 +216,17 @@ function Thread({ conversation, onError, onNotice }: { conversation: ChatConvers
   const stickToBottom = useRef(true);
   const readMarked = useRef<string | null>(null);
 
+  const markDisplayedRead = useCallback((cursor: string | null) => {
+    if (!conversationId || !cursor || readMarked.current === cursor) return;
+    readMarked.current = cursor;
+    markConversationRead(conversationId, cursor)
+      .then(notifyChatChanged)
+      .catch(() => {
+        // Наступне polling повторить підтвердження після тимчасової помилки.
+        if (readMarked.current === cursor) readMarked.current = null;
+      });
+  }, [conversationId]);
+
   const merge = useCallback((incoming: ChatMessage[]) => {
     setMessages((current) => {
       const known = new Set(current.map((item) => item.message_id));
@@ -244,11 +255,12 @@ function Thread({ conversation, onError, onNotice }: { conversation: ChatConvers
         setBeforeCursor(page.before_cursor);
         setHasOlder(page.has_more);
         afterCursor.current = page.after_cursor;
+        markDisplayedRead(page.after_cursor);
       })
       .catch((requestError) => { if (!cancelled) onError(errorText(requestError)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [conversationId, onError]);
+  }, [conversationId, markDisplayedRead, onError]);
 
   // Опитування нових повідомлень кожні 5 с, поки вкладка видима.
   useEffect(() => {
@@ -263,21 +275,14 @@ function Thread({ conversation, onError, onNotice }: { conversation: ChatConvers
         if (cancelled) return;
         if (page.after_cursor) afterCursor.current = page.after_cursor;
         if (page.items.length) merge(page.items);
+        markDisplayedRead(page.after_cursor);
       } catch { /* наступне опитування повторить спробу */ }
       finally { running = false; }
     };
     const timer = window.setInterval(() => void poll(), THREAD_POLL_MS);
     document.addEventListener("visibilitychange", poll);
     return () => { cancelled = true; window.clearInterval(timer); document.removeEventListener("visibilitychange", poll); };
-  }, [conversationId, merge]);
-
-  // Позначаємо прочитаним, коли в розмові з'являється вхідне повідомлення.
-  const lastIncomingId = [...messages].reverse().find((item) => !item.is_own)?.message_id ?? null;
-  useEffect(() => {
-    if (!conversationId || !lastIncomingId || readMarked.current === lastIncomingId) return;
-    readMarked.current = lastIncomingId;
-    markConversationRead(conversationId).then(notifyChatChanged).catch(() => undefined);
-  }, [conversationId, lastIncomingId]);
+  }, [conversationId, markDisplayedRead, merge]);
 
   // Прокручуємо донизу, якщо користувач і так біля кінця.
   useLayoutEffect(() => {
@@ -537,8 +542,6 @@ function useChatFullscreen() {
   }, []);
 }
 
-const MAX_LOOKUP_PAGES = 20;
-
 export function ChatPage({ onError, onNotice }: { onError: (message: string) => void; onNotice: (message: string) => void }) {
   const { conversationId } = useParams();
   const [items, setItems] = useState<ChatConversation[]>([]);
@@ -594,7 +597,7 @@ export function ChatPage({ onError, onNotice }: { onError: (message: string) => 
         let all = [...page.items];
         let next = page.next_cursor;
         let extra = false;
-        for (let step = 0; step < MAX_LOOKUP_PAGES && next && !all.some((item) => item.conversation_id === conversationId); step += 1) {
+        while (next && !all.some((item) => item.conversation_id === conversationId)) {
           page = await getConversations(next);
           extra = true;
           all = [...all, ...page.items];

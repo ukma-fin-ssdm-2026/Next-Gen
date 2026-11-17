@@ -971,6 +971,22 @@ def test_mark_read_clears_only_own_unread(chat) -> None:
     assert chat.service.unread_count(buyer) == 0
 
 
+def test_mark_read_through_cursor_keeps_newer_message_unread(chat) -> None:
+    """[TP-053] Повідомлення після показаного курсора не губить unread-стан."""
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "m0")
+    shown = chat.service.list_messages(seller, started.conversation_id).after_cursor
+    assert shown is not None
+
+    chat.clock.advance(seconds=1)
+    chat.service.send_message(buyer, started.conversation_id, "m1")
+    assert chat.service.unread_count(seller) == 2
+
+    chat.service.mark_read(seller, started.conversation_id, through=shown)
+
+    assert chat.service.unread_count(seller) == 1
+
+
 # ---------------------------------------------------------------------------
 # Ліміти (ADR-005, розділ 2.5)
 # ---------------------------------------------------------------------------

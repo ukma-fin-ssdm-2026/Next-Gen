@@ -722,6 +722,57 @@ def test_unread_count_changes_after_read_and_cache_control(
     assert client.get(f"{API}/conversations/unread-count").json() == {"unread_count": 1}
 
 
+def test_read_through_cursor_does_not_acknowledge_message_received_later(
+    client, chat_env: ChatEnv
+) -> None:
+    """[TP-055] `/read` не підтверджує повідомлення новіше за показаний курсор."""
+    seller = chat_env.make_user(
+        display_name="Продавець",
+        email="seller.cursor@ukma.edu.ua",
+    )
+    buyer = chat_env.make_user(
+        display_name="Покупець",
+        email="buyer.cursor@ukma.edu.ua",
+    )
+    listing = chat_env.add_listing(seller)
+
+    chat_env.authenticate(client, buyer)
+    started = client.post(
+        f"{API}/listings/{listing.id}/conversation", json={"body": "m0"}
+    )
+    conversation_id = started.json()["conversation_id"]
+
+    chat_env.authenticate(client, seller)
+    shown = client.get(f"{API}/conversations/{conversation_id}/messages").json()
+    shown_cursor = shown["after_cursor"]
+
+    chat_env.authenticate(client, buyer)
+    chat_env.advance(seconds=1)
+    assert (
+        client.post(
+            f"{API}/conversations/{conversation_id}/messages", json={"body": "m1"}
+        ).status_code
+        == 201
+    )
+
+    chat_env.authenticate(client, seller)
+    invalid = client.post(
+        f"{API}/conversations/{conversation_id}/read",
+        params={"through": "%%%"},
+    )
+    assert invalid.status_code == 422
+    assert invalid.headers["cache-control"] == "no-store"
+    assert client.get(f"{API}/conversations/unread-count").json() == {"unread_count": 2}
+
+    read = client.post(
+        f"{API}/conversations/{conversation_id}/read",
+        params={"through": shown_cursor},
+    )
+    assert read.status_code == 204
+    assert read.headers["cache-control"] == "no-store"
+    assert client.get(f"{API}/conversations/unread-count").json() == {"unread_count": 1}
+
+
 def test_cursors_pagination_boundaries_invalid_cursors_and_equal_timestamps(
     client, chat_env: ChatEnv
 ) -> None:

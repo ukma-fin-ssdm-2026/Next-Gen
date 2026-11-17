@@ -293,8 +293,10 @@ def send_conversation_message(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Позначити розмову прочитаною",
     description=(
-        "Пересуває позначку прочитаного для поточного учасника до останнього "
-        "повідомлення в розмові (FR-022); для не-учасника повертає 404 (SEC-003)."
+        "Пересуває позначку прочитаного для поточного учасника до повідомлення "
+        "з необов'язкового курсора `through`; без курсора — до останнього "
+        "повідомлення в розмові (FR-022). Новіші, ще не показані повідомлення "
+        "лишаються непрочитаними; для не-учасника повертає 404 (SEC-003)."
     ),
     responses={
         401: UNAUTHENTICATED,
@@ -307,6 +309,7 @@ def mark_conversation_read(
     conversation_id: UUID,
     actor: Actor,
     service: Service,
+    through: Annotated[str | None, Query()] = None,
 ) -> None:
-    with _chat_errors():
-        service.mark_read(actor, conversation_id)
+    with _chat_errors(cursor_field="through"):
+        service.mark_read(actor, conversation_id, through=through)

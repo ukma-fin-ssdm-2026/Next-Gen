@@ -250,11 +250,26 @@ class ConversationService:
             )
         return self._message_view(message, user_id)
 
-    def mark_read(self, actor: CurrentUser | None, conversation_id: UUID) -> None:
-        """Позначає прочитаною всю розмову до останнього повідомлення."""
+    def mark_read(
+        self,
+        actor: CurrentUser | None,
+        conversation_id: UUID,
+        through: str | None = None,
+    ) -> None:
+        """Пересуває позначку до показаного повідомлення або до останнього.
+
+        Курсор не дає повідомленню, що надійшло між читанням сторінки та цим
+        викликом, стати прочитаним ще до того, як клієнт його отримає.
+        """
         user_id = self._require_actor(actor)
         self._require_participant(conversation_id, user_id)
-        last = self._conversations.last_message(conversation_id)
+        if through is None:
+            last = self._conversations.last_message(conversation_id)
+        else:
+            key = decode_cursor(through)
+            last = self._conversations.get_message(conversation_id, key[1])
+            if last is None or last.key != key:
+                raise InvalidChatCursorError("Некоректний курсор прочитання")
         if last is not None:
             self._conversations.mark_read(conversation_id, user_id, last.key)
 
