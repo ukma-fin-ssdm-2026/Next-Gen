@@ -1571,9 +1571,9 @@ def test_postgres_seller_review_api_persists_across_requests(
         assert (first.status_code, second.status_code) == (201, 200)
         assert first.json()["review_id"] == second.json()["review_id"]
         assert client.get(f"{path}/rating").json() == {
-            "average": None,
+            "average": 2.0,
             "count": 1,
-            "distribution": None,
+            "distribution": {"1": 0, "2": 1, "3": 0, "4": 0, "5": 0},
         }
         assert client.delete(f"{path}/review").status_code == 204
         assert client.get(f"{path}/rating").json()["count"] == 0

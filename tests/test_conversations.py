@@ -117,14 +117,13 @@ def test_message_body_accepts_valid_text(raw: str, expected: str) -> None:
         "",
         "   ",
         "я" * (MESSAGE_BODY_MAX_LENGTH + 1),
-        "рядок\nще рядок",
         "таб\tтут",
         "нуль\x00байт",
         "del\x7f",
         "підміна " + RIGHT_TO_LEFT_OVERRIDE + "тексту",
         None,
     ],
-    ids=["empty", "spaces", "too-long", "newline", "tab", "nul", "del", "bidi", "none"],
+    ids=["empty", "spaces", "too-long", "tab", "nul", "del", "bidi", "none"],
 )
 def test_message_body_rejects_invalid_text(raw) -> None:
     """[TP-050]
@@ -133,6 +132,12 @@ def test_message_body_rejects_invalid_text(raw) -> None:
     """
     with pytest.raises(InvalidMessageError):
         normalize_message_body(raw)
+
+
+def test_message_body_keeps_line_breaks() -> None:
+    """[TP-050] Перенос рядка дозволений: CRLF зводиться до LF, 3+ переноси до двох."""
+    assert normalize_message_body("  рядок\r\nщe рядок  ") == "рядок\nщe рядок"
+    assert normalize_message_body("а\n\n\n\n\nб") == "а\n\nб"
 
 
 def test_message_entity_normalizes_body_and_rejects_invalid() -> None:
@@ -774,6 +779,50 @@ def test_attached_listing_must_be_active_and_belong_to_participant(chat) -> None
     assert len(chat.service.list_messages(buyer, conversation_id).items) == 2
 
 
+def test_reply_quotes_message_of_same_conversation(chat) -> None:
+    """[TP-053] Відповідь цитує повідомлення своєї розмови; чужі й вигадані id — 422."""
+    seller, buyer, stranger = (
+        chat.user("Продавець"),
+        chat.user("Покупець"),
+        chat.user("Сторонній"),
+    )
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "Привіт")
+    other = chat.service.start_from_listing(
+        stranger, chat.listing(seller, "Інше").id, "Секрет"
+    )
+    first_id = started.message.message_id
+
+    chat.clock.advance(seconds=1)
+    reply = chat.service.send_message(
+        seller, started.conversation_id, "Так", reply_to_id=first_id
+    )
+    assert reply.reply_to.message_id == first_id
+    assert reply.reply_to.body == "Привіт"
+    assert reply.reply_to.is_own is False
+
+    for bad in (other.message.message_id, uuid4()):
+        with pytest.raises(InvalidMessageError):
+            chat.service.send_message(
+                seller, started.conversation_id, "Ні", reply_to_id=bad
+            )
+
+    items = chat.service.list_messages(buyer, started.conversation_id).items
+    assert items[0].reply_to is None
+    assert items[1].reply_to.is_own is True
+
+
+def test_reply_preview_is_truncated(chat) -> None:
+    """[TP-053] Довга цитата скорочується до 140 символів з «…»."""
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "я" * 500)
+    chat.clock.advance(seconds=1)
+    reply = chat.service.send_message(
+        seller, started.conversation_id, "ok", reply_to_id=started.message.message_id
+    )
+    assert len(reply.reply_to.body) == 140
+    assert reply.reply_to.body.endswith("…")
+
+
 def test_card_of_withdrawn_or_deleted_listing_shows_only_state(chat) -> None:
     """[TP-053]
     Після зняття чи видалення оголошення картка має лише available=False:
@@ -920,6 +969,43 @@ def test_mark_read_clears_only_own_unread(chat) -> None:
     assert chat.service.unread_count(buyer) == 1
     chat.service.mark_read(buyer, started.conversation_id)
     assert chat.service.unread_count(buyer) == 0
+
+
+def test_message_page_reports_peer_read_marker(chat) -> None:
+    """[TP-053] Сторінка повідомлень віддає, до якого місця прочитав співрозмовник."""
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "Hi")
+    sent = chat.service.send_message(buyer, started.conversation_id, "Ще тут?")
+
+    before = chat.service.list_messages(buyer, started.conversation_id)
+    assert before.peer_read is None
+
+    chat.service.mark_read(seller, started.conversation_id)
+    after = chat.service.list_messages(buyer, started.conversation_id)
+    assert after.peer_read is not None
+    assert after.peer_read.message_id == sent.message_id
+    # Власна позначка читача не видається як позначка співрозмовника.
+    assert chat.service.list_messages(seller, started.conversation_id).peer_read is None
+    polled = chat.service.list_messages(
+        buyer, started.conversation_id, after=after.after_cursor
+    )
+    assert polled.items == [] and polled.peer_read == after.peer_read
+
+
+def test_mark_read_through_cursor_keeps_newer_message_unread(chat) -> None:
+    """[TP-053] Повідомлення після показаного курсора не губить unread-стан."""
+    seller, buyer = chat.user("Продавець"), chat.user("Покупець")
+    started = chat.service.start_from_listing(buyer, chat.listing(seller).id, "m0")
+    shown = chat.service.list_messages(seller, started.conversation_id).after_cursor
+    assert shown is not None
+
+    chat.clock.advance(seconds=1)
+    chat.service.send_message(buyer, started.conversation_id, "m1")
+    assert chat.service.unread_count(seller) == 2
+
+    chat.service.mark_read(seller, started.conversation_id, through=shown)
+
+    assert chat.service.unread_count(seller) == 1
 
 
 # ---------------------------------------------------------------------------

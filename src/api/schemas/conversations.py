@@ -41,6 +41,13 @@ class SendMessageRequest(BaseModel):
             "розмови"
         ),
     )
+    reply_to_id: UUID | None = Field(
+        default=None,
+        description=(
+            "Необов'язковий ідентифікатор повідомлення цієї ж розмови, на яке "
+            "це повідомлення є відповіддю"
+        ),
+    )
 
 
 class ListingCardResponse(BaseModel):
@@ -72,6 +79,21 @@ class ListingCardResponse(BaseModel):
     )
 
 
+class ReplyPreviewResponse(BaseModel):
+    """Цитата повідомлення, на яке відповідають (скорочений текст, без контактів)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    message_id: UUID = Field(
+        ..., description="Ідентифікатор оригінального повідомлення"
+    )
+    sender_id: UUID = Field(..., description="Публічний ідентифікатор відправника")
+    is_own: bool = Field(
+        ..., description="True, якщо оригінал надіслав поточний користувач"
+    )
+    body: str = Field(..., description="Початок тексту оригіналу (до 140 символів)")
+
+
 class MessageResponse(BaseModel):
     """Одне повідомлення розмови без контактних даних користувачів."""
 
@@ -88,6 +110,10 @@ class MessageResponse(BaseModel):
     listing: ListingCardResponse | None = Field(
         default=None,
         description="Прикріплена картка оголошення або null",
+    )
+    reply_to: ReplyPreviewResponse | None = Field(
+        default=None,
+        description="Цитата повідомлення, на яке відповідають, або null",
     )
 
 
@@ -133,6 +159,20 @@ class ConversationPageResponse(BaseModel):
     )
 
 
+class PeerReadResponse(BaseModel):
+    """Позиція, до якої співрозмовник прочитав розмову (для статусу «прочитано»)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    created_at: datetime = Field(
+        ..., description="Час останнього прочитаного співрозмовником повідомлення"
+    )
+    message_id: UUID = Field(
+        ...,
+        description="Ідентифікатор цього повідомлення (для порядку за рівного часу)",
+    )
+
+
 class MessagePageResponse(BaseModel):
     """Сторінка повідомлень розмови з курсорами гортання і polling."""
 
@@ -152,6 +192,13 @@ class MessagePageResponse(BaseModel):
     has_more: bool = Field(
         ...,
         description="True, якщо в напрямку запиту залишилися ще повідомлення",
+    )
+    peer_read: PeerReadResponse | None = Field(
+        default=None,
+        description=(
+            "Позначка прочитаного співрозмовником: власні повідомлення не новіші "
+            "за неї мають статус «прочитано». null, якщо він ще нічого не читав"
+        ),
     )
 
 

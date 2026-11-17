@@ -204,8 +204,6 @@ def login(
     summary="Завершити Microsoft Entra ID callback",
     status_code=status.HTTP_303_SEE_OTHER,
     responses={
-        400: {"model": ErrorResponse, "description": "Invalid OIDC state"},
-        401: {"model": ErrorResponse, "description": "Microsoft sign-in rejected"},
         403: {"model": ErrorResponse, "description": "Local user is blocked"},
         503: {"model": ErrorResponse, "description": "Entra ID not configured"},
     },
@@ -222,27 +220,20 @@ def callback(
     service: AuthService = Depends(get_auth_service),
 ) -> RedirectResponse:
     if state is None or oidc_state is None or state != oidc_state:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Невалідний OIDC state",
-        )
+        return _auth_error_redirect(settings, "expired")
     flow = flows.pop(state)
     if flow is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="OIDC flow не знайдено або він завершився",
-        )
+        return _auth_error_redirect(settings, "expired")
 
     return_to = _safe_return_path(flow.pop("return_to", None))
 
     try:
         claims = oidc.complete(flow, dict(request.query_params))
         current_user = service.authenticate_verified_claims(claims)
-    except (EntraOidcError, InvalidIdentityError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(exc),
-        ) from exc
+    except InvalidIdentityError:
+        return _auth_error_redirect(settings, "identity")
+    except EntraOidcError:
+        return _auth_error_redirect(settings, "failed")
     except BlockedUserError as exc:
         # Замість сирого JSON 403 показуємо сторінку з причиною блокування:
         # квиток дає доступ лише до /auth/blocked-status, не до сесії.
@@ -278,6 +269,19 @@ def callback(
         samesite="lax",
         path="/",
     )
+    return response
+
+
+def _auth_error_redirect(settings: EntraSettings, code: str) -> RedirectResponse:
+    """Невдалий вхід веде на сайт із кодом помилки, а не на сирий JSON.
+
+    Сесію не створюємо; у URL потрапляє лише фіксований код, не текст помилки.
+    """
+    response = RedirectResponse(
+        _frontend_destination(settings, f"/?auth_error={code}"),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+    response.delete_cookie(OIDC_STATE_COOKIE_NAME, path="/api/v1/auth")
     return response
 
 

@@ -51,6 +51,9 @@ class ConversationRepository(Protocol):
     def last_message(self, conversation_id: UUID) -> Message | None:
         """Найновіше повідомлення розмови за `(created_at, message_id)`."""
 
+    def get_message(self, conversation_id: UUID, message_id: UUID) -> Message | None:
+        """Повідомлення за id, лише якщо воно належить цій розмові."""
+
     def list_for_user(
         self, user_id: UUID, limit: int, before: MessageKey | None = None
     ) -> list[Conversation]:
@@ -149,6 +152,12 @@ class InMemoryConversationRepository:
     def last_message(self, conversation_id: UUID) -> Message | None:
         items = self._messages.get(conversation_id) or []
         return items[-1] if items else None
+
+    def get_message(self, conversation_id: UUID, message_id: UUID) -> Message | None:
+        for item in self._messages.get(conversation_id) or []:
+            if item.message_id == message_id:
+                return item
+        return None
 
     def list_for_user(
         self, user_id: UUID, limit: int, before: MessageKey | None = None
