@@ -37,6 +37,25 @@ DEFAULT_OUTPUT = REPO_ROOT / "docs" / "ci-cd" / "dora-metrics-auto.md"
 TRACKED_WORKFLOWS = ("CI", "Deploy API docs")
 GITHUB_API_TIMEOUT_SECONDS = 20
 
+# Незалежний базовий рівень ручного аналізу з docs/ci-cd/dora-summary.md (Етап 2)
+MANUAL_BASELINE: dict[str, Any] = {
+    "period_days": 15,
+    "total_units": 60,
+    "success_deployments": 48,
+    "failure_units": 8,
+    "cancelled_units": 4,
+    "deployment_freq_per_day": 3.2,
+    "deployment_freq_per_week": 22.4,
+    "lead_time_median_s": 1463,  # 24 хв 23 с
+    "lead_time_mean_s": 8727,  # 2 год 25 хв 27 с
+    "lead_time_p75_s": 3993,  # 1 год 6 хв 33 с
+    "cfr_no_cancelled_pct": 14.3,
+    "cfr_with_cancelled_pct": 20.0,
+    "per_failure_median_s": 21767,  # 6 год 2 хв 47 с
+    "per_failure_mean_s": 23038,  # 6 год 23 хв 58 с
+    "incident_episode_s": 56313,  # 15 год 38 хв 33 с
+}
+
 
 @dataclass(frozen=True)
 class DeliveryUnit:
@@ -522,6 +541,114 @@ def render_markdown(metrics: dict[str, Any]) -> str:
         else "**не спостерігалося** (0 із 0)"
     )
 
+    # Динамічне порівняння з незалежним базовим звітом dora-summary.md (Етап 2)
+    freq_matches = (
+        abs(s["deployment_freq_per_day"] - MANUAL_BASELINE["deployment_freq_per_day"])
+        < 0.05
+        and c["success"] == MANUAL_BASELINE["success_deployments"]
+    )
+    if freq_matches:
+        freq_comparison = (
+            f"Повний збіг для **{c['success']} зелених** розгортань "
+            f"(зріз усіх {c['total']} злитих одиниць: "
+            f"`{m2['deployment_freq_per_day']:.1f} / день`, "
+            f"`{m2['deployment_freq_per_week']:.1f} / тиждень`)."
+        )
+    else:
+        freq_comparison = (
+            f"Розбіжність: {s['deployment_freq_per_day']:.1f} vs "
+            f"{MANUAL_BASELINE['deployment_freq_per_day']:.1f} / день "
+            f"({c['success']} зелених розгортань у поточній вибірці проти "
+            f"{MANUAL_BASELINE['success_deployments']} у базовому звіті за "
+            f"{metrics['period_days']} днів; зріз усіх {c['total']} одиниць: "
+            f"`{m2['deployment_freq_per_day']:.1f} / день`)."
+        )
+
+    lead_time_matches = (
+        abs(s["lead_time_median_s"] - 1462) <= 1
+        and abs(s["lead_time_mean_s"] - MANUAL_BASELINE["lead_time_mean_s"]) <= 1
+        and abs(s["lead_time_p75_s"] - MANUAL_BASELINE["lead_time_p75_s"]) <= 1
+    )
+    if lead_time_matches:
+        lead_time_comparison = (
+            "Різниця `1 с` на медіані через округлення парної вибірки "
+            "`(1228 + 1697) / 2 = 1462.5 с`: `24 хв 23 с` угору проти "
+            "банківського `round()` у Python (`24 хв 22 с`); середнє й P75 "
+            f"збігаються, а для всіх {c['total']} одиниць медіана "
+            f"`{_format_duration(m2['lead_time_median_s'])}`."
+        )
+    else:
+        lead_time_comparison = (
+            f"Розбіжність: медіана {_format_duration(s['lead_time_median_s'])} vs "
+            f"{_format_duration(MANUAL_BASELINE['lead_time_median_s'])}, середнє "
+            f"{_format_duration(s['lead_time_mean_s'])} vs "
+            f"{_format_duration(MANUAL_BASELINE['lead_time_mean_s'])} "
+            f"({c['success']} зелених розгортань у вибірці; для всіх {c['total']} "
+            f"одиниць медіана `{_format_duration(m2['lead_time_median_s'])}`)."
+        )
+
+    cfr_matches = (
+        abs(s["cfr_no_cancelled_pct"] - MANUAL_BASELINE["cfr_no_cancelled_pct"]) < 0.05
+        and c["failure"] == MANUAL_BASELINE["failure_units"]
+        and c["success"] == MANUAL_BASELINE["success_deployments"]
+    )
+    if cfr_matches:
+        cfr_comparison = (
+            f"Формула `{c['failure']} / ({c['success']} + {c['failure']})` "
+            f"і консервативна `({c['failure']} + {c['cancelled']}) / {c['total']}` "
+            "збігаються."
+        )
+    else:
+        cfr_comparison = (
+            f"Розбіжність: {s['cfr_no_cancelled_pct']:.1f}% vs "
+            f"{MANUAL_BASELINE['cfr_no_cancelled_pct']:.1f}% (поточна вибірка містить "
+            f"{c['failure']} ❌, {c['success']} ✅, {c['cancelled']} ⚠️; "
+            f"базовий звіт: {MANUAL_BASELINE['failure_units']} ❌, "
+            f"{MANUAL_BASELINE['success_deployments']} ✅)."
+        )
+
+    recovery_matches = (
+        abs(s["per_failure_median_s"] - MANUAL_BASELINE["per_failure_median_s"]) <= 1
+        and abs(s["per_failure_mean_s"] - MANUAL_BASELINE["per_failure_mean_s"]) <= 1
+        and bool(s["incident_recoveries_s"])
+        and s["incident_recoveries_s"][0] == MANUAL_BASELINE["incident_episode_s"]
+    )
+    if recovery_matches:
+        recovery_comparison = (
+            "Обидва показники збігаються до секунди: усі 8 падінь відбулися в одній "
+            "серії `Deploy API docs` 30 жовтня перед відновленням у PR #231 "
+            "(`15:41:20 UTC`)."
+        )
+    elif c["failure"] == 0:
+        recovery_comparison = (
+            "Розбіжність: у поточній вибірці збоїв не зафіксовано, тоді як "
+            "базовий звіт містить 8 збоїв із медіаною "
+            f"{_format_duration(MANUAL_BASELINE['per_failure_median_s'])}."
+        )
+    else:
+        recovery_comparison = (
+            f"Розбіжність: медіана {rec_per_fail} vs "
+            f"{_format_duration(MANUAL_BASELINE['per_failure_median_s'])}, середнє "
+            f"{rec_per_fail_mean} vs "
+            f"{_format_duration(MANUAL_BASELINE['per_failure_mean_s'])} "
+            f"({c['failure']} ❌ у вибірці)."
+        )
+
+    status_success_rate = (
+        "Нижче орієнтира через серію падінь `Deploy API docs` 30.10"
+        if c["total"] and (c["success"] / c["total"]) < 0.90
+        else "У межах орієнтира"
+    )
+    status_recovery = (
+        "Перевищено (тривалий повторний збій без блокування злиття)"
+        if s["incident_recoveries_s"] and max(s["incident_recoveries_s"]) > 3600
+        else (
+            "У межах орієнтира"
+            if s["incident_recoveries_s"]
+            else "Збоїв не спостерігалося (main залишався зеленим)"
+        )
+    )
+
     lines = [
         "# Автоматичний звіт DORA-метрик CI/CD (Бонус 1)",
         "",
@@ -552,50 +679,43 @@ def render_markdown(metrics: dict[str, Any]) -> str:
             f"| Частота розгортань | "
             f"**{s['deployment_freq_per_day']:.1f} / день** "
             f"({s['deployment_freq_per_week']:.1f} / тиждень) | "
-            f"**{s['deployment_freq_per_day']:.1f} / день** "
-            f"({s['deployment_freq_per_week']:.1f} / тиждень) | "
-            f"Повний збіг для **{c['success']} зелених** розгортань "
-            f"(зріз усіх {c['total']} злитих одиниць: "
-            f"`{m2['deployment_freq_per_day']:.1f} / день`, "
-            f"`{m2['deployment_freq_per_week']:.1f} / тиждень`). |"
+            f"**{MANUAL_BASELINE['deployment_freq_per_day']:.1f} / день** "
+            f"({MANUAL_BASELINE['deployment_freq_per_week']:.1f} / тиждень) | "
+            f"{freq_comparison} |"
         ),
         (
             f"| Час виконання змін | "
             f"медіана **{_format_duration(s['lead_time_median_s'])}**, "
             f"середнє **{_format_duration(s['lead_time_mean_s'])}**, "
             f"P75 **{_format_duration(s['lead_time_p75_s'])}** | "
-            "медіана **24 хв 23 с**, середнє **2 год 25 хв 27 с**, "
-            "P75 **1 год 6 хв 33 с** | "
-            "Різниця `1 с` на медіані через округлення парної вибірки "
-            "`(1228 + 1697) / 2 = 1462.5 с`: `24 хв 23 с` угору проти "
-            "банківського `round()` у Python (`24 хв 22 с`); середнє й P75 "
-            f"збігаються, а для всіх {c['total']} одиниць медіана "
-            f"`{_format_duration(m2['lead_time_median_s'])}`. |"
+            f"медіана **{_format_duration(MANUAL_BASELINE['lead_time_median_s'])}**, "
+            f"середнє **{_format_duration(MANUAL_BASELINE['lead_time_mean_s'])}**, "
+            f"P75 **{_format_duration(MANUAL_BASELINE['lead_time_p75_s'])}** | "
+            f"{lead_time_comparison} |"
         ),
         (
             f"| Частка невдалих змін | "
             f"**{s['cfr_no_cancelled_pct']:.1f}%** (без скасованих) / "
             f"**{s['cfr_all_units_pct']:.1f}%** (з {c['total']}) | "
-            f"**{s['cfr_no_cancelled_pct']:.1f}%** (чутливість "
-            f"{s['cfr_with_cancelled_pct']:.1f}%) | "
-            f"Формула `8 / (48 + 8)` і консервативна `(8 + 4) / 60` збігаються. |"
+            f"**{MANUAL_BASELINE['cfr_no_cancelled_pct']:.1f}%** (чутливість "
+            f"{MANUAL_BASELINE['cfr_with_cancelled_pct']:.1f}%) | "
+            f"{cfr_comparison} |"
         ),
         (
             f"| Час відновлення після збою | "
             f"по окремих ❌: медіана **{rec_per_fail}**, "
             f"середнє **{rec_per_fail_mean}**; "
             f"інцидент від першого збою: **{rec_episode}** | "
-            "медіана **6 год 2 хв 47 с**, середнє **6 год 23 хв 58 с** "
-            "(макс. **15 год 38 хв 33 с**) | "
-            "Обидва показники збігаються до секунди: усі 8 падінь відбулися в одній "
-            "серії `Deploy API docs` 30 жовтня перед відновленням у PR #231 "
-            "(`15:41:20 UTC`). |"
+            f"медіана **{_format_duration(MANUAL_BASELINE['per_failure_median_s'])}**, "
+            f"середнє **{_format_duration(MANUAL_BASELINE['per_failure_mean_s'])}** "
+            f"(макс. **{_format_duration(MANUAL_BASELINE['incident_episode_s'])}**) | "
+            f"{recovery_comparison} |"
         ),
         "",
         "## 2. Відокремлення черги від виконання в часі проходження змін",
         "",
         (
-            "| Компонент (усі 60 одиниць) | Медіана | Середнє | P75 | "
+            f"| Компонент (усі {c['total']} одиниць) | Медіана | Середнє | P75 | "
             "Максимум | Частка сумарного Lead Time | "
             "Частка часу CI (`черга + виконання`) |"
         ),
@@ -623,7 +743,7 @@ def render_markdown(metrics: dict[str, Any]) -> str:
             f"**{b['exec_share_ci_pct']:.1f}%** |"
         ),
         (
-            f"| Повний Change Lead Time (60 одиниць) | "
+            f"| Повний Change Lead Time ({c['total']} одиниць) | "
             f"**{_format_duration(m2['lead_time_median_s'])}** | "
             f"{_format_duration(m2['lead_time_mean_s'])} | "
             f"{_format_duration(m2['lead_time_p75_s'])} | "
@@ -651,11 +771,11 @@ def render_markdown(metrics: dict[str, Any]) -> str:
         (
             f"| Частка успішних запусків на `main` | "
             f"{success_rate_cell} | 90% | "
-            f"Нижче орієнтира через серію падінь `Deploy API docs` 30.10 |"
+            f"{status_success_rate} |"
         ),
         (
             f"| Повернення `main` до зеленого стану | **{rec_episode}** | "
-            "до 60 хв | Перевищено (тривалий повторний збій без блокування злиття) |"
+            f"до 60 хв | {status_recovery} |"
         ),
         (
             f"| Тривалість запуску workflow (медіана `черга + виконання`) | "
