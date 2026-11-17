@@ -177,6 +177,15 @@ class PostgresConversationRepository:
         row = self._session.scalars(stmt).first()
         return message_row_to_domain(row) if row else None
 
+    def get_message(self, conversation_id: UUID, message_id: UUID) -> Message | None:
+        row = self._session.scalars(
+            select(MessageRow).where(
+                MessageRow.conversation_id == conversation_id,
+                MessageRow.message_id == message_id,
+            )
+        ).first()
+        return message_row_to_domain(row) if row else None
+
     def list_messages(
         self,
         conversation_id: UUID,

@@ -4,6 +4,8 @@ import type {
   Complaint,
   ComplaintReason,
   ComplaintStatus,
+  MessageReport,
+  MessageReportReason,
   FeedbackMessage,
   FeedbackStatus,
   LogEntry,
@@ -17,8 +19,15 @@ import type {
   ListingUpdatePayload,
   ListingWithContact,
   ModerationAction,
+  AdminSellerReview,
+  ChatConversationPage,
+  ChatMessage,
+  ChatMessagePage,
+  ChatStartResult,
+  OwnSellerReview,
   PublicProfile,
   SellerContact,
+  SellerRating,
   UploadedImage,
 } from "./types";
 
@@ -299,6 +308,18 @@ export function resolveComplaint(complaintId: string, status: Exclude<ComplaintS
   return apiFetch<Complaint>(`/admin/complaints/${segment(complaintId)}/resolve`, { method: "POST", body: JSON.stringify({ status, note }) });
 }
 
+export function reportChatMessage(conversationId: string, messageId: string, reason: MessageReportReason, details: string): Promise<void> {
+  return apiFetch<void>(`/conversations/${segment(conversationId)}/messages/${segment(messageId)}/report`, { method: "POST", body: JSON.stringify({ reason, details }) });
+}
+
+export function getMessageReports(): Promise<MessageReport[]> {
+  return apiFetch<MessageReport[]>("/admin/message-reports");
+}
+
+export function resolveMessageReport(reportId: string, status: Exclude<ComplaintStatus, "OPEN">, note: string): Promise<MessageReport> {
+  return apiFetch<MessageReport>(`/admin/message-reports/${segment(reportId)}/resolve`, { method: "POST", body: JSON.stringify({ status, note }) });
+}
+
 export function submitFeedback(subject: string, message: string): Promise<FeedbackMessage> {
   return apiFetch<FeedbackMessage>("/feedback", { method: "POST", body: JSON.stringify({ subject, message }) });
 }
@@ -313,4 +334,78 @@ export function resolveFeedback(feedbackId: string): Promise<FeedbackMessage> {
 
 export function getActivityLog(kind: "users" | "admins", skip = 0, limit = 100): Promise<LogEntry[]> {
   return apiFetch<LogEntry[]>(`/admin/logs/${kind}?skip=${skip}&limit=${limit}`);
+}
+
+export function getSellerRating(sellerId: string): Promise<SellerRating> {
+  return apiFetch<SellerRating>(`/users/${segment(sellerId)}/rating`);
+}
+
+export function setSellerReview(sellerId: string, rating: number, listingId?: string): Promise<OwnSellerReview> {
+  return apiFetch<OwnSellerReview>(`/users/${segment(sellerId)}/review`, {
+    method: "PUT",
+    body: JSON.stringify({ rating, ...(listingId ? { listing_id: segment(listingId) } : {}) }),
+  });
+}
+
+export function deleteSellerReview(sellerId: string): Promise<void> {
+  return apiFetch<void>(`/users/${segment(sellerId)}/review`, { method: "DELETE" });
+}
+
+export function getAdminReviews(skip = 0, limit = 100): Promise<AdminSellerReview[]> {
+  return apiFetch<AdminSellerReview[]>(`/admin/reviews?skip=${skip}&limit=${limit}`);
+}
+
+export function hideSellerReview(reviewId: string, reason: string): Promise<AdminSellerReview> {
+  return apiFetch<AdminSellerReview>(`/admin/reviews/${segment(reviewId)}/hide`, { method: "POST", body: JSON.stringify({ reason }) });
+}
+
+export function restoreSellerReview(reviewId: string): Promise<AdminSellerReview> {
+  return apiFetch<AdminSellerReview>(`/admin/reviews/${segment(reviewId)}/restore`, { method: "POST" });
+}
+
+/** Активні оголошення продавця для його публічного профілю (`GET /listings?seller_id=`). */
+export async function getSellerListings(sellerId: string, limit = 24, skip = 0): Promise<ListingPage> {
+  const response = await apiFetchWithHeaders<Listing[]>(
+    `/listings?seller_id=${encodeURIComponent(segment(sellerId))}&limit=${limit}&skip=${skip}&sort=newest`,
+  );
+  const total = Number(response.headers.get("X-Total-Count"));
+  return { items: response.data, total: Number.isFinite(total) && total >= 0 ? total : response.data.length };
+}
+
+// --- Чат між користувачами (ADR-005) ---
+
+export function startConversation(listingId: string, body: string): Promise<ChatStartResult> {
+  return apiFetch<ChatStartResult>(`/listings/${segment(listingId)}/conversation`, { method: "POST", body: JSON.stringify({ body }) });
+}
+
+export function getConversations(cursor?: string | null, limit = 30): Promise<ChatConversationPage> {
+  const query = `limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+  return apiFetch<ChatConversationPage>(`/conversations?${query}`);
+}
+
+export async function getUnreadCount(): Promise<number> {
+  return (await apiFetch<{ unread_count: number }>("/conversations/unread-count")).unread_count;
+}
+
+/** Без курсора — останні повідомлення; `before` гортає історію, `after` — опитування нових. */
+export function getMessages(
+  conversationId: string,
+  options: { before?: string | null; after?: string | null; limit?: number } = {},
+): Promise<ChatMessagePage> {
+  const pairs: string[] = [`limit=${options.limit ?? 50}`];
+  if (options.before) pairs.push(`before=${encodeURIComponent(options.before)}`);
+  else if (options.after) pairs.push(`after=${encodeURIComponent(options.after)}`);
+  return apiFetch<ChatMessagePage>(`/conversations/${segment(conversationId)}/messages?${pairs.join("&")}`);
+}
+
+export function sendChatMessage(conversationId: string, body: string, replyToId?: string): Promise<ChatMessage> {
+  return apiFetch<ChatMessage>(`/conversations/${segment(conversationId)}/messages`, {
+    method: "POST",
+    body: JSON.stringify(replyToId ? { body, reply_to_id: replyToId } : { body }),
+  });
+}
+
+export function markConversationRead(conversationId: string, through?: string | null): Promise<void> {
+  const query = through ? `?through=${encodeURIComponent(through)}` : "";
+  return apiFetch<void>(`/conversations/${segment(conversationId)}/read${query}`, { method: "POST" });
 }

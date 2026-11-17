@@ -42,6 +42,7 @@ from src.repositories.seller_reviews import (
     InMemorySellerReviewRepository,
     SellerReviewRepository,
 )
+from src.repositories.message_reports import InMemoryMessageReportRepository
 from src.repositories.support import (
     InMemoryActivityRepository,
     InMemoryComplaintRepository,
@@ -57,6 +58,7 @@ from src.services.conversations import ConversationService
 from src.services.favorites import FavoriteService
 from src.services.feedback import FeedbackService
 from src.services.listings import ListingService
+from src.services.message_reports import MessageReportService
 from src.services.moderation import ModerationService
 from src.services.profile import ProfileService
 from src.services.seller_reviews import SellerReviewService
@@ -87,6 +89,7 @@ _inmem_favorite_repository = InMemoryFavoriteRepository()
 _inmem_moderation_action_repository = InMemoryModerationActionRepository()
 _inmem_user_repository = InMemoryUserRepository()
 _inmem_complaint_repository = InMemoryComplaintRepository()
+_inmem_message_report_repository = InMemoryMessageReportRepository()
 _inmem_feedback_repository = InMemoryFeedbackRepository()
 _inmem_activity_repository = InMemoryActivityRepository()
 _inmem_conversation_repository = InMemoryConversationRepository()
@@ -325,6 +328,15 @@ def get_user_moderation_service(
     )
 
 
+def get_message_report_repository(session: DbSession = None):
+    """Повертає PostgreSQL або in-memory сховище скарг на повідомлення."""
+    if session is not None:
+        from src.repositories.message_reports import PostgresMessageReportRepository
+
+        return PostgresMessageReportRepository(session)
+    return _inmem_message_report_repository
+
+
 def get_complaint_repository(session: DbSession = None):
     """Повертає PostgreSQL або in-memory репозиторій скарг."""
     if session is not None:
@@ -398,6 +410,15 @@ def get_conversation_service(session: DbSession = None) -> ConversationService:
         get_user_repository(session),
         get_activity_service(session),
         ChatSettings.from_env(),
+    )
+
+
+def get_message_report_service(session: DbSession = None) -> MessageReportService:
+    """Повертає сервіс скарг на повідомлення чату."""
+    return MessageReportService(
+        get_message_report_repository(session),
+        get_conversation_repository(session),
+        get_user_repository(session),
     )
 
 

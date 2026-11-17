@@ -38,6 +38,7 @@ from src.domain.exceptions import (
     ConversationForbiddenError,
     ConversationNotFoundError,
     InvalidChatCursorError,
+    InvalidMessageError,
     ListingNotFoundError,
     ListingUnauthorizedError,
 )
@@ -49,6 +50,7 @@ from src.repositories.users import UserRepository
 from src.services.activity import ActivityLogService
 
 MESSAGES_PAGE_DEFAULT = 50
+REPLY_PREVIEW_LENGTH = 140
 MESSAGES_PAGE_MAX = 100
 CONVERSATIONS_PAGE_DEFAULT = 20
 CONVERSATIONS_PAGE_MAX = 50
@@ -76,6 +78,16 @@ class ListingCard:
 
 
 @dataclass(frozen=True)
+class ReplyPreview:
+    """Цитата повідомлення, на яке відповідають: скорочений текст без вкладень."""
+
+    message_id: UUID
+    sender_id: UUID
+    is_own: bool
+    body: str
+
+
+@dataclass(frozen=True)
 class MessageView:
     """Повідомлення для учасника розмови."""
 
@@ -86,6 +98,7 @@ class MessageView:
     created_at: datetime
     is_own: bool
     listing: ListingCard | None
+    reply_to: ReplyPreview | None = None
 
 
 @dataclass(frozen=True)
@@ -117,6 +130,14 @@ class ConversationPage:
 
 
 @dataclass(frozen=True)
+class PeerRead:
+    """Позиція останнього повідомлення, яке прочитав співрозмовник."""
+
+    created_at: datetime
+    message_id: UUID
+
+
+@dataclass(frozen=True)
 class MessagePage:
     """Сторінка повідомлень за зростанням `(created_at, message_id)`.
 
@@ -130,6 +151,7 @@ class MessagePage:
     before_cursor: str | None
     after_cursor: str | None
     has_more: bool
+    peer_read: PeerRead | None = None
 
 
 @dataclass(frozen=True)
@@ -214,25 +236,49 @@ class ConversationService:
         conversation_id: UUID,
         body: str,
         listing_id: UUID | None = None,
+        reply_to_id: UUID | None = None,
     ) -> MessageView:
-        """Надсилає повідомлення учасником розмови, за потреби з карткою."""
+        """Надсилає повідомлення учасником розмови, за потреби з карткою й цитатою."""
         user_id = self._require_active_actor(actor)
         conversation = self._require_participant(conversation_id, user_id)
         clean_body = normalize_message_body(body)
         if listing_id is not None:
             self._require_attachable_listing(listing_id, conversation)
+        if reply_to_id is not None and (
+            self._conversations.get_message(conversation_id, reply_to_id) is None
+        ):
+            raise InvalidMessageError("Повідомлення для відповіді не знайдено")
         with self._conversations.sender_write_lock(user_id):
             self._check_message_rate(user_id, self._clock())
             message = self._append(
-                conversation.conversation_id, user_id, clean_body, listing_id
+                conversation.conversation_id,
+                user_id,
+                clean_body,
+                listing_id,
+                reply_to_id=reply_to_id,
             )
         return self._message_view(message, user_id)
 
-    def mark_read(self, actor: CurrentUser | None, conversation_id: UUID) -> None:
-        """Позначає прочитаною всю розмову до останнього повідомлення."""
+    def mark_read(
+        self,
+        actor: CurrentUser | None,
+        conversation_id: UUID,
+        through: str | None = None,
+    ) -> None:
+        """Пересуває позначку до показаного повідомлення або до останнього.
+
+        Курсор не дає повідомленню, що надійшло між читанням сторінки та цим
+        викликом, стати прочитаним ще до того, як клієнт його отримає.
+        """
         user_id = self._require_actor(actor)
         self._require_participant(conversation_id, user_id)
-        last = self._conversations.last_message(conversation_id)
+        if through is None:
+            last = self._conversations.last_message(conversation_id)
+        else:
+            key = decode_cursor(through)
+            last = self._conversations.get_message(conversation_id, key[1])
+            if last is None or last.key != key:
+                raise InvalidChatCursorError("Некоректний курсор прочитання")
         if last is not None:
             self._conversations.mark_read(conversation_id, user_id, last.key)
 
@@ -243,6 +289,7 @@ class ConversationService:
         body: str,
         listing_id: UUID | None,
         first_at: datetime | None = None,
+        reply_to_id: UUID | None = None,
     ) -> Message:
         """Додає повідомлення під блокуванням розмови зі строго зростаючим часом.
 
@@ -263,6 +310,7 @@ class ConversationService:
                 body=body,
                 listing_id=listing_id,
                 created_at=created_at,
+                reply_to_id=reply_to_id,
             )
         )
 
@@ -304,7 +352,7 @@ class ConversationService:
         _check_limit(limit, MESSAGES_PAGE_MAX)
         after_key = decode_cursor(after) if after is not None else None
         before_key = decode_cursor(before) if before is not None else None
-        self._require_participant(conversation_id, user_id)
+        conversation = self._require_participant(conversation_id, user_id)
         rows = self._conversations.list_messages(
             conversation_id, limit + 1, after=after_key, before=before_key
         )
@@ -316,11 +364,13 @@ class ConversationService:
             page = rows[-limit:]
             before_cursor = encode_cursor(page[0].key) if has_more else None
         after_cursor = encode_cursor(page[-1].key) if page else after
+        peer_marker = conversation.read_marker(conversation.other_participant(user_id))
         return MessagePage(
             items=[self._message_view(item, user_id) for item in page],
             before_cursor=before_cursor,
             after_cursor=after_cursor,
             has_more=has_more,
+            peer_read=PeerRead(*peer_marker) if peer_marker else None,
         )
 
     def unread_count(self, actor: CurrentUser | None) -> int:
@@ -392,6 +442,25 @@ class ConversationService:
             created_at=message.key[0],
             is_own=message.sender_id == viewer_id,
             listing=self._listing_card(message.listing_id),
+            reply_to=self._reply_preview(message, viewer_id),
+        )
+
+    def _reply_preview(self, message: Message, viewer_id: UUID) -> ReplyPreview | None:
+        if message.reply_to_id is None:
+            return None
+        target = self._conversations.get_message(
+            message.conversation_id, message.reply_to_id
+        )
+        if target is None:
+            return None
+        body = target.body
+        if len(body) > REPLY_PREVIEW_LENGTH:
+            body = body[: REPLY_PREVIEW_LENGTH - 1].rstrip() + "…"
+        return ReplyPreview(
+            message_id=target.message_id,
+            sender_id=target.sender_id,
+            is_own=target.sender_id == viewer_id,
+            body=body,
         )
 
     def _listing_card(self, listing_id: UUID | None) -> ListingCard | None:
