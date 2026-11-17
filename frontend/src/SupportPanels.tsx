@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Pagination, usePaged } from "./Pagination";
 import {
   ApiError,
+  blockUser,
   getActivityLog,
   getBlockedUsers,
   getComplaints,
@@ -331,6 +332,28 @@ export function MessageReportsPanel({ onError, onNotice }: { onError: (m: string
   const paged = usePaged(items ?? [], PANEL_PAGE_SIZE);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [blockingId, setBlockingId] = useState<string | null>(null);
+  const [blockReason, setBlockReason] = useState("");
+
+  async function copyUserId(userId: string) {
+    try { await navigator.clipboard.writeText(userId); onNotice("ID користувача скопійовано"); }
+    catch { onError("Не вдалося скопіювати ID. Виділіть його вручну."); }
+  }
+
+  async function block(item: MessageReport) {
+    const reason = blockReason.trim();
+    if (reason.length < 5) { onError("Причина блокування має містити щонайменше 5 символів"); return; }
+    setBusyId(item.id);
+    try {
+      await blockUser(item.reported_user_id, reason);
+      onNotice("Користувача заблоковано");
+      setBlockingId(null); setBlockReason("");
+    } catch (requestError) {
+      onError(describe(requestError));
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   async function resolve(item: MessageReport, status: "RESOLVED" | "DISMISSED") {
     setBusyId(item.id);
@@ -347,7 +370,7 @@ export function MessageReportsPanel({ onError, onNotice }: { onError: (m: string
 
   return (
     <section className="form-block">
-      <div className="form-block-head"><div><h2>Скарги на повідомлення</h2><p className="form-hint">Нові скарги першими. Текст повідомлення збережено на момент скарги. Заблокувати користувача можна у вкладці «Модерація».</p></div></div>
+      <div className="form-block-head"><div><h2>Скарги на повідомлення</h2><p className="form-hint">Нові скарги першими. Текст повідомлення збережено на момент скарги. Користувача можна заблокувати просто тут або за ID у вкладці «Модерація».</p></div></div>
       {items === null && <p className="form-hint">Завантажуємо…</p>}
       {items?.length === 0 && <p className="form-hint">Скарг поки немає.</p>}
       <ul className="suggestion-list">
@@ -357,9 +380,27 @@ export function MessageReportsPanel({ onError, onNotice }: { onError: (m: string
               <strong>{item.reported_name ?? "Користувач"}</strong>
               <span className={`status-chip status-${item.status.toLowerCase()}`}>{COMPLAINT_STATUS_LABELS[item.status]}</span>
             </div>
+            <p className="form-hint report-user-id">
+              ID: <code>{item.reported_user_id}</code>
+              {" · "}<button className="button button-text" type="button" onClick={() => void copyUserId(item.reported_user_id)}>Копіювати</button>
+              {" · "}<Link to={`/sellers/${item.reported_user_id}`}>Профіль</Link>
+            </p>
             <p className="form-hint">{MESSAGE_REPORT_REASON_LABELS[item.reason]} · від {item.reporter_name ?? "невідомо"} · {formatDateTime(item.created_at)}</p>
             <p className="log-details report-snapshot">{item.body_snapshot}</p>
             {item.details && <p className="form-hint">Коментар: {item.details}</p>}
+            {blockingId === item.id ? (
+              <form className="admin-inline" onSubmit={(event) => { event.preventDefault(); void block(item); }}>
+                <label><span>Причина блокування <small>5–500 символів</small></span><textarea value={blockReason} onChange={(event) => setBlockReason(event.target.value)} minLength={5} maxLength={500} rows={2} required /></label>
+                <div className="form-actions">
+                  <button className="button button-danger" type="submit" disabled={busyId === item.id || blockReason.trim().length < 5}>Заблокувати користувача</button>
+                  <button className="button button-text" type="button" onClick={() => { setBlockingId(null); setBlockReason(""); }}>Скасувати</button>
+                </div>
+              </form>
+            ) : (
+              <div className="form-actions">
+                <button className="button button-light" type="button" onClick={() => { setBlockingId(item.id); setBlockReason(""); }}>Заблокувати користувача…</button>
+              </div>
+            )}
             {item.status === "OPEN" ? (
               <>
                 <label><span>Примітка <small>необов'язково</small></span><input value={notes[item.id] ?? ""} maxLength={500} onChange={(event) => setNotes((current) => ({ ...current, [item.id]: event.target.value }))} /></label>
