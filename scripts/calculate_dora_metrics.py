@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
@@ -123,6 +123,42 @@ def _saved_run_fp(run: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
+def _fetch_unit_job_timings(
+    base_url: str,
+    headers: dict[str, str],
+    group: list[dict[str, Any]],
+) -> tuple[datetime, datetime]:
+    """Отримує мінімальний старт і максимальне завершення завдань одиниці."""
+    started_times: list[datetime] = []
+    completed_times: list[datetime] = []
+    for run in group:
+        if isinstance(run.get("jobs"), list):
+            jobs = run["jobs"]
+        else:
+            run_id = run.get("id") or run.get("databaseId")
+            j_resp = requests.get(
+                f"{base_url}/actions/runs/{run_id}/jobs",
+                headers=headers,
+                params={"per_page": 100},
+                timeout=GITHUB_API_TIMEOUT_SECONDS,
+            )
+            if not j_resp.ok:
+                raise RuntimeError(
+                    f"Не вдалося отримати завдання для запуску GitHub Actions {run_id}"
+                )
+            jobs = j_resp.json().get("jobs", [])
+        for job in jobs:
+            if job.get("started_at"):
+                started_times.append(_parse_iso(job["started_at"]))
+            if job.get("completed_at"):
+                completed_times.append(_parse_iso(job["completed_at"]))
+    if not started_times or not completed_times:
+        raise RuntimeError(
+            "Не вдалося отримати часові мітки завдань для одиниці постачання"
+        )
+    return min(started_times), max(completed_times)
+
+
 def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]:
     """Отримує запуски CI/CD на `main` через GitHub Actions REST API."""
     headers = _github_headers()
@@ -156,18 +192,14 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
             break
         raw_runs.extend(batch)
         oldest = _parse_iso(batch[-1]["created_at"])
-        if oldest < start_dt or len(batch) < 100:
+        if oldest < start_dt - timedelta(days=1) or len(batch) < 100:
             break
 
     by_sha: dict[str, list[dict[str, Any]]] = {}
-    filtered_raw: list[dict[str, Any]] = []
     for run in raw_runs:
         if run.get("name") not in TRACKED_WORKFLOWS:
             continue
         if run.get("event") in {"workflow_dispatch", "schedule"}:
-            continue
-        completed = _parse_iso(run["updated_at"])
-        if not (start_dt <= completed <= end_dt):
             continue
         sha = run["head_sha"]
         # Виключаємо незалежні коміти Dependabot або не-merge запуски поза вибіркою.
@@ -175,9 +207,9 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
         if "dependabot" in title.lower() and sha not in fallback_by_sha:
             continue
         by_sha.setdefault(sha, []).append(run)
-        filtered_raw.append(run)
 
     units: list[DeliveryUnit] = []
+    filtered_raw: list[dict[str, Any]] = []
     ordered_groups = sorted(
         by_sha.items(),
         key=lambda item: max(_parse_iso(r["updated_at"]) for r in item[1]),
@@ -185,7 +217,11 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
 
     pr_first_commit_cache: dict[int, datetime] = {}
 
-    for idx, (sha, group) in enumerate(ordered_groups, start=1):
+    for sha, group in ordered_groups:
+        group_max_updated = max(_parse_iso(r["updated_at"]) for r in group)
+        if not (start_dt <= group_max_updated <= end_dt):
+            continue
+
         conclusions = {r.get("conclusion") for r in group}
         if "failure" in conclusions or "timed_out" in conclusions:
             unit_status = "failure"
@@ -224,14 +260,16 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
             execution_seconds = int(cached["execution_seconds"])
         else:
             created_min = min(_parse_iso(r["created_at"]) for r in group)
-            started_min = min(
-                _parse_iso(r.get("run_started_at") or r["created_at"]) for r in group
+            started_min, completed_at = _fetch_unit_job_timings(
+                base_url, headers, group
             )
-            completed_at = max(_parse_iso(r["updated_at"]) for r in group)
             queue_seconds = max(0, int((started_min - created_min).total_seconds()))
             execution_seconds = max(
                 0, int((completed_at - started_min).total_seconds())
             )
+
+        if not (start_dt <= completed_at <= end_dt):
+            continue
 
         if cached and cached.get("first_commit_at"):
             first_commit_at = _parse_iso(cached["first_commit_at"])
@@ -263,9 +301,10 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
                 pr_first_commit_cache[pr_number] = _parse_iso(dt)
             first_commit_at = pr_first_commit_cache[pr_number]
 
+        filtered_raw.extend(group)
         units.append(
             DeliveryUnit(
-                unit_number=idx,
+                unit_number=len(units) + 1,
                 commit_sha=sha[:7],
                 full_sha=sha,
                 pr_number=pr_number,
@@ -373,6 +412,12 @@ def compute_metrics(units: list[DeliveryUnit], period_days: int) -> dict[str, An
                 (len(failed) + len(cancelled)) / len(units) * 100 if units else 0.0
             ),
             "incident_recoveries_s": incident_recoveries,
+            "incident_recovery_median_s": (
+                statistics.median(incident_recoveries) if incident_recoveries else 0
+            ),
+            "incident_recovery_mean_s": (
+                statistics.mean(incident_recoveries) if incident_recoveries else 0
+            ),
             "per_failure_median_s": (
                 statistics.median(per_failure_recoveries)
                 if per_failure_recoveries
@@ -419,17 +464,27 @@ def compute_metrics(units: list[DeliveryUnit], period_days: int) -> dict[str, An
     }
 
 
+def _format_incident_recoveries(strict_metrics: dict[str, Any]) -> str:
+    incidents = strict_metrics["incident_recoveries_s"]
+    if not incidents:
+        return "не спостерігалося"
+    if len(incidents) == 1:
+        return _format_duration(incidents[0])
+    per_incident = ", ".join(_format_duration(item) for item in incidents)
+    return (
+        f"медіана {_format_duration(strict_metrics['incident_recovery_median_s'])}, "
+        f"середнє {_format_duration(strict_metrics['incident_recovery_mean_s'])} "
+        f"(інциденти: {per_incident})"
+    )
+
+
 def render_markdown(metrics: dict[str, Any]) -> str:
     """Генерує Markdown-звіт із результатами автоматичного підрахунку."""
     c = metrics["counts"]
     s = metrics["strict"]
     m2 = metrics["stage2_all_merges"]
     b = metrics["breakdown"]
-    rec_episode = (
-        _format_duration(s["incident_recoveries_s"][0])
-        if s["incident_recoveries_s"]
-        else "не спостерігалося"
-    )
+    rec_episode = _format_incident_recoveries(s)
     rec_per_fail = (
         _format_duration(s["per_failure_median_s"])
         if s["per_failure_median_s"]
@@ -613,11 +668,7 @@ def main() -> None:
 
     s = metrics["strict"]
     b = metrics["breakdown"]
-    recovery_text = (
-        _format_duration(s["incident_recoveries_s"][0])
-        if s["incident_recoveries_s"]
-        else "не спостерігалося"
-    )
+    recovery_text = _format_incident_recoveries(s)
     print(f"[OK] Автоматичний звіт DORA збережено: {DEFAULT_OUTPUT}")
     print(
         f"     Розгортання (зелені): {metrics['counts']['success']} "
