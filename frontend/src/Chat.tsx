@@ -312,14 +312,21 @@ function Thread({ conversation, onError, onNotice }: { conversation: ChatConvers
     const body = text.trim();
     if (!body || sending || !conversationId) return;
     setSending(true);
+    // Поле очищаємо одразу: усе, що користувач набере, поки йде запит, — вже нове повідомлення.
+    const quoted = replyTo;
+    setText("");
+    setReplyTo(null);
     try {
-      const sent = await sendChatMessage(conversationId, body, replyTo?.message_id);
+      const sent = await sendChatMessage(conversationId, body, quoted?.message_id);
       stickToBottom.current = true;
       merge([sent]);
-      setText("");
-      setReplyTo(null);
       notifyChatChanged();
-    } catch (requestError) { onError(errorText(requestError)); }
+    } catch (requestError) {
+      // Невдача: повертаємо текст і цитату, але не затираємо новіше, що вже набрано.
+      setText((current) => current || body);
+      setReplyTo((current) => current ?? quoted);
+      onError(errorText(requestError));
+    }
     finally { setSending(false); }
   }
 
