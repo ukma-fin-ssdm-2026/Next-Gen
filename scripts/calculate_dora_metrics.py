@@ -504,9 +504,13 @@ def compute_metrics(units: list[DeliveryUnit], period_days: int) -> dict[str, An
     }
 
 
-def _format_incident_recoveries(strict_metrics: dict[str, Any]) -> str:
+def _format_incident_recoveries(
+    strict_metrics: dict[str, Any], failure_count: int = 0
+) -> str:
     incidents = strict_metrics["incident_recoveries_s"]
     if not incidents:
+        if failure_count > 0:
+            return "не завершено (очікує успішного розгортання)"
         return "не спостерігалося"
     if len(incidents) == 1:
         return _format_duration(incidents[0])
@@ -524,16 +528,16 @@ def render_markdown(metrics: dict[str, Any]) -> str:
     s = metrics["strict"]
     m2 = metrics["stage2_all_merges"]
     b = metrics["breakdown"]
-    rec_episode = _format_incident_recoveries(s)
+    rec_episode = _format_incident_recoveries(s, failure_count=c["failure"])
     rec_per_fail = (
         _format_duration(s["per_failure_median_s"])
         if s["per_failure_median_s"]
-        else "не спостерігалося"
+        else ("не завершено" if c["failure"] > 0 else "не спостерігалося")
     )
     rec_per_fail_mean = (
         _format_duration(s["per_failure_mean_s"])
         if s["per_failure_mean_s"]
-        else "не спостерігалося"
+        else ("не завершено" if c["failure"] > 0 else "не спостерігалося")
     )
     success_rate_cell = (
         f"**{c['success'] / c['total'] * 100:.1f}%** ({c['success']} із {c['total']})"
@@ -625,6 +629,13 @@ def render_markdown(metrics: dict[str, Any]) -> str:
             "базовий звіт містить 8 збоїв із медіаною "
             f"{_format_duration(MANUAL_BASELINE['per_failure_median_s'])}."
         )
+    elif not s["incident_recoveries_s"]:
+        recovery_comparison = (
+            f"Розбіжність: у вибірці зафіксовано {c['failure']} ❌, але жодного "
+            "наступного успішного розгортання в межах періоду не відбулося "
+            f"(відновлення не завершено; базовий звіт містить 8 збоїв із медіаною "
+            f"{_format_duration(MANUAL_BASELINE['per_failure_median_s'])})."
+        )
     else:
         recovery_comparison = (
             f"Розбіжність: медіана {rec_per_fail} vs "
@@ -634,20 +645,35 @@ def render_markdown(metrics: dict[str, Any]) -> str:
             f"({c['failure']} ❌ у вибірці)."
         )
 
-    status_success_rate = (
-        "Нижче орієнтира через серію падінь `Deploy API docs` 30.10"
-        if c["total"] and (c["success"] / c["total"]) < 0.90
-        else "У межах орієнтира"
-    )
-    status_recovery = (
-        "Перевищено (тривалий повторний збій без блокування злиття)"
-        if s["incident_recoveries_s"] and max(s["incident_recoveries_s"]) > 3600
-        else (
-            "У межах орієнтира"
-            if s["incident_recoveries_s"]
-            else "Збоїв не спостерігалося (main залишався зеленим)"
+    if c["total"] == 0:
+        status_success_rate = "не спостерігалося"
+    elif (c["success"] / c["total"]) < 0.90:
+        if c["failure"] == 8 and c["success"] == 48:
+            status_success_rate = (
+                "Нижче орієнтира через серію падінь `Deploy API docs` 30.10"
+            )
+        else:
+            status_success_rate = "Нижче орієнтира 90%"
+    else:
+        status_success_rate = "У межах орієнтира"
+
+    if s["incident_recoveries_s"] and max(s["incident_recoveries_s"]) > 3600:
+        status_recovery = "Перевищено (тривалий повторний збій без блокування злиття)"
+    elif s["incident_recoveries_s"]:
+        status_recovery = "У межах орієнтира"
+    elif c["failure"] > 0:
+        status_recovery = (
+            "Відновлення очікується (наявні збої не закрито зеленим розгортанням)"
         )
-    )
+    else:
+        status_recovery = "Збоїв не спостерігалося (main залишався зеленим)"
+
+    if c["total"] == 0:
+        status_ci_duration = "не спостерігалося"
+    elif b["ci_total_median_s"] <= 600:
+        status_ci_duration = "У межах орієнтира"
+    else:
+        status_ci_duration = "Перевищено орієнтир (понад 10 хв)"
 
     lines = [
         "# Автоматичний звіт DORA-метрик CI/CD (Бонус 1)",
@@ -780,7 +806,7 @@ def render_markdown(metrics: dict[str, Any]) -> str:
         (
             f"| Тривалість запуску workflow (медіана `черга + виконання`) | "
             f"**{_format_duration(b['ci_total_median_s'])}** | до 10 хв | "
-            "У межах орієнтира |"
+            f"{status_ci_duration} |"
         ),
         "",
         "> ### Нотатка «Використання ШІ»",
