@@ -238,6 +238,28 @@ def test_filter_by_price_range_api(client: TestClient) -> None:
     assert len(res_empty.json()) == 0
 
 
+def test_catalog_filters_by_seller_for_public_profile(client: TestClient) -> None:
+    """[TP-004] [FR-006] Публічний профіль: лише активні оголошення продавця."""
+    own = client.get("/api/v1/listings", params={"seller_id": str(SEED_OWNER_ID)})
+    assert own.status_code == 200
+    items = own.json()
+    assert items
+    assert {item["user_id"] for item in items} == {str(SEED_OWNER_ID)}
+    assert str(WITHDRAWN_LISTING_ID) not in {item["id"] for item in items}
+    assert own.headers["X-Total-Count"] == str(len(items))
+
+    stranger = client.get("/api/v1/listings", params={"seller_id": str(uuid4())})
+    assert stranger.status_code == 200
+    assert stranger.json() == []
+    assert stranger.headers["X-Total-Count"] == "0"
+
+
+def test_catalog_rejects_invalid_seller_id(client: TestClient) -> None:
+    """[TP-004] [FR-006] Некоректний seller_id відхиляється з 422."""
+    res = client.get("/api/v1/listings", params={"seller_id": "not-a-uuid"})
+    assert res.status_code == 422
+
+
 def test_catalog_rejects_inverted_price_range(client: TestClient) -> None:
     """[TP-004] [FR-008]
     Регресійний тест: API повертає HTTP 422, якщо min_price > max_price.

@@ -130,8 +130,17 @@ def test_review_display_threshold_is_configurable(
     service.set_review(actor(), seller.user_id, 2, None)
     service.set_review(actor(), seller.user_id, 4, None)
     monkeypatch.delenv("REVIEW_MIN_COUNT_TO_DISPLAY", raising=False)
-    assert get_review_min_count_to_display() == 3
+    assert get_review_min_count_to_display() == 1
     assert service.summary(seller.user_id).average is None
+    monkeypatch.setenv("REVIEW_MIN_COUNT_TO_DISPLAY", "3")
+    strict_service = SellerReviewService(
+        repository,
+        InMemoryUserRepository(),
+        listing_repository,
+        events,
+        get_review_min_count_to_display(),
+    )
+    assert strict_service.summary(seller.user_id).average is None
     monkeypatch.setenv("REVIEW_MIN_COUNT_TO_DISPLAY", "2")
     custom_service = SellerReviewService(
         repository,

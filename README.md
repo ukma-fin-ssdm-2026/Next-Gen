@@ -63,18 +63,19 @@ Baraholka NaUKMA — вебзастосунок для обміну речами
 - [Якість коду, стандарти та безпека](#якість-коду-стандарти-та-безпека)
 - [Тестування та налагодження](#тестування-та-налагодження)
 - [Планування тестування та валідація](#планування-тестування-та-валідація)
+- [Надійність та аналітика CI/CD](#надійність-та-аналітика-cicd)
 - [Індивідуальні відеозвіти (Loom)](#індивідуальні-відеозвіти-loom)
 - [Швидкий запуск та перевірки якості коду](#швидкий-запуск-та-перевірки-якості-коду)
 - [Розгортання на сервері](#розгортання-на-сервері)
 
 ## Команда
 
-| Учасник | Lab 1 — репозиторій | Lab 2 — вимоги | Lab 3 — архітектура | Lab 4 — API | Lab 5 — якість коду | Lab 6 — тестування | Lab 7 — валідація | Lab 8 — рефакторинг | Lab 9 — надійність |
-|---|---|---|---|---|---|---|---|---|---|
-| **Артем Солодкий** | Repo Maintainer | Requirements Lead + Functional Requirements Lead | Data Model & Threat Modeling Lead | Quality Lead | Code Reviewer | Testing Lead + Test Doubles Lead | Test Planner | Code Analyst | Failure Analyst |
-| **Данііл Чернявський** | CI Maintainer | Quality Lead (NFR) | Architecture Lead | Backend Lead + API Design Lead | Quality & Prototype Lead | Debugging Lead | Review Manager + AI Code Reviewer | Refactoring Lead | Risk Hunter |
-| **Євгеній Остапенко** | Documentation Lead | Documentation Lead | Documentation & UML Lead | Documentation Lead | Documentation Lead | Testing Strategist | Documentation Lead | Testing Engineer | Documentation Lead |
-| **Богдан Солонина** | Issue Tracker Lead | Traceability Lead | Traceability Lead | Integration Lead | Security Analyst | Integration Lead | Quality Analyst | Release Manager | Reliability Engineer |
+| Учасник | Lab 1 — репозиторій | Lab 2 — вимоги | Lab 3 — архітектура | Lab 4 — API | Lab 5 — якість коду | Lab 6 — тестування | Lab 7 — валідація | Lab 8 — рефакторинг | Lab 9 — надійність | Lab 10 — аналітика CI/CD |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **Артем Солодкий** | Repo Maintainer | Requirements Lead + Functional Requirements Lead | Data Model & Threat Modeling Lead | Quality Lead | Code Reviewer | Testing Lead + Test Doubles Lead | Test Planner | Code Analyst | Failure Analyst | DORA Analyst |
+| **Данііл Чернявський** | CI Maintainer | Quality Lead (NFR) | Architecture Lead | Backend Lead + API Design Lead | Quality & Prototype Lead | Debugging Lead | Review Manager + AI Code Reviewer | Refactoring Lead | Risk Hunter | Documentation Lead |
+| **Євгеній Остапенко** | Documentation Lead | Documentation Lead | Documentation & UML Lead | Documentation Lead | Documentation Lead | Testing Strategist | Documentation Lead | Testing Engineer | Documentation Lead | CI/CD Data Analyst |
+| **Богдан Солонина** | Issue Tracker Lead | Traceability Lead | Traceability Lead | Integration Lead | Security Analyst | Integration Lead | Quality Analyst | Release Manager | Reliability Engineer | Improvement Designer |
 
 Детальний опис відповідальностей наведено в [Командному статуті](TeamCharter.md#2-ролі-та-відповідальності).
 
@@ -146,6 +147,13 @@ Baraholka NaUKMA — вебзастосунок для обміну речами
 
 - [План тестування](docs/validation/test-plan.md) — обсяг, критерії виходу, аналіз ризиків та таблиця тест-кейсів різних рівнів із трасуванням до вимог.
 - [Журнал взаємного огляду та огляду ШІ-коду](docs/validation/review-log.md) — підсумки взаємного огляду тест-плану з командою B2B, внесені зміни та контрольний список огляду ШІ-згенерованого коду.
+
+## Надійність та аналітика CI/CD
+
+- [Пошук точок відмови (Resilience Scavenger Hunt)](docs/reliability/scavenger-hunt.md) — реєстр 8 знахідок за категоріями A–E та класифікація *несправність → помилка → відмова*.
+- [Командний звіт про надійність](docs/reliability/reliability-report.md) — патерни стійкості, режими відмов, тести з ін'єкцією збою (`tests/reliability/`) та бонусні завдання.
+- [Сирі метрики конвеєра CI/CD](docs/ci-cd/metrics-raw.md) — вивантаження 60 одиниць постачання на `main` (черги, виконання, перший коміт PR, причини червоних запусків).
+- [Звіт DORA-метрик CI/CD](docs/ci-cd/dora-summary.md) — чотири метрики DORA за 15 днів, інтерпретація базового рівня та зіставлення з рамкою DORA 2025.
 
 ## Індивідуальні відеозвіти (Loom)
 

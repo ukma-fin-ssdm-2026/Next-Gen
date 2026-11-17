@@ -379,12 +379,19 @@ def compute_metrics(units: list[DeliveryUnit], period_days: int) -> dict[str, An
     all_pre_ci = [u.pre_ci_seconds for u in units]
     green_queue = [u.queue_seconds for u in green]
     green_exec = [u.execution_seconds for u in green]
+    green_pre_ci = [u.pre_ci_seconds for u in green]
 
     sum_lt = sum(all_lt) or 1
     sum_queue = sum(all_queue)
     sum_exec = sum(all_exec)
     sum_pre_ci = sum(all_pre_ci)
     sum_ci = (sum_queue + sum_exec) or 1
+
+    sum_green_lt = sum(green_lt) or 1
+    sum_green_queue = sum(green_queue)
+    sum_green_exec = sum(green_exec)
+    sum_green_pre_ci = sum(green_pre_ci)
+    sum_green_ci = (sum_green_queue + sum_green_exec) or 1
 
     completed_non_cancelled = len(green) + len(failed)
 
@@ -423,6 +430,9 @@ def compute_metrics(units: list[DeliveryUnit], period_days: int) -> dict[str, An
                 if per_failure_recoveries
                 else 0
             ),
+            "per_failure_mean_s": (
+                statistics.mean(per_failure_recoveries) if per_failure_recoveries else 0
+            ),
         },
         "stage2_all_merges": {
             "deployment_freq_per_day": len(units) / period_days,
@@ -446,8 +456,15 @@ def compute_metrics(units: list[DeliveryUnit], period_days: int) -> dict[str, An
                 statistics.median(green_queue) if green_queue else 0
             ),
             "green_queue_mean_s": statistics.mean(green_queue) if green_queue else 0,
+            "green_queue_p75_s": _percentile(green_queue, 0.75),
             "green_exec_median_s": statistics.median(green_exec) if green_exec else 0,
             "green_exec_mean_s": statistics.mean(green_exec) if green_exec else 0,
+            "green_exec_p75_s": _percentile(green_exec, 0.75),
+            "green_pre_ci_share_lt_pct": sum_green_pre_ci / sum_green_lt * 100,
+            "green_queue_share_lt_pct": sum_green_queue / sum_green_lt * 100,
+            "green_exec_share_lt_pct": sum_green_exec / sum_green_lt * 100,
+            "green_queue_share_ci_pct": sum_green_queue / sum_green_ci * 100,
+            "green_exec_share_ci_pct": sum_green_exec / sum_green_ci * 100,
             "queue_share_lt_pct": sum_queue / sum_lt * 100,
             "exec_share_lt_pct": sum_exec / sum_lt * 100,
             "pre_ci_share_lt_pct": sum_pre_ci / sum_lt * 100,
@@ -490,6 +507,11 @@ def render_markdown(metrics: dict[str, Any]) -> str:
         if s["per_failure_median_s"]
         else "не спостерігалося"
     )
+    rec_per_fail_mean = (
+        _format_duration(s["per_failure_mean_s"])
+        if s["per_failure_mean_s"]
+        else "не спостерігалося"
+    )
 
     lines = [
         "# Автоматичний звіт DORA-метрик CI/CD (Бонус 1)",
@@ -507,50 +529,58 @@ def render_markdown(metrics: dict[str, Any]) -> str:
         ),
         "- **Команда запуску:** `python scripts/calculate_dora_metrics.py`",
         "",
-        "## 1. Чотири метрики DORA (порівняння строгого розрахунку й Етапу 2)",
+        (
+            "## 1. Чотири метрики DORA "
+            "(звірка автоматичного розрахунку і `dora-summary.md`)"
+        ),
         "",
         (
-            "| Метрика DORA | Автоматичний (строго за правилом Лаб 10) | "
-            "Ручний підрахунок Етапу 2 (`dora-summary.md`) | Джерело розбіжності |"
+            "| Метрика DORA | Автоматичний (`calculate_dora_metrics.py`) | "
+            "`dora-summary.md` (Етап 2) | Звірка / джерело розбіжності |"
         ),
         "|---|---:|---:|---|",
         (
             f"| Частота розгортань | "
             f"**{s['deployment_freq_per_day']:.1f} / день** "
             f"({s['deployment_freq_per_week']:.1f} / тиждень) | "
-            f"**{m2['deployment_freq_per_day']:.1f} / день** "
-            f"({m2['deployment_freq_per_week']:.1f} / тиждень) | "
-            f"Строгий підрахунок бере лише **{c['success']} зелених** розгортань "
-            f"(за умовою: «розгортання — успішний зелений запуск»), а Етап 2 порахував "
-            f"усі **{c['total']}** злитих одиниць включно з 8 червоними "
-            "й 4 скасованими. |"
+            f"**{s['deployment_freq_per_day']:.1f} / день** "
+            f"({s['deployment_freq_per_week']:.1f} / тиждень) | "
+            f"Повний збіг для **{c['success']} зелених** розгортань "
+            f"(зріз усіх {c['total']} злитих одиниць: "
+            f"`{m2['deployment_freq_per_day']:.1f} / день`, "
+            f"`{m2['deployment_freq_per_week']:.1f} / тиждень`). |"
         ),
         (
-            f"| Час виконання змін (медіана) | "
-            f"**{_format_duration(s['lead_time_median_s'])}** "
-            f"(середнє {_format_duration(s['lead_time_mean_s'])}) | "
-            f"**{_format_duration(m2['lead_time_median_s'])}** "
-            f"(середнє {_format_duration(m2['lead_time_mean_s'])}) | "
-            f"У строгому розрахунку виміряно інтервал лише для **{c['success']}** "
-            f"успішних зелених розгортань; Етап 2 включив також 8 ранніх червоних і 4 "
-            f"скасовані одиниці від 30 жовтня. |"
+            f"| Час виконання змін | "
+            f"медіана **{_format_duration(s['lead_time_median_s'])}**, "
+            f"середнє **{_format_duration(s['lead_time_mean_s'])}**, "
+            f"P75 **{_format_duration(s['lead_time_p75_s'])}** | "
+            "медіана **24 хв 23 с**, середнє **2 год 25 хв 27 с**, "
+            "P75 **1 год 6 хв 33 с** | "
+            "Різниця `1 с` на медіані через округлення парної вибірки "
+            "`(1228 + 1697) / 2 = 1462.5 с`: `24 хв 23 с` угору проти "
+            "банківського `round()` у Python (`24 хв 22 с`); середнє й P75 "
+            f"збігаються, а для всіх {c['total']} одиниць медіана "
+            f"`{_format_duration(m2['lead_time_median_s'])}`. |"
         ),
         (
             f"| Частка невдалих змін | "
             f"**{s['cfr_no_cancelled_pct']:.1f}%** (без скасованих) / "
-            f"**{s['cfr_all_units_pct']:.1f}%** (з 60) | "
+            f"**{s['cfr_all_units_pct']:.1f}%** (з {c['total']}) | "
             f"**{s['cfr_no_cancelled_pct']:.1f}%** (чутливість "
             f"{s['cfr_with_cancelled_pct']:.1f}%) | "
             f"Формула `8 / (48 + 8)` і консервативна `(8 + 4) / 60` збігаються. |"
         ),
         (
             f"| Час відновлення після збою | "
-            f"**{rec_episode}** (за безперервним інцидентом); "
-            f"медіана по окремих ❌: **{rec_per_fail}** | "
-            f"**{rec_episode}** | "
-            "Усі 8 падінь відбулися в одній серії `Deploy API docs` 30 жовтня перед "
-            "відновленням у PR #231 (`15:41:20 UTC`): "
-            "час інциденту збігається точно. |"
+            f"по окремих ❌: медіана **{rec_per_fail}**, "
+            f"середнє **{rec_per_fail_mean}**; "
+            f"інцидент від першого збою: **{rec_episode}** | "
+            "медіана **6 год 2 хв 47 с**, середнє **6 год 23 хв 58 с** "
+            "(макс. **15 год 38 хв 33 с**) | "
+            "Обидва показники збігаються до секунди: усі 8 падінь відбулися в одній "
+            "серії `Deploy API docs` 30 жовтня перед відновленням у PR #231 "
+            "(`15:41:20 UTC`). |"
         ),
         "",
         "## 2. Відокремлення черги від виконання в часі проходження змін",
@@ -592,11 +622,18 @@ def render_markdown(metrics: dict[str, Any]) -> str:
             f"100.00% | — |"
         ),
         "",
-        "Для 48 зелених розгортань медіанна черга становить "
+        f"Для {c['success']} зелених розгортань медіанна черга становить "
         f"**{_format_duration(b['green_queue_median_s'])}** (середнє "
-        f"{_format_duration(b['green_queue_mean_s'])}), а медіанне виконання — "
+        f"{_format_duration(b['green_queue_mean_s'])}, P75 "
+        f"{_format_duration(b['green_queue_p75_s'])}), а медіанне виконання — "
         f"**{_format_duration(b['green_exec_median_s'])}** (середнє "
-        f"{_format_duration(b['green_exec_mean_s'])}).",
+        f"{_format_duration(b['green_exec_mean_s'])}, P75 "
+        f"{_format_duration(b['green_exec_p75_s'])}); частки повного Lead Time: "
+        f"до CI `{b['green_pre_ci_share_lt_pct']:.2f}%`, черга "
+        f"`{b['green_queue_share_lt_pct']:.2f}%` "
+        f"(`{b['green_queue_share_ci_pct']:.2f}%` CI), виконання "
+        f"`{b['green_exec_share_lt_pct']:.2f}%` "
+        f"(`{b['green_exec_share_ci_pct']:.2f}%` CI).",
         "",
         "## 3. Звірка з орієнтирами телеметрії CI (CircleCI 2025/2026)",
         "",

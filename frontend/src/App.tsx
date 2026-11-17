@@ -27,6 +27,7 @@ import {
   getListings,
   getMyListings,
   getPublicProfile,
+  getSellerListings,
   getSellerContact,
   loginUrl,
   logout,
@@ -51,9 +52,12 @@ import {
   BlockedUsersPanel,
   ComplaintDialog,
   ComplaintsPanel,
+  MessageReportsPanel,
   FeedbackAdminPanel,
   FeedbackPage,
 } from "./SupportPanels";
+import { AdminReviewsPanel, MyRatingCard, SellerRatingBlock } from "./SellerRating";
+import { ChatPage, ContactSellerDialog, MessageIcon, useUnreadCount } from "./Chat";
 import { Pagination, usePaged } from "./Pagination";
 import type {
   BlockedStatus,
@@ -204,6 +208,22 @@ function App() {
   );
 
   useEffect(() => {
+    // /auth/callback повертає сюди з ?auth_error=..., якщо вхід не вдався.
+    const params = new URLSearchParams(window.location.search);
+    const authError = params.get("auth_error");
+    if (!authError) return;
+    const messages: Record<string, string> = {
+      identity: "Вхід можливий лише з підтвердженою поштою @ukma.edu.ua. Увійдіть обліковим записом університету.",
+      failed: "Не вдалося увійти через Microsoft. Спробуйте ще раз.",
+      expired: "Сесія входу завершилась. Спробуйте увійти ще раз.",
+    };
+    setError(messages[authError] ?? messages.failed);
+    params.delete("auth_error");
+    const query = params.toString();
+    window.history.replaceState(null, "", window.location.pathname + (query ? `?${query}` : "") + window.location.hash);
+  }, []);
+
+  useEffect(() => {
     void Promise.all([
       getCurrentUser()
         .then(setUser)
@@ -333,6 +353,9 @@ function App() {
         />
         <Route path="/listings/new" element={<CreateListingPage user={user} authChecked={authChecked} categories={categories} onError={setError} onNotice={setNotice} />} />
         <Route path="/listings/:listingId/edit" element={<EditListingPage user={user} authChecked={authChecked} categories={categories} onError={setError} onNotice={setNotice} />} />
+        <Route path="/sellers/:userId" element={<SellerPage user={user} authChecked={authChecked} categoryNames={categoryNames} favorites={favorites} busy={busy} onFavorite={(id) => void toggleFavorite(id)} onError={setError} onNotice={setNotice} />} />
+        <Route path="/messages" element={authChecked && !user ? <SignInRequired title="Повідомлення доступні після входу" /> : <ChatPage onError={setError} onNotice={setNotice} />} />
+        <Route path="/messages/:conversationId" element={authChecked && !user ? <SignInRequired title="Повідомлення доступні після входу" /> : <ChatPage onError={setError} onNotice={setNotice} />} />
         <Route path="/my" element={<MyListingsPage user={user} authChecked={authChecked} categoryNames={categoryNames} onError={setError} onNotice={setNotice} />} />
         <Route
           path="/listings/:listingId"
@@ -446,7 +469,7 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
   const [menuOpen, setMenuOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const onFormPage = /^\/(listings\/new|listings\/[^/]+\/edit|profile)\/?$/.test(location.pathname);
+  const onFormPage = /^\/(listings\/new|listings\/[^/]+\/edit|profile|messages(\/[^/]+)?)\/?$/.test(location.pathname);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
   useEffect(() => { setMenuOpen(false); setHidden(false); }, [location.pathname]);
@@ -482,6 +505,8 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
   }, [menuOpen]);
 
   const favoritesLabel = favoritesCount > 0 ? `Обране, збережено: ${favoritesCount}` : "Обране";
+  const unreadMessages = useUnreadCount(authChecked ? user : null);
+  const messagesLabel = unreadMessages > 0 ? `Повідомлення, непрочитаних: ${unreadMessages}` : "Повідомлення";
   const onCreatePage = location.pathname === "/listings/new";
 
   return (
@@ -495,6 +520,12 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
           <nav className="topnav" aria-label="Основна навігація">
             <NavLink to="/listings" end>Оголошення</NavLink>
           </nav>
+          {authChecked && user && (
+            <NavLink className="icon-button msg-button" to="/messages" aria-label={messagesLabel} title="Повідомлення">
+              <MessageIcon />
+              {unreadMessages > 0 && <span className="badge" aria-hidden="true">{unreadMessages > 99 ? "99+" : unreadMessages}</span>}
+            </NavLink>
+          )}
           {authChecked && user && (
             <NavLink className="icon-button fav-button" to="/favorites" aria-label={favoritesLabel} title="Обране">
               <HeartIcon />
@@ -551,6 +582,7 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
           <NavLink to="/listings" end>Оголошення</NavLink>
           <NavLink to="/listings/new">Створити оголошення</NavLink>
           {user && <NavLink to="/my">Мої оголошення</NavLink>}
+          {user && <NavLink to="/messages">Повідомлення{unreadMessages > 0 ? ` (${unreadMessages})` : ""}</NavLink>}
           {user && <NavLink to="/favorites">Обране{favoritesCount > 0 ? ` (${favoritesCount})` : ""}</NavLink>}
           {user && <NavLink to="/profile">Профіль</NavLink>}
           {user?.role === "ADMIN" && <NavLink to="/admin">Адмін-панель</NavLink>}
@@ -559,7 +591,7 @@ function Header({ user, authChecked, busy, favoritesCount, onLogout }: {
           {authChecked && user ? (
             <button className="button button-light" disabled={busy} onClick={() => { closeMenu(); onLogout(); }}>Вийти</button>
           ) : authChecked ? (
-            <a className="button button-primary" href={currentLoginUrl}>Увійти через Microsoft</a>
+            <a className="button button-primary" href={currentLoginUrl}>Увійти з Microsoft</a>
           ) : null}
         </div>
       </aside>
@@ -1364,7 +1396,7 @@ function HomePage({ categories, categoryNames, user, favorites, busy, onFavorite
             <span>02</span><h3>Увійдіть</h3><p>Підтвердьте належність до спільноти через Microsoft.</p>
             {user
               ? <div className="step-done">Ви вже увійшли</div>
-              : <a className="button button-light step-button" href={loginUrl("/listings")}>Увійти через Microsoft</a>}
+              : <a className="button button-light step-button" href={loginUrl("/listings")}>Увійти з Microsoft</a>}
           </article>
           <article>
             <span>03</span><h3>Домовтеся</h3><p>Отримайте контакт продавця і напишіть напряму.</p>
@@ -1562,6 +1594,7 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
   const [blockOpen, setBlockOpen] = useState(false);
   const [blockReason, setBlockReason] = useState("");
   const [complaintOpen, setComplaintOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
   const userId = user?.user_id ?? null;
 
   useEffect(() => {
@@ -1653,6 +1686,7 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
                 </>
               ) : (
                 <>
+                  {user && <button className="button button-primary" type="button" disabled={busy} onClick={() => setContactOpen(true)}>Написати продавцю</button>}
                   <button className="button button-light" disabled={busy} onClick={() => onFavorite(listing.id)}>{favorites.has(listing.id) ? "♥ В обраному" : "♡ Додати в обране"}</button>
                   {user ? (
                     <button className="button button-text report-button" type="button" disabled={busy} onClick={() => setComplaintOpen(true)}>Поскаржитись на оголошення</button>
@@ -1675,8 +1709,16 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
                   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.2 3.6-7 8-7s8 2.8 8 7" /></svg>
                 </span>
               )}
-              <div><strong>{sellerName ?? "Продавець"}</strong><small>Вхід через корпоративну пошту</small></div>
+              <div><strong>{sellerName ? <Link className="seller-link" to={`/sellers/${listing.user_id}`}>{sellerName}</Link> : "Продавець"}</strong><small>Вхід через корпоративну пошту</small></div>
             </div>
+            <SellerRatingBlock
+              sellerId={listing.user_id}
+              fallback={listing.seller_rating}
+              canRate={Boolean(user) && !isOwner}
+              listingId={listing.id}
+              onError={onError}
+              onNotice={onNotice}
+            />
             {!user ? (
               <a className="button button-primary lot-contact-button" href={currentLoginUrl}>Увійти, щоб побачити контакт</a>
             ) : contactState === "loading" ? (
@@ -1717,6 +1759,7 @@ function ListingPage({ user, categoryNames, favorites, busy, onFavorite, onBusy,
           </dl>
         </section>
       </div>
+      {contactOpen && <ContactSellerDialog listingId={listing.id} sellerName={sellerName} onClose={() => setContactOpen(false)} onError={onError} />}
       {complaintOpen && (
         <ComplaintDialog
           listingId={listing.id}
@@ -1758,6 +1801,86 @@ function FavoritesPage({ user, authChecked, categoryNames, favorites, busy, onFa
         </>
       ) : (
         <div className="empty-state"><span>♡</span><h3>Тут поки порожньо</h3><p>Зберігайте цікаві оголошення, щоб не загубити їх.</p><Link className="button button-primary" to="/listings">Перейти до каталогу</Link></div>
+      )}
+    </main>
+  );
+}
+
+/** Публічний профіль продавця: ім'я, рейтинг і його активні оголошення. Контакт тут не показуємо. */
+function SellerPage({ user, authChecked, categoryNames, favorites, busy, onFavorite, onError, onNotice }: {
+  user: CurrentUser | null;
+  authChecked: boolean;
+  categoryNames: Map<string, string>;
+  favorites: Set<string>;
+  busy: boolean;
+  onFavorite: (id: string) => void;
+  onError: (message: string) => void;
+  onNotice: (message: string) => void;
+}) {
+  const { userId = "" } = useParams();
+  const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const [state, setState] = useState<"loading" | "ready" | "missing">("loading");
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [listingsLoading, setListingsLoading] = useState(true);
+  const authed = Boolean(user);
+  const isOwn = user?.user_id === userId;
+  const totalPages = Math.max(1, Math.ceil(total / CATALOG_PAGE_SIZE));
+
+  useEffect(() => {
+    if (!authed) return;
+    let cancelled = false;
+    setState("loading");
+    getPublicProfile(userId)
+      .then((item) => { if (!cancelled) { setProfile(item); setState("ready"); } })
+      .catch(() => { if (!cancelled) setState("missing"); });
+    return () => { cancelled = true; };
+  }, [userId, authed]);
+
+  useEffect(() => { setPage(1); }, [userId]);
+  useEffect(() => {
+    if (!authed || state !== "ready") return;
+    let cancelled = false;
+    setListingsLoading(true);
+    getSellerListings(userId, CATALOG_PAGE_SIZE, (page - 1) * CATALOG_PAGE_SIZE)
+      .then((result) => { if (!cancelled) { setListings(result.items); setTotal(result.total); } })
+      .catch((requestError) => { if (!cancelled) onError(errorText(requestError)); })
+      .finally(() => { if (!cancelled) setListingsLoading(false); });
+    return () => { cancelled = true; };
+  }, [userId, authed, state, page, onError]);
+
+  if (!authChecked) return <PageLoading />;
+  if (!user) return <SignInRequired title="Профіль продавця доступний після входу" />;
+  if (state === "loading") return <PageLoading />;
+  if (state === "missing" || !profile) return <NotFoundPage />;
+  const name = isOwn ? user.display_name : profile.display_name;
+  const avatar = isOwn ? user.avatar_url : profile.avatar_url;
+  return (
+    <main className="page-main seller-page">
+      <Link className="back-link" to="/listings">← До оголошень</Link>
+      <section className="lot-card seller-hero">
+        <Avatar name={name} url={avatar} className="avatar-xl" />
+        <div className="seller-hero-info">
+          <span className="eyebrow dark">Продавець НаУКМА</span>
+          <h1>{name}</h1>
+          {isOwn && <Link className="button button-light" to="/profile">Редагувати профіль</Link>}
+        </div>
+        <div className="seller-hero-rating">
+          <SellerRatingBlock sellerId={userId} canRate={!isOwn} onError={onError} onNotice={onNotice} />
+        </div>
+      </section>
+      <div className="seller-listings-head">
+        <h2>Активні оголошення</h2>
+        {!listingsLoading && <span>{total}</span>}
+      </div>
+      {listingsLoading ? <ListingSkeleton /> : listings.length ? (
+        <>
+          <ListingGrid listings={listings} categoryNames={categoryNames} favorites={favorites} busy={busy} onFavorite={onFavorite} />
+          <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+        </>
+      ) : (
+        <div className="empty-state"><span>∅</span><h3>Активних оголошень немає</h3><p>{isOwn ? "Опублікуйте перше оголошення, і воно зʼявиться тут." : "Цей продавець зараз нічого не пропонує."}</p>{isOwn && <Link className="button button-primary" to="/listings/new">Створити оголошення</Link>}</div>
       )}
     </main>
   );
@@ -1867,6 +1990,8 @@ function ProfilePage({ user, authChecked, onUserChange, onError, onNotice }: {
           </div>
         </section>
 
+        <MyRatingCard userId={user.user_id} />
+
         <section className="form-block">
           <div className="form-block-head"><div><h2>Особисті дані</h2><p className="form-hint">Ім’я бачать інші користувачі в оголошеннях.</p></div></div>
           <label><span>Ім’я</span><input value={name} onChange={(event) => setName(event.target.value)} maxLength={100} required /></label>
@@ -1913,16 +2038,18 @@ function ProfilePage({ user, authChecked, onUserChange, onError, onNotice }: {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UKMA_EMAIL_PATTERN = /^[^@\s]+@ukma\.edu\.ua$/i;
 
-type AdminTab = "moderation" | "categories" | "complaints" | "feedback" | "blocked" | "user-log" | "admin-log";
+type AdminTab = "moderation" | "categories" | "complaints" | "message-reports" | "feedback" | "blocked" | "user-log" | "admin-log" | "reviews";
 /** Кожна вкладка має власну адресу, щоб на неї можна було посилатися. */
 const ADMIN_TABS: { id: AdminTab; label: string; path: string }[] = [
   { id: "moderation", label: "Модерація", path: "/admin" },
   { id: "categories", label: "Категорії", path: "/admin/categories" },
   { id: "complaints", label: "Скарги", path: "/admin/complaints" },
+  { id: "message-reports", label: "Скарги на чат", path: "/admin/message-reports" },
   { id: "feedback", label: "Звернення", path: "/admin/feedback" },
   { id: "blocked", label: "Заблоковані", path: "/admin/blocked" },
   { id: "user-log", label: "Журнал", path: "/admin/logs/users" },
   { id: "admin-log", label: "Адмін-дії", path: "/admin/logs/admins" },
+  { id: "reviews", label: "Оцінки", path: "/admin/logs/reviews" },
 ];
 
 function adminTabFromPath(pathname: string): AdminTab | null {
@@ -1946,6 +2073,8 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
   const [history, setHistory] = useState<ModerationAction[]>([]);
   const adminLocation = useLocation();
   const tab = adminTabFromPath(adminLocation.pathname);
+  // На вузьких екранах вкладки гортаються, тож активну підсуваємо в зону видимості.
+  useEffect(() => { document.querySelector(".admin-tabs a.is-active")?.scrollIntoView({ block: "nearest", inline: "center" }); }, [tab, authChecked, user]);
 
   if (!authChecked) return <PageLoading />;
   if (!user) return <SignInRequired title="Адмін-панель доступна після входу" />;
@@ -1979,23 +2108,27 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
   }
 
   return (
-    <main className="page-main narrow-page">
+    <main className="page-main narrow-page admin-page">
       <PageHeading eyebrow="Модерація" title="Адмін-панель" />
-      <div className="admin-tabs" role="tablist" aria-label="Розділи адмін-панелі">
+      <div className="admin-layout">
+      <nav className="admin-tabs" role="tablist" aria-label="Розділи адмін-панелі" aria-orientation="vertical">
         {ADMIN_TABS.map((item) => (
           <Link key={item.id} role="tab" aria-selected={tab === item.id} className={tab === item.id ? "is-active" : ""} to={item.path}>{item.label}</Link>
         ))}
-      </div>
+      </nav>
+      <div className="admin-content">
       {tab === null && <NotFoundPage />}
       {tab === "categories" && (<>
         <AdminCategoriesPanel onError={onError} onNotice={onNotice} onCategoriesChanged={onCategoriesChanged} />
         <CategorySuggestionsPanel onError={onError} onNotice={onNotice} onCategoriesChanged={onCategoriesChanged} />
       </>)}
       {tab === "complaints" && <ComplaintsPanel onError={onError} onNotice={onNotice} />}
+      {tab === "message-reports" && <MessageReportsPanel onError={onError} onNotice={onNotice} />}
       {tab === "feedback" && <FeedbackAdminPanel onError={onError} onNotice={onNotice} />}
       {tab === "blocked" && <BlockedUsersPanel onError={onError} onNotice={onNotice} />}
       {tab === "user-log" && <ActivityLogPanel kind="users" onError={onError} />}
       {tab === "admin-log" && <ActivityLogPanel kind="admins" onError={onError} />}
+      {tab === "reviews" && <AdminReviewsPanel onError={onError} onNotice={onNotice} />}
       {tab === "moderation" && (<>
       <form className="profile-form" onSubmit={(event) => event.preventDefault()}>
         <section className="form-block">
@@ -2025,6 +2158,8 @@ function AdminPage({ user, authChecked, onError, onNotice, onCategoriesChanged }
         )}
       </form>
       </>)}
+      </div>
+      </div>
     </main>
   );
 }
@@ -2200,7 +2335,8 @@ function CategorySelect({ categories, value, onChange, placeholder, allLabel, ot
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [open]);
 
-  const selectedName = categories.find((category) => category.id === value)?.name ?? (value === "" ? "" : value);
+  // Категорії, якої немає серед активних (її вимкнули), як і на сторінці оголошення, показуємо як «Інше», а не сирий ідентифікатор.
+  const selectedName = categories.find((category) => category.id === value)?.name ?? (value === "" ? "" : "Інше");
 
   function choose(id: string) {
     onChange(id);
@@ -2325,7 +2461,7 @@ function CategorySuggestionsPanel({ onError, onNotice, onCategoriesChanged }: {
 
 function SignInRequired({ title }: { title: string }) {
   const currentLoginUrl = useCurrentLoginUrl();
-  return <main className="page-main auth-required"><span className="brand-mark large-mark">Б</span><h1>{title}</h1><p>Увійдіть через корпоративний Microsoft-акаунт НаУКМА.</p><a className="button button-primary" href={currentLoginUrl}>Увійти через Microsoft</a></main>;
+  return <main className="page-main auth-required"><span className="brand-mark large-mark">Б</span><h1>{title}</h1><p>Увійдіть через корпоративний Microsoft-акаунт НаУКМА.</p><a className="button button-primary" href={currentLoginUrl}>Увійти з Microsoft</a></main>;
 }
 
 function PageHeading({ eyebrow, title }: { eyebrow: string; title: string }) {

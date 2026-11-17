@@ -14,6 +14,7 @@ from src.db.models import (
     FeedbackRow,
     ListingImageRow,
     ListingRow,
+    MessageReportRow,
     MessageRow,
     ModerationActionRow,
     SellerReviewRow,
@@ -24,6 +25,7 @@ from src.domain.categories import Category
 from src.domain.category_suggestions import CategorySuggestion, CategorySuggestionStatus
 from src.domain.complaints import Complaint, ComplaintReason, ComplaintStatus
 from src.domain.conversations import Conversation, Message, as_utc
+from src.domain.message_reports import MessageReport, MessageReportReason
 from src.domain.favorites import Favorite
 from src.domain.feedback import Feedback, FeedbackStatus
 from src.domain.listings import (
@@ -346,6 +348,46 @@ def complaint_domain_to_row(
     )
 
 
+def message_report_row_to_domain(row: MessageReportRow) -> MessageReport:
+    return MessageReport(
+        id=row.report_id,
+        message_id=row.message_id,
+        conversation_id=row.conversation_id,
+        reporter_id=row.reporter_id,
+        reported_user_id=row.reported_user_id,
+        body_snapshot=row.body_snapshot,
+        reason=MessageReportReason(row.reason),
+        details=row.details,
+        status=ComplaintStatus(row.status),
+        created_at=as_utc(row.created_at),
+        resolved_by=row.resolved_by,
+        resolved_at=as_utc(row.resolved_at) if row.resolved_at else None,
+        resolution_note=row.resolution_note,
+    )
+
+
+def message_report_domain_to_row(
+    r: MessageReport, existing: MessageReportRow | None = None
+) -> MessageReportRow:
+    return _populate_row(
+        MessageReportRow,
+        existing,
+        report_id=r.id,
+        message_id=r.message_id,
+        conversation_id=r.conversation_id,
+        reporter_id=r.reporter_id,
+        reported_user_id=r.reported_user_id,
+        body_snapshot=r.body_snapshot,
+        reason=r.reason.value,
+        details=r.details,
+        status=r.status.value,
+        created_at=r.created_at,
+        resolved_by=r.resolved_by,
+        resolved_at=r.resolved_at,
+        resolution_note=r.resolution_note,
+    )
+
+
 def feedback_row_to_domain(row: FeedbackRow) -> Feedback:
     return Feedback(
         id=row.feedback_id,
@@ -458,6 +500,7 @@ def message_row_to_domain(row: MessageRow) -> Message:
         body=row.body,
         listing_id=row.listing_id,
         created_at=as_utc(row.created_at),
+        reply_to_id=row.reply_to_id,
     )
 
 
@@ -470,5 +513,6 @@ def message_domain_to_row(m: Message, existing: MessageRow | None = None) -> Mes
         sender_id=m.sender_id,
         body=m.body,
         listing_id=m.listing_id,
+        reply_to_id=m.reply_to_id,
         created_at=m.created_at,
     )

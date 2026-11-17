@@ -311,6 +311,9 @@ def get_listings(
             "price_asc або price_desc (за ціною)"
         ),
     ),
+    seller_id: Optional[UUID] = Query(
+        None, description="Лише активні оголошення цього продавця (публічний профіль)"
+    ),
     service: ListingService = Depends(get_listing_service),
 ) -> list[ListingPublicResponse]:
     try:
@@ -322,6 +325,7 @@ def get_listings(
             min_price=min_price,
             max_price=max_price,
             sort_order=sort_order,
+            seller_id=seller_id,
         )
     except InvalidPriceRangeError as exc:
         _raise_domain(exc)

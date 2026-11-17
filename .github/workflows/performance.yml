@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   benchmark:
-    name: TP-N02 catalog benchmark
+    name: NFR performance benchmarks (TP-N02, TP-056)
     runs-on: [self-hosted, linux]
     steps:
       - name: Checkout repository
@@ -25,5 +25,5 @@ jobs:
         run: |
           pip install --require-hashes --only-binary :all: -r requirements.lock -r requirements-test.lock
 
-      - name: Run TP-N02 without coverage instrumentation
-        run: pytest -q tests/test_nfr_performance.py -s
+      - name: Run NFR performance benchmarks without coverage instrumentation
+        run: pytest -q -m performance tests/test_nfr_performance.py tests/test_conversations_api.py -s

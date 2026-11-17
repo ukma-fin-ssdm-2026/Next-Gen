@@ -42,7 +42,7 @@ def get_image_storage_dir() -> Path:
 def get_review_min_count_to_display() -> int:
     """Мінімальна кількість видимих оцінок для публікації середнього."""
     name = "REVIEW_MIN_COUNT_TO_DISPLAY"
-    raw = os.getenv(name, "3").strip()
+    raw = os.getenv(name, "1").strip()
     try:
         count = int(raw)
     except ValueError:

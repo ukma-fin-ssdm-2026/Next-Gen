@@ -1,5 +1,6 @@
 """Інтеграційні тести HTTP-межі Microsoft Entra ID."""
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -230,8 +231,9 @@ def test_callback_rejects_state_that_does_not_match_cookie(auth_http_client) -> 
         follow_redirects=False,
     )
 
-    assert response.status_code == 400
-    assert response.json() == {"detail": "Невалідний OIDC state"}
+    assert response.status_code == 303
+    assert response.headers["location"] == "http://localhost:5173/?auth_error=expired"
+    assert client.get("/api/v1/auth/me").status_code == 401
     assert oidc.completed_response is None
 
 
@@ -258,10 +260,10 @@ def test_callback_flow_cannot_be_replayed(auth_http_client) -> None:
     replay_response = client.get(callback_url, follow_redirects=False)
 
     assert first_response.status_code == 303
-    assert replay_response.status_code == 400
-    assert replay_response.json() == {
-        "detail": "OIDC flow не знайдено або він завершився"
-    }
+    assert replay_response.status_code == 303
+    assert replay_response.headers["location"] == (
+        "http://localhost:5173/?auth_error=expired"
+    )
 
 
 def test_blocked_user_loses_existing_session(auth_http_client) -> None:
@@ -310,7 +312,7 @@ def test_blocked_user_callback_redirects_to_notice_with_reason(
 
     assert response.status_code == 303
     assert response.headers["location"].endswith("/?blocked=1")
-    assert "baraholka_session" not in response.headers.get("set-cookie", "")
+    assert client.get("/api/v1/auth/me").status_code == 401
     assert client.get("/api/v1/auth/me").status_code == 401
     status = client.get("/api/v1/auth/blocked-status").json()
     assert status["is_blocked"] is True
@@ -334,3 +336,19 @@ def test_login_returns_503_when_entra_configuration_is_missing(monkeypatch) -> N
 
     assert response.status_code == 503
     assert response.json() == {"detail": "Microsoft Entra ID ще не сконфігуровано"}
+
+
+def test_callback_redirects_rejected_identity_to_frontend(auth_http_client) -> None:
+    """[TP-AUTH-03] [FR-001] [SEC-001] Не-ukma акаунт веде на сайт без сесії."""
+    client, oidc, _, _ = auth_http_client
+    oidc.claims = replace(oidc.claims, email="stranger@gmail.com")
+    client.get("/api/v1/auth/login", follow_redirects=False)
+
+    response = client.get(
+        "/api/v1/auth/callback?code=authorization-code&state=state-created-by-msal",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "http://localhost:5173/?auth_error=identity"
+    assert client.get("/api/v1/auth/me").status_code == 401

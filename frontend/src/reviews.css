@@ -1,0 +1,87 @@
+/* Оцінки продавців: зірки, форма оцінки, вкладка адмін-панелі (ADR-004). */
+.stars { position: relative; display: inline-block; line-height: 1; letter-spacing: 0.06em; white-space: nowrap; }
+.stars-base { color: #d3dcf1; }
+.stars-fill { position: absolute; inset: 0 auto 0 0; overflow: hidden; color: #f5a623; }
+
+.rating-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: 14px; color: var(--ink); }
+.rating-summary strong { font-size: 16px; }
+.rating-summary > span:last-child { color: #5a6788; }
+.rating-muted > span:last-child { color: #6b7898; font-size: 13px; }
+
+.seller-rating { display: grid; gap: 10px; margin: 12px 0 4px; }
+.rating-distribution { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12px; color: #5a6788; }
+.rating-distribution li { display: grid; grid-template-columns: 28px 1fr 22px; align-items: center; gap: 8px; }
+.rating-distribution li > span:last-child { text-align: right; }
+.rating-bar { height: 6px; border-radius: 999px; background: #e6ecf8; overflow: hidden; }
+.rating-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #f7b844, #f5a623); border-radius: inherit; }
+
+.rate-seller { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid rgba(27, 37, 71, 0.08); }
+.rate-label { font-size: 13px; font-weight: 700; color: var(--ink); }
+.rate-stars { display: flex; align-items: center; gap: 2px; }
+.rate-stars button[role="radio"] { border: 0; background: transparent; padding: 2px 3px; font-size: 28px; line-height: 1; color: #d3dcf1; cursor: pointer; transition: color 120ms ease, transform 120ms ease; }
+.rate-stars button[role="radio"].is-on { color: #f5a623; }
+.rate-stars button[role="radio"]:hover:not(:disabled) { transform: scale(1.12); }
+.rate-stars button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }
+.rate-stars button:disabled { cursor: default; opacity: 0.6; }
+.rate-remove { margin-left: 10px; border: 0; background: transparent; color: var(--brand); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; padding: 4px 6px; }
+.rate-remove:hover:not(:disabled) { text-decoration: underline; }
+
+.my-rating .rating-summary { margin-bottom: 8px; }
+
+.review-list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 12px; }
+.review-list > li { display: grid; gap: 6px; padding: 14px 16px; border: 1px solid #e0e7f6; border-radius: 14px; background: rgba(255, 255, 255, 0.7); }
+.review-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.review-head .status-chip { margin-left: auto; }
+.status-chip.review-visible { background: #e3f4ea; color: #1d6b3e; }
+.status-chip.review-hidden { background: #fdebe8; color: #a83a2c; }
+.status-chip.review-deleted { background: #eceff6; color: #5a6788; }
+.review-author-stats.is-warning { color: #a83a2c; font-weight: 700; }
+
+@media (max-width: 560px) {
+  .rate-stars button[role="radio"] { font-size: 30px; padding: 2px 4px; }
+  .review-head .status-chip { margin-left: 0; }
+}
+
+/* ===== Адмін-панель: бічна навігація на широких екранах ===== */
+.admin-layout { display: grid; gap: 14px; }
+.admin-content { min-width: 0; display: grid; gap: 18px; align-content: start; }
+@media (min-width: 900px) {
+  .page-main.admin-page { max-width: 1180px; }
+  .admin-layout { grid-template-columns: 220px minmax(0, 1fr); gap: 28px; align-items: start; }
+  .admin-layout > .admin-tabs {
+    position: sticky; top: 98px; flex-direction: column; flex-wrap: nowrap; gap: 4px; margin: 0; padding: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.8); border-radius: 20px; background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: var(--shadow-sm);
+  }
+  .admin-layout > .admin-tabs a {
+    border: 0; border-radius: 12px; padding: 11px 14px; box-shadow: none; background: transparent; font-size: 14px;
+  }
+  .admin-layout > .admin-tabs a:hover { background: rgba(44, 95, 184, 0.09); transform: none; }
+  .admin-layout > .admin-tabs a.is-active { background: var(--grad-brand); color: #fff; box-shadow: 0 10px 20px -10px rgba(44, 95, 184, 0.8); }
+}
+/* Вужчі екрани: вкладки в один рядок із горизонтальним гортанням замість перенесення на кілька рядків. */
+@media (max-width: 899px) {
+  .admin-layout > .admin-tabs { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px; padding: 2px 16px 10px; scrollbar-width: none; }
+  .admin-layout > .admin-tabs::-webkit-scrollbar { display: none; }
+  .admin-layout > .admin-tabs a { flex: none; white-space: nowrap; }
+}
+
+/* ===== Публічний профіль продавця ===== */
+.seller-link { color: inherit; text-decoration: none; }
+.seller-link:hover { color: var(--brand); text-decoration: underline; }
+.seller-page { max-width: 1180px; margin: 0 auto; }
+.seller-hero { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(240px, 340px); align-items: center; gap: 24px 28px; padding: 28px 32px; margin-top: 12px; }
+.seller-hero-info { display: grid; gap: 8px; justify-items: start; }
+.seller-hero-info h1 { margin: 0; font-size: clamp(26px, 3.2vw, 38px); line-height: 1.1; letter-spacing: -0.02em; color: #14214f; overflow-wrap: anywhere; }
+.seller-hero-rating .seller-rating { margin: 0; }
+.seller-listings-head { display: flex; align-items: baseline; gap: 10px; margin: 30px 0 16px; }
+.seller-listings-head h2 { margin: 0; font-size: 22px; }
+.seller-listings-head span { color: #5a6788; font-weight: 700; }
+@media (max-width: 860px) {
+  .seller-hero { grid-template-columns: auto minmax(0, 1fr); padding: 20px; }
+  .seller-hero-rating { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid rgba(27, 37, 71, 0.08); }
+}
+@media (max-width: 560px) {
+  .seller-hero { gap: 14px 16px; }
+  .seller-hero .avatar-xl { width: 64px; height: 64px; font-size: 26px; }
+}

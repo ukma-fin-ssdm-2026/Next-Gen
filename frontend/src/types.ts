@@ -36,6 +36,7 @@ export interface Listing {
   images: ListingImage[];
   created_at: string;
   updated_at: string;
+  seller_rating?: SellerRatingSummary;
 }
 
 export interface ListingWithContact extends Listing {
@@ -118,6 +119,24 @@ export interface ModerationAction {
 
 export type ComplaintReason = "SPAM" | "FRAUD" | "PROHIBITED" | "INAPPROPRIATE" | "WRONG_CATEGORY" | "OTHER";
 export type ComplaintStatus = "OPEN" | "RESOLVED" | "DISMISSED";
+export type MessageReportReason = "SPAM" | "FRAUD" | "ABUSE" | "OTHER";
+
+export interface MessageReport {
+  id: string;
+  message_id: string;
+  conversation_id: string;
+  reporter_id: string;
+  reporter_name: string | null;
+  reported_user_id: string;
+  reported_name: string | null;
+  body_snapshot: string;
+  reason: MessageReportReason;
+  details: string;
+  status: ComplaintStatus;
+  created_at: string;
+  resolved_at: string | null;
+  resolution_note: string;
+}
 
 export interface Complaint {
   id: string;
@@ -171,4 +190,100 @@ export interface BlockedStatus {
   is_blocked: boolean;
   reason: string | null;
   blocked_at: string | null;
+}
+
+export interface SellerRatingSummary {
+  average: number | null;
+  count: number;
+}
+
+export interface SellerRating extends SellerRatingSummary {
+  distribution: Record<string, number> | null;
+  my_rating?: number;
+}
+
+export type SellerReviewStatus = "VISIBLE" | "HIDDEN";
+
+export interface OwnSellerReview {
+  review_id: string;
+  seller_id: string;
+  listing_id: string | null;
+  rating: number;
+  status: SellerReviewStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminSellerReview extends OwnSellerReview {
+  author_id: string;
+  hidden_by: string | null;
+  hidden_at: string | null;
+  hidden_reason: string | null;
+  deleted_at: string | null;
+  author_stats: { total_count: number; recent_count: number; recent_one_star_count: number };
+}
+
+export interface ChatListingCard {
+  listing_id: string;
+  available: boolean;
+  title: string | null;
+  price: number | null;
+  image_url: string | null;
+}
+
+export interface ChatReplyPreview {
+  message_id: string;
+  sender_id: string;
+  is_own: boolean;
+  body: string;
+}
+
+export interface ChatMessage {
+  message_id: string;
+  conversation_id: string;
+  sender_id: string;
+  body: string;
+  created_at: string;
+  is_own: boolean;
+  listing: ChatListingCard | null;
+  reply_to?: ChatReplyPreview | null;
+}
+
+export interface ChatParticipant {
+  user_id: string;
+  display_name: string;
+  avatar_url: string | null;
+}
+
+export interface ChatConversation {
+  conversation_id: string;
+  other: ChatParticipant;
+  last_message: ChatMessage | null;
+  last_message_at: string;
+  unread_count: number;
+}
+
+export interface ChatConversationPage {
+  items: ChatConversation[];
+  next_cursor: string | null;
+}
+
+export interface ChatPeerRead {
+  created_at: string;
+  message_id: string;
+}
+
+export interface ChatMessagePage {
+  items: ChatMessage[];
+  before_cursor: string | null;
+  after_cursor: string | null;
+  has_more: boolean;
+  /** Позиція, до якої співрозмовник прочитав розмову; null, якщо ще нічого. */
+  peer_read?: ChatPeerRead | null;
+}
+
+export interface ChatStartResult {
+  conversation_id: string;
+  message: ChatMessage;
+  created: boolean;
 }

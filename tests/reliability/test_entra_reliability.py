@@ -216,14 +216,31 @@ def test_entra_fault_injection_network_timeout_and_connection_error(
 # ---------------------------------------------------------------------------
 
 
-def test_entra_begin_retries_with_exponential_backoff_and_full_jitter_are_bounded() -> (
-    None
-):
+class _DeterministicRandom:
+    """Дублер генератора для детермінованої перевірки меж та формули full jitter."""
+
+    def __init__(self, fractions: list[float]) -> None:
+        self._fractions = list(fractions)
+        self.calls: list[tuple[float, float]] = []
+
+    def uniform(self, low: float, high: float) -> float:
+        self.calls.append((low, high))
+        fraction = self._fractions.pop(0)
+        return low + (high - low) * fraction
+
+
+def test_entra_begin_retries_with_exponential_backoff_and_full_jitter_are_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """[TP-AUTH-01] [FR-001] [SEC-001]
     Бонус 1: доводить, що при постійному мережевому збої кількість спроб суворо
-    обмежена (`max_attempts=3`), між ними застосовується full jitter backoff,
+    обмежена (`max_attempts=3`), генератор full jitter отримує точні межі `[0, cap]`,
+    паузи збігаються з формулою `min(max_delay, base_delay * 2^attempt) * u`,
     а після останньої спроби спрацьовує обрана реакція (`EntraOidcError`).
     """
+    fake_random = _DeterministicRandom([0.65, 0.35])
+    monkeypatch.setattr("src.integrations.entra._SYSTEM_RANDOM", fake_random)
+
     recorded_sleeps: list[float] = []
     double = _FaultInjectingMsalClient(
         begin_exc=Timeout("Entra metadata endpoint timed out")
@@ -241,11 +258,10 @@ def test_entra_begin_retries_with_exponential_backoff_and_full_jitter_are_bounde
     ):
         adapter.begin()
 
-    # Кількість спроб суворо обмежена 3, паузи робляться лише між спробами (2 рази)
+    # Кількість спроб суворо обмежена 3, паузи перевіряються за формулою full jitter.
     assert double.begin_calls == 3
-    assert len(recorded_sleeps) == 2
-    assert 0.0 <= recorded_sleeps[0] <= 0.2
-    assert 0.0 <= recorded_sleeps[1] <= 0.4
+    assert fake_random.calls == [(0.0, 0.2), (0.0, 0.4)]
+    assert recorded_sleeps == pytest.approx([0.2 * 0.65, 0.4 * 0.35])
 
 
 def test_entra_begin_recovers_on_transient_failure_before_max_attempts() -> None:
