@@ -179,7 +179,7 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
                 saved_runs_by_sha.setdefault(raw_sha, []).append(_saved_run_fp(raw_run))
 
     raw_runs: list[dict[str, Any]] = []
-    for page in range(1, 10):
+    for page in range(1, 101):
         resp = requests.get(
             f"{base_url}/actions/runs",
             headers=headers,
@@ -194,6 +194,10 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
         oldest = _parse_iso(batch[-1]["created_at"])
         if oldest < start_dt - timedelta(days=1) or len(batch) < 100:
             break
+    else:
+        raise RuntimeError(
+            "Історія запусків GitHub Actions не досягла початку періоду спостереження"
+        )
 
     by_sha: dict[str, list[dict[str, Any]]] = {}
     for run in raw_runs:
@@ -512,6 +516,11 @@ def render_markdown(metrics: dict[str, Any]) -> str:
         if s["per_failure_mean_s"]
         else "не спостерігалося"
     )
+    success_rate_cell = (
+        f"**{c['success'] / c['total'] * 100:.1f}%** ({c['success']} із {c['total']})"
+        if c["total"]
+        else "**не спостерігалося** (0 із 0)"
+    )
 
     lines = [
         "# Автоматичний звіт DORA-метрик CI/CD (Бонус 1)",
@@ -641,8 +650,7 @@ def render_markdown(metrics: dict[str, Any]) -> str:
         "|---|---:|---:|---|",
         (
             f"| Частка успішних запусків на `main` | "
-            f"**{c['success'] / c['total'] * 100:.1f}%** "
-            f"({c['success']} із {c['total']}) | 90% | "
+            f"{success_rate_cell} | 90% | "
             f"Нижче орієнтира через серію падінь `Deploy API docs` 30.10 |"
         ),
         (
