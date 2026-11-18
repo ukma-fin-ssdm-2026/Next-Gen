@@ -1,0 +1,55 @@
+name: Publish application image
+run-name: 'Publish ${{ github.event.workflow_run.head_sha }} from CI #${{ github.event.workflow_run.id }}'
+
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    env:
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      REPOSITORY: ${{ github.repository }}
+      SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
+    steps:
+      - name: Check out the verified main commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Build application image
+        shell: bash
+        run: |
+          image="ghcr.io/${REPOSITORY,,}:${SOURCE_SHA}"
+          docker build \
+            --label "org.opencontainers.image.source=${SOURCE_URL}" \
+            --label "org.opencontainers.image.revision=${SOURCE_SHA}" \
+            --tag "$image" .
+
+      - name: Publish commit tag to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          image="ghcr.io/${REPOSITORY,,}:${SOURCE_SHA}"
+          DOCKER_CONFIG="$(mktemp -d)"
+          export DOCKER_CONFIG
+          trap 'rm -rf "$DOCKER_CONFIG"; docker image rm "$image" >/dev/null 2>&1 || true' EXIT
+
+          printf '%s\n' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker push "$image"
+          printf 'Опубліковано `%s`\n' "$image" >> "$GITHUB_STEP_SUMMARY"
