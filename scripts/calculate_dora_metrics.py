@@ -72,6 +72,7 @@ class DeliveryUnit:
     execution_seconds: int
     status: str  # "success", "failure", "cancelled"
     note: str = ""
+    workflow_runs: tuple[dict[str, Any], ...] = ()
 
     @property
     def lead_time_seconds(self) -> int:
@@ -86,6 +87,10 @@ class DeliveryUnit:
 
 def _parse_iso(ts: str) -> datetime:
     return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc)
+
+
+def _format_iso(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _format_duration(seconds: float) -> str:
@@ -128,18 +133,86 @@ def _github_headers() -> dict[str, str]:
     return headers
 
 
+def _run_id(run: dict[str, Any]) -> int:
+    return int(run.get("id") or run.get("databaseId") or 0)
+
+
+def _run_created_at(run: dict[str, Any]) -> datetime:
+    return _parse_iso(str(run.get("created_at") or run.get("createdAt") or ""))
+
+
+def _run_started_at(run: dict[str, Any]) -> datetime:
+    ts = (
+        run.get("run_started_at")
+        or run.get("runStartedAt")
+        or run.get("created_at")
+        or run.get("createdAt")
+        or ""
+    )
+    return _parse_iso(str(ts))
+
+
+def _run_updated_at(run: dict[str, Any]) -> datetime:
+    return _parse_iso(str(run.get("updated_at") or run.get("updatedAt") or ""))
+
+
 def _saved_run_fp(run: dict[str, Any]) -> tuple[Any, ...]:
-    created = str(run.get("createdAt") or run.get("created_at") or "")
-    started = str(run.get("runStartedAt") or run.get("run_started_at") or created)
-    updated = str(run.get("updatedAt") or run.get("updated_at") or "")
     return (
-        int(run.get("databaseId") or run.get("id") or 0),
+        _run_id(run),
         int(run.get("attempt") or run.get("run_attempt") or 1),
         str(run.get("conclusion")),
-        _parse_iso(created),
-        _parse_iso(started),
-        _parse_iso(updated),
+        _run_created_at(run),
+        _run_started_at(run),
+        _run_updated_at(run),
     )
+
+
+def _normalize_unit_workflow_run(
+    run: dict[str, Any],
+    cached_runs_by_id: dict[int, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Нормалізує об'єкт workflow-запуску до схеми `delivery_units.workflow_runs`."""
+    run_id = _run_id(run)
+    cached_run = cached_runs_by_id.get(run_id) if cached_runs_by_id else None
+    workflow_id = run.get("workflow_id")
+    if workflow_id is None and cached_run is not None:
+        workflow_id = cached_run.get("workflow_id")
+    html_url = (
+        run.get("html_url")
+        or run.get("url")
+        or (cached_run.get("html_url") if cached_run else "")
+        or ""
+    )
+    return {
+        "id": run_id,
+        "name": str(run.get("name") or run.get("workflowName") or ""),
+        "workflow_id": int(workflow_id) if workflow_id is not None else None,
+        "status": str(run.get("status") or "completed"),
+        "conclusion": run.get("conclusion"),
+        "run_attempt": int(run.get("run_attempt") or run.get("attempt") or 1),
+        "created_at": _format_iso(_run_created_at(run)),
+        "run_started_at": _format_iso(_run_started_at(run)),
+        "updated_at": _format_iso(_run_updated_at(run)),
+        "html_url": str(html_url),
+    }
+
+
+def _normalize_raw_run(run: dict[str, Any]) -> dict[str, Any]:
+    """Нормалізує сирий запис запуску GitHub Actions до схеми `github_runs_raw`."""
+    return {
+        "databaseId": _run_id(run),
+        "workflowName": str(run.get("workflowName") or run.get("name") or ""),
+        "headSha": str(run.get("headSha") or run.get("head_sha") or ""),
+        "status": str(run.get("status") or "completed"),
+        "conclusion": run.get("conclusion"),
+        "attempt": int(run.get("attempt") or run.get("run_attempt") or 1),
+        "event": str(run.get("event") or "push"),
+        "createdAt": _format_iso(_run_created_at(run)),
+        "runStartedAt": _format_iso(_run_started_at(run)),
+        "updatedAt": _format_iso(_run_updated_at(run)),
+        "displayTitle": str(run.get("displayTitle") or run.get("display_title") or ""),
+        "url": str(run.get("url") or run.get("html_url") or ""),
+    }
 
 
 def _fetch_unit_job_timings(
@@ -210,7 +283,7 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
         if not batch:
             break
         raw_runs.extend(batch)
-        oldest = _parse_iso(batch[-1]["created_at"])
+        oldest = min(_run_created_at(run) for run in batch)
         if oldest < start_dt - timedelta(days=1) or len(batch) < 100:
             break
     else:
@@ -220,13 +293,16 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
 
     by_sha: dict[str, list[dict[str, Any]]] = {}
     for run in raw_runs:
-        if run.get("name") not in TRACKED_WORKFLOWS:
+        run_name = run.get("name") or run.get("workflowName")
+        if run_name not in TRACKED_WORKFLOWS:
             continue
         if run.get("event") in {"workflow_dispatch", "schedule"}:
             continue
-        sha = run["head_sha"]
+        sha = str(run.get("head_sha") or run.get("headSha") or "")
+        if not sha:
+            continue
         # Виключаємо незалежні коміти Dependabot або не-merge запуски поза вибіркою.
-        title = run.get("display_title", "")
+        title = str(run.get("display_title") or run.get("displayTitle") or "")
         if "dependabot" in title.lower() and sha not in fallback_by_sha:
             continue
         by_sha.setdefault(sha, []).append(run)
@@ -235,15 +311,17 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
     filtered_raw: list[dict[str, Any]] = []
     ordered_groups = sorted(
         by_sha.items(),
-        key=lambda item: max(_parse_iso(r["updated_at"]) for r in item[1]),
+        key=lambda item: (
+            min(_run_created_at(r) for r in item[1]),
+            max(_run_updated_at(r) for r in item[1]),
+        ),
     )
 
     pr_first_commit_cache: dict[int, datetime] = {}
 
     for sha, group in ordered_groups:
-        group_max_updated = max(_parse_iso(r["updated_at"]) for r in group)
-        if not (start_dt <= group_max_updated <= end_dt):
-            continue
+        created_min = min(_run_created_at(r) for r in group)
+        group_max_updated = max(_run_updated_at(r) for r in group)
 
         conclusions = {r.get("conclusion") for r in group}
         if "failure" in conclusions or "timed_out" in conclusions:
@@ -256,7 +334,29 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
             unit_status = "failure"
 
         cached = fallback_by_sha.get(sha) or fallback_by_sha.get(sha[:7])
-        title = group[0].get("display_title", "")
+        cached_wf_runs = cached.get("workflow_runs", []) if cached else []
+        cached_runs_by_id = {
+            int(item["id"]): item for item in cached_wf_runs if item.get("id")
+        }
+        cached_order = {
+            int(item["id"]): idx
+            for idx, item in enumerate(cached_wf_runs)
+            if item.get("id")
+        }
+        ordered_group = sorted(
+            group,
+            key=lambda r: (
+                cached_order.get(_run_id(r), len(cached_order)),
+                _format_iso(_run_created_at(r)),
+                _run_id(r),
+            ),
+        )
+
+        title = str(
+            ordered_group[0].get("display_title")
+            or ordered_group[0].get("displayTitle")
+            or ""
+        )
         pr_match = re.search(r"#(\d+)", title)
         cached_pr = cached.get("pr_number") if cached else None
         pr_number: int | None = (
@@ -273,18 +373,23 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
                 else None
             )
         )
-        note = str(cached.get("note", "")) if cached else ""
+        note = (
+            str(cached.get("note", ""))
+            if cached and unit_status == cached.get("status")
+            else ""
+        )
 
-        live_fp = sorted(_saved_run_fp(r) for r in group)
+        live_fp = sorted(_saved_run_fp(r) for r in ordered_group)
         saved_fp = sorted(saved_runs_by_sha.get(sha, []))
         if cached and saved_fp and live_fp == saved_fp:
             completed_at = _parse_iso(cached["completed_at"])
             queue_seconds = int(cached["queue_seconds"])
             execution_seconds = int(cached["execution_seconds"])
         else:
-            created_min = min(_parse_iso(r["created_at"]) for r in group)
+            if created_min > end_dt or group_max_updated < start_dt:
+                continue
             started_min, completed_at = _fetch_unit_job_timings(
-                base_url, headers, group
+                base_url, headers, ordered_group
             )
             queue_seconds = max(0, int((started_min - created_min).total_seconds()))
             execution_seconds = max(
@@ -324,7 +429,10 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
                 pr_first_commit_cache[pr_number] = _parse_iso(dt)
             first_commit_at = pr_first_commit_cache[pr_number]
 
-        filtered_raw.extend(group)
+        unit_workflow_runs = tuple(
+            _normalize_unit_workflow_run(r, cached_runs_by_id) for r in ordered_group
+        )
+        filtered_raw.extend(_normalize_raw_run(r) for r in ordered_group)
         units.append(
             DeliveryUnit(
                 unit_number=len(units) + 1,
@@ -338,6 +446,7 @@ def fetch_units_from_github() -> tuple[list[DeliveryUnit], list[dict[str, Any]]]
                 execution_seconds=execution_seconds,
                 status=unit_status,
                 note=note,
+                workflow_runs=unit_workflow_runs,
             )
         )
     return units, filtered_raw
@@ -359,9 +468,73 @@ def load_units_from_evidence() -> list[DeliveryUnit]:
             execution_seconds=int(row["execution_seconds"]),
             status=str(row["status"]),
             note=str(row.get("note", "")),
+            workflow_runs=tuple(row.get("workflow_runs", [])),
         )
         for row in payload["delivery_units"]
     ]
+
+
+def save_evidence(
+    units: list[DeliveryUnit],
+    raw_runs: list[dict[str, Any]],
+    period_days: int,
+) -> None:
+    """Зберігає нормалізовані одиниці постачання та сирі відповіді GitHub Actions."""
+    normalized_raw = [_normalize_raw_run(r) for r in raw_runs]
+    if not normalized_raw and units:
+        for unit in units:
+            for wf_run in unit.workflow_runs:
+                enriched = {
+                    **wf_run,
+                    "headSha": (
+                        wf_run.get("headSha") or wf_run.get("head_sha") or unit.full_sha
+                    ),
+                    "displayTitle": (
+                        wf_run.get("displayTitle")
+                        or wf_run.get("display_title")
+                        or (f"PR #{unit.pr_number}" if unit.pr_number else "")
+                    ),
+                }
+                normalized_raw.append(_normalize_raw_run(enriched))
+
+    payload = {
+        "metadata": {
+            "repository": DEFAULT_REPO,
+            "branch": "main",
+            "period_start": DEFAULT_SINCE,
+            "period_end": DEFAULT_UNTIL,
+            "period_days": period_days,
+            "workflows_tracked": list(TRACKED_WORKFLOWS),
+            "delivery_units_count": len(units),
+            "workflow_runs_count": len(normalized_raw),
+            "source_api": (
+                f"https://api.github.com/repos/{DEFAULT_REPO}/actions/runs?branch=main"
+            ),
+        },
+        "delivery_units": [
+            {
+                "unit_number": unit.unit_number,
+                "commit_sha": unit.commit_sha,
+                "full_sha": unit.full_sha,
+                "pr_number": unit.pr_number,
+                "pr_url": unit.pr_url,
+                "first_commit_at": _format_iso(unit.first_commit_at),
+                "completed_at": _format_iso(unit.completed_at),
+                "queue_seconds": unit.queue_seconds,
+                "execution_seconds": unit.execution_seconds,
+                "lead_time_seconds": unit.lead_time_seconds,
+                "status": unit.status,
+                "note": unit.note,
+                "workflow_runs": list(unit.workflow_runs),
+            }
+            for unit in units
+        ],
+        "github_runs_raw": normalized_raw,
+    }
+    DEFAULT_EVIDENCE.parent.mkdir(parents=True, exist_ok=True)
+    with open(DEFAULT_EVIDENCE, "w", encoding="utf-8") as ev_file:
+        json.dump(payload, ev_file, ensure_ascii=False, indent=2)
+        ev_file.write("\n")
 
 
 def compute_metrics(units: list[DeliveryUnit], period_days: int) -> dict[str, Any]:
@@ -848,18 +1021,22 @@ def main() -> None:
     period_days = (end_d - start_d).days + 1
 
     if args.fetch_github:
-        units, _ = fetch_units_from_github()
+        units, raw_runs = fetch_units_from_github()
+        save_evidence(units, raw_runs, period_days)
     else:
         units = load_units_from_evidence()
 
     metrics = compute_metrics(units, period_days)
     report = render_markdown(metrics)
+    DEFAULT_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     with open(DEFAULT_OUTPUT, "w", encoding="utf-8") as out_file:
         out_file.write(report)
 
     s = metrics["strict"]
     b = metrics["breakdown"]
-    recovery_text = _format_incident_recoveries(s)
+    recovery_text = _format_incident_recoveries(
+        s, failure_count=metrics["counts"]["failure"]
+    )
     print(f"[OK] Автоматичний звіт DORA збережено: {DEFAULT_OUTPUT}")
     print(
         f"     Розгортання (зелені): {metrics['counts']['success']} "
