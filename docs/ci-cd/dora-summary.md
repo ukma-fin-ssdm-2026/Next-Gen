@@ -250,3 +250,37 @@ Workflow [`Flaky test detector`](../../.github/workflows/flaky-tests.yml) зап
 > - **Етап:** реалізація й перевірка бонусного детектора нестабільних тестів.
 > - **Що згенеровано:** початкова версія workflow, Python-аналізатора JUnit-звітів, модульних тестів і документації.
 > - **Що перевірено вручну:** workflow має лише `workflow_dispatch`, один job і п’ять послідовних повних прогонів; модульні тести, black, flake8 і traceability check пройшли; локально повний набір тестів виконано п’ять разів із однаковим зеленим результатом; виправлені `TP-N02 / PERF-001` і `TP-056 / PERF-002` окремо виконано по 10 разів без зміни результату; перший ручний run на `main` справді виявив зміну результату `PERF-002`, а фінальний run після виправлення перевірено як зелений із п'ятьма однаковими результатами.
+
+## Бонус: швидкий і повільний набори тестів
+
+Дія 13 плану покращень, [PR #317](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/317). Workflow [`CI`](../../.github/workflows/ci.yml) поділено на два набори:
+
+| Набір | Завдання | Коли запускається | Що перевіряє |
+|---|---|---|---|
+| Швидкий | `test`, `Reliability tests` | кожен pull request і push у `main` | модульні й API-тести з покриттям 85%, лінтери, Bandit, pip-audit, фронтенд, актуальність OpenAPI, одна голова Alembic без БД; тести надійності |
+| Повільний | `Alembic migration check (PostgreSQL 16)` | лише push у `main` після злиття або вручну (`workflow_dispatch`); на pull request пропускається через `if: github.event_name != 'pull_request'` | справжній PostgreSQL 16 у контейнері: `alembic upgrade head`, `alembic check`, downgrade і повторний upgrade, інтеграційні тести `tests/test_postgres_repositories.py`, `tests/test_postgres_moderation.py`, `tests/reliability/test_database_reliability.py` |
+
+Обов'язкові перевірки `main` не змінено: `test`, `SonarCloud Code Analysis` і `Reliability tests` (бонус Lab 9) лишаються в швидкому наборі.
+
+### Докази
+
+| Запуск | Подія | Швидкий набір | Повільний набір |
+|---|---|---|---|
+| [CI #623](https://github.com/ukma-fin-ssdm-2026/Next-Gen/actions/runs/44336382313) | pull request #317 | `test` — 1 хв 22 с, `Reliability tests` — 34 с; набір завершився за 1 хв 24 с | `Alembic migration check (PostgreSQL 16)` — **skipped**, раннер не займав |
+| [CI #624](https://github.com/ukma-fin-ssdm-2026/Next-Gen/actions/runs/44337000738) | push у `main` після злиття #317 | `test` — 1 хв 27 с, `Reliability tests` — 35 с | `Alembic migration check (PostgreSQL 16)` — 50 с, success |
+
+У запуску PR крок [`Alembic single head (no database)`](https://github.com/ukma-fin-ssdm-2026/Next-Gen/actions/runs/44336382313/job/134914140636) вивів `Alembic heads: 1`. Локально цей крок падає, якщо додати другу міграцію з тим самим `down_revision`, тож дві паралельні міграції, як `0005` і `0006` у листопаді, і далі ловляться ще в PR.
+
+### Ефект
+
+За тиждень до зміни (30 запусків `CI` на pull request з 11 по 18 листопада) повільне завдання PostgreSQL виконалося в 29 із них, з медіаною 54 с і разом 31 хв 57 с спільного раннера. Тепер кожен push у PR займає три спільні раннери замість чотирьох: два завдання швидкого набору і `Performance benchmark`.
+
+Ціна поділу — у розділі «План, прочитаний парами» (дія 13): дефект, який видно лише на справжньому PostgreSQL, тепер дасть червоний запуск на `main` і ввійде в частоту збоїв змін.
+
+**Пояснення у відео:** Богдан показує поділ у `ci.yml`, пропущене завдання PostgreSQL у запуску PR і обидва набори на `main` — [`Labs/Lab10/videoBonus_Solonyna.txt`](../../Labs/Lab10/videoBonus_Solonyna.txt).
+
+> ### Нотатка «Використання ШІ» (бонус 3)
+> - **Інструмент:** Claude.
+> - **Автор:** Богдан Солонина.
+> - **Що згенеровано:** зміни `ci.yml`, вибірка тривалості завдань через GitHub REST API і текст розділу.
+> - **Що перевірено вручну:** у запуску PR #317 завдання PostgreSQL пропущено, а після злиття на `main` воно виконалося успішно; перевірка однієї голови Alembic проходить з однією головою і падає з двома.
