@@ -11,6 +11,12 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+# Isolate groups by PR. A unique run group for main and manual runs keeps
+# every delivery check and independently requested run eligible to finish.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     runs-on: [self-hosted, linux]
