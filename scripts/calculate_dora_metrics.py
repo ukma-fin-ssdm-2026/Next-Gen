@@ -562,6 +562,7 @@ def compute_metrics(units: list[DeliveryUnit], period_days: int) -> dict[str, An
 
     # 2) Окремі червоні одиниці до найближчого наступного зеленого запуску
     per_failure_recoveries: list[int] = []
+    unresolved_failures = 0
     for idx, unit in enumerate(units_by_completion):
         if unit.status != "failure":
             continue
@@ -573,6 +574,8 @@ def compute_metrics(units: list[DeliveryUnit], period_days: int) -> dict[str, An
             per_failure_recoveries.append(
                 int((next_green.completed_at - unit.completed_at).total_seconds())
             )
+        else:
+            unresolved_failures += 1
 
     all_lt = [u.lead_time_seconds for u in units]
     green_lt = [u.lead_time_seconds for u in green]
@@ -635,6 +638,8 @@ def compute_metrics(units: list[DeliveryUnit], period_days: int) -> dict[str, An
             "per_failure_mean_s": (
                 statistics.mean(per_failure_recoveries) if per_failure_recoveries else 0
             ),
+            "open_incident": incident_start is not None,
+            "unresolved_failures": unresolved_failures,
         },
         "stage2_all_merges": {
             "deployment_freq_per_day": len(units) / period_days,
@@ -687,18 +692,25 @@ def _format_incident_recoveries(
     strict_metrics: dict[str, Any], failure_count: int = 0
 ) -> str:
     incidents = strict_metrics["incident_recoveries_s"]
+    open_incident = bool(strict_metrics.get("open_incident"))
+    unresolved_failures = int(strict_metrics.get("unresolved_failures", 0))
     if not incidents:
-        if failure_count > 0:
+        if open_incident or failure_count > 0:
             return "не завершено (очікує успішного розгортання)"
         return "не спостерігалося"
     if len(incidents) == 1:
-        return _format_duration(incidents[0])
-    per_incident = ", ".join(_format_duration(item) for item in incidents)
-    return (
-        f"медіана {_format_duration(strict_metrics['incident_recovery_median_s'])}, "
-        f"середнє {_format_duration(strict_metrics['incident_recovery_mean_s'])} "
-        f"(інциденти: {per_incident})"
-    )
+        base = _format_duration(incidents[0])
+    else:
+        per_incident = ", ".join(_format_duration(item) for item in incidents)
+        med = _format_duration(strict_metrics["incident_recovery_median_s"])
+        mean = _format_duration(strict_metrics["incident_recovery_mean_s"])
+        base = f"медіана {med}, середнє {mean} (інциденти: {per_incident})"
+    if open_incident:
+        return (
+            f"{base}; невідновлений інцидент "
+            f"({unresolved_failures} ❌ очікує успішного розгортання)"
+        )
+    return base
 
 
 def render_markdown(metrics: dict[str, Any]) -> str:
@@ -708,15 +720,21 @@ def render_markdown(metrics: dict[str, Any]) -> str:
     m2 = metrics["stage2_all_merges"]
     b = metrics["breakdown"]
     rec_episode = _format_incident_recoveries(s, failure_count=c["failure"])
+    unresolved_failures = int(s.get("unresolved_failures", 0))
+    has_open_or_failures = bool(s.get("open_incident")) or c["failure"] > 0
+    unresolved_suffix = (
+        f" ({unresolved_failures} ❌ не завершено)" if unresolved_failures else ""
+    )
+    per_fail_fallback = "не завершено" if has_open_or_failures else "не спостерігалося"
     rec_per_fail = (
-        _format_duration(s["per_failure_median_s"])
+        f"{_format_duration(s['per_failure_median_s'])}{unresolved_suffix}"
         if s["per_failure_median_s"]
-        else ("не завершено" if c["failure"] > 0 else "не спостерігалося")
+        else per_fail_fallback
     )
     rec_per_fail_mean = (
-        _format_duration(s["per_failure_mean_s"])
+        f"{_format_duration(s['per_failure_mean_s'])}{unresolved_suffix}"
         if s["per_failure_mean_s"]
-        else ("не завершено" if c["failure"] > 0 else "не спостерігалося")
+        else per_fail_fallback
     )
     success_rate_cell = (
         f"**{c['success'] / c['total'] * 100:.1f}%** ({c['success']} із {c['total']})"
@@ -751,6 +769,7 @@ def render_markdown(metrics: dict[str, Any]) -> str:
         abs(s["lead_time_median_s"] - 1462) <= 1
         and abs(s["lead_time_mean_s"] - MANUAL_BASELINE["lead_time_mean_s"]) <= 1
         and abs(s["lead_time_p75_s"] - MANUAL_BASELINE["lead_time_p75_s"]) <= 1
+        and c["success"] == MANUAL_BASELINE["success_deployments"]
     )
     if lead_time_matches:
         lead_time_comparison = (
@@ -772,8 +791,11 @@ def render_markdown(metrics: dict[str, Any]) -> str:
 
     cfr_matches = (
         abs(s["cfr_no_cancelled_pct"] - MANUAL_BASELINE["cfr_no_cancelled_pct"]) < 0.05
+        and abs(s["cfr_with_cancelled_pct"] - MANUAL_BASELINE["cfr_with_cancelled_pct"])
+        < 0.05
         and c["failure"] == MANUAL_BASELINE["failure_units"]
         and c["success"] == MANUAL_BASELINE["success_deployments"]
+        and c["cancelled"] == MANUAL_BASELINE["cancelled_units"]
     )
     if cfr_matches:
         cfr_comparison = (
@@ -791,9 +813,12 @@ def render_markdown(metrics: dict[str, Any]) -> str:
         )
 
     recovery_matches = (
-        abs(s["per_failure_median_s"] - MANUAL_BASELINE["per_failure_median_s"]) <= 1
+        not s.get("open_incident")
+        and c["failure"] == MANUAL_BASELINE["failure_units"]
+        and len(s["incident_recoveries_s"]) == 1
+        and abs(s["per_failure_median_s"] - MANUAL_BASELINE["per_failure_median_s"])
+        <= 1
         and abs(s["per_failure_mean_s"] - MANUAL_BASELINE["per_failure_mean_s"]) <= 1
-        and bool(s["incident_recoveries_s"])
         and s["incident_recoveries_s"][0] == MANUAL_BASELINE["incident_episode_s"]
     )
     if recovery_matches:
@@ -814,6 +839,13 @@ def render_markdown(metrics: dict[str, Any]) -> str:
             "наступного успішного розгортання в межах періоду не відбулося "
             f"(відновлення не завершено; базовий звіт містить 8 збоїв із медіаною "
             f"{_format_duration(MANUAL_BASELINE['per_failure_median_s'])})."
+        )
+    elif s.get("open_incident"):
+        recovery_comparison = (
+            f"Розбіжність: по завершених відновленнях медіана {rec_per_fail}, "
+            f"середнє {rec_per_fail_mean}, проте наприкінці періоду залишається "
+            f"невідновлений інцидент ({s['unresolved_failures']} ❌ з {c['failure']} "
+            "без наступного зеленого розгортання)."
         )
     else:
         recovery_comparison = (
@@ -836,14 +868,27 @@ def render_markdown(metrics: dict[str, Any]) -> str:
     else:
         status_success_rate = "У межах орієнтира"
 
-    if s["incident_recoveries_s"] and max(s["incident_recoveries_s"]) > 3600:
-        status_recovery = "Перевищено (тривалий повторний збій без блокування злиття)"
-    elif s["incident_recoveries_s"]:
-        status_recovery = "У межах орієнтира"
-    elif c["failure"] > 0:
+    if s.get("open_incident") and s["incident_recoveries_s"]:
+        if max(s["incident_recoveries_s"]) > 3600:
+            status_recovery = (
+                "Перевищено орієнтир і відновлення очікується "
+                "(наявний невідновлений збій наприкінці періоду)"
+            )
+        else:
+            status_recovery = (
+                "Відновлення очікується (попередній інцидент закрито, "
+                "але новий збій залишається невідновленим)"
+            )
+    elif s.get("open_incident") or (
+        not s["incident_recoveries_s"] and c["failure"] > 0
+    ):
         status_recovery = (
             "Відновлення очікується (наявні збої не закрито зеленим розгортанням)"
         )
+    elif s["incident_recoveries_s"] and max(s["incident_recoveries_s"]) > 3600:
+        status_recovery = "Перевищено (тривалий повторний збій без блокування злиття)"
+    elif s["incident_recoveries_s"]:
+        status_recovery = "У межах орієнтира"
     else:
         status_recovery = "Збоїв не спостерігалося (main залишався зеленим)"
 

@@ -277,19 +277,43 @@ def test_main_fetch_github_persists_evidence_for_offline_replay(
     assert "**14.3%** (чутливість 20.0%)" in replay_report
 
 
+def _make_unit(
+    num: int,
+    sha: str,
+    pr: int,
+    start: tuple[int, int, int],
+    end: tuple[int, int, int],
+    status: str,
+    execution_seconds: int = 60,
+    queue_seconds: int = 5,
+) -> cdm.DeliveryUnit:
+    return cdm.DeliveryUnit(
+        unit_number=num,
+        commit_sha=sha,
+        full_sha=sha * 5 + "abcde",
+        pr_number=pr,
+        pr_url=None,
+        first_commit_at=datetime(
+            2026, 11, 1, start[0], start[1], start[2], tzinfo=timezone.utc
+        ),
+        completed_at=datetime(2026, 11, 1, end[0], end[1], end[2], tzinfo=timezone.utc),
+        queue_seconds=queue_seconds,
+        execution_seconds=execution_seconds,
+        status=status,
+    )
+
+
 def test_render_markdown_handles_unresolved_failures_and_breached_duration() -> None:
     """[TP-058] Невідновлені збої та тривалість >10 хв коректно позначаються у звіті."""
-    failed_unit = cdm.DeliveryUnit(
-        unit_number=1,
-        commit_sha="abc1234",
-        full_sha="abc1234" * 5 + "abcde",
-        pr_number=301,
-        pr_url=None,
-        first_commit_at=datetime(2026, 11, 1, 9, 0, 0, tzinfo=timezone.utc),
-        completed_at=datetime(2026, 11, 1, 10, 0, 0, tzinfo=timezone.utc),
-        queue_seconds=0,
+    failed_unit = _make_unit(
+        1,
+        "abc1234",
+        301,
+        (9, 0, 0),
+        (10, 0, 0),
+        "failure",
         execution_seconds=1200,
-        status="failure",
+        queue_seconds=0,
     )
     metrics = cdm.compute_metrics([failed_unit], 15)
     report = cdm.render_markdown(metrics)
@@ -305,35 +329,50 @@ def test_compute_metrics_sorts_by_completed_at_for_recovery() -> None:
     """[TP-058]
     Відновлення рахується за хронологією `completed_at`, а не порядком створення.
     """
-    specs = [
-        (1, "fail111", 401, (10, 0), (10, 10), "failure"),
-        (2, "succ111", 402, (10, 2), (10, 5), "success"),
-        (3, "succ222", 403, (10, 15), (10, 25), "success"),
-    ]
-    failed_first, green_earlier, green_later = [
-        cdm.DeliveryUnit(
-            unit_number=num,
-            commit_sha=sha,
-            full_sha=sha * 5 + "abcde",
-            pr_number=pr,
-            pr_url=None,
-            first_commit_at=datetime(
-                2026, 11, 1, start[0], start[1], tzinfo=timezone.utc
-            ),
-            completed_at=datetime(2026, 11, 1, end[0], end[1], tzinfo=timezone.utc),
-            queue_seconds=5,
-            execution_seconds=60,
-            status=status,
-        )
-        for num, sha, pr, start, end, status in specs
-    ]
+    failed_first = _make_unit(1, "fail111", 401, (10, 0, 0), (10, 10, 0), "failure")
+    green_earlier = _make_unit(2, "succ111", 402, (10, 2, 0), (10, 5, 0), "success")
+    green_later = _make_unit(3, "succ222", 403, (10, 15, 0), (10, 25, 0), "success")
 
     unresolved = cdm.compute_metrics([failed_first, green_earlier], 15)["strict"]
     assert unresolved["incident_recoveries_s"] == []
     assert unresolved["per_failure_median_s"] == 0
+    assert unresolved["open_incident"] is True
+    assert unresolved["unresolved_failures"] == 1
 
     resolved = cdm.compute_metrics([failed_first, green_earlier, green_later], 15)[
         "strict"
     ]
     assert resolved["incident_recoveries_s"] == [900]
     assert resolved["per_failure_median_s"] == 900
+    assert resolved["open_incident"] is False
+    assert resolved["unresolved_failures"] == 0
+
+
+def test_render_markdown_tracks_open_incident_after_earlier_recovery() -> None:
+    """[TP-058]
+    Попереднє швидке відновлення не приховує відкритий інцидент у кінці періоду.
+    """
+    units = [
+        _make_unit(1, "fail111", 501, (9, 50, 0), (10, 0, 0), "failure"),
+        _make_unit(2, "succ111", 502, (9, 55, 0), (10, 1, 0), "success"),
+        _make_unit(3, "fail222", 503, (10, 2, 0), (10, 5, 0), "failure"),
+    ]
+    metrics = cdm.compute_metrics(units, 15)
+    assert metrics["strict"]["incident_recoveries_s"] == [60]
+    assert metrics["strict"]["open_incident"] is True
+    assert metrics["strict"]["unresolved_failures"] == 1
+
+    report = cdm.render_markdown(metrics)
+    recovery_telemetry_line = next(
+        line
+        for line in report.splitlines()
+        if line.startswith("| Повернення `main` до зеленого стану |")
+    )
+    assert "1 хв" in recovery_telemetry_line
+    assert "невідновлений інцидент" in recovery_telemetry_line
+    assert (
+        "Відновлення очікується (попередній інцидент закрито, "
+        "але новий збій залишається невідновленим)"
+    ) in recovery_telemetry_line
+    assert "У межах орієнтира" not in recovery_telemetry_line
+    assert "залишається невідновлений інцидент (1 ❌ з 2" in report
