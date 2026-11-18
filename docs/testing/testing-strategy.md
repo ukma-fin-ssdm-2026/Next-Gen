@@ -96,7 +96,7 @@
 
 Принцип **Shift-Left Testing** забезпечується наскрізною автоматизацією у [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml):
 1. **Local Pre-commit**: лінтинг і перевірка секретів (`detect-secrets`, `black`, `flake8`).
-2. **GitHub Actions CI (на кожен push та pull request у `main`)**:
+2. **GitHub Actions CI**. Швидкий набір — на кожен pull request і push у `main`; повільний набір із реальним PostgreSQL — лише після злиття в `main` або вручну (`workflow_dispatch`):
    - `black --check src tests scripts` (перевірка форматування)
    - `flake8 src tests scripts` (стиль та лінтинг)
    - `bandit -r src -ll -c pyproject.toml` (безпековий аудит)
@@ -104,7 +104,8 @@
    - `pytest -q --cov=src --cov-report=term-missing --cov-report=html --cov-fail-under=85` (виконання набору тестів із валідацією порогу покриття)
    - `npm ci`, `npm test`, `npm run build` у `frontend/` перед pytest (тести SPA fallback з реальним build-ом)
    - `python scripts/generate_openapi.py` (перевірка актуальності контракту OpenAPI)
-   - окремий job `postgres-migration`: PostgreSQL 16, Alembic round-trip, `tests/test_postgres_repositories.py` і `tests/test_postgres_moderation.py`
+   - `alembic heads` без БД: у міграціях має бути рівно одна голова (швидкий набір, ловить дві паралельні міграції ще в PR)
+   - окремий job `postgres-migration` (повільний набір, не запускається на pull request): PostgreSQL 16, Alembic round-trip, `tests/test_postgres_repositories.py`, `tests/test_postgres_moderation.py` і `tests/reliability/test_database_reliability.py`
 3. **Артефакти**: Звіт `htmlcov/` автоматично вивантажується в артефакти кожної збірки CI (`actions/upload-artifact@v4`).
 
 ---
