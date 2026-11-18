@@ -545,10 +545,13 @@ def compute_metrics(units: list[DeliveryUnit], period_days: int) -> dict[str, An
     weeks = period_days / 7.0
 
     # Час відновлення після невдалого розгортання:
+    # Одиниці впорядковуємо за завершенням, щоб раніша зелена зміна не закрила збій.
+    units_by_completion = sorted(units, key=lambda u: (u.completed_at, u.unit_number))
+
     # 1) Безперервні інциденти (від першого збою серії до першого наступного зеленого)
     incident_recoveries: list[int] = []
     incident_start: datetime | None = None
-    for unit in units:
+    for unit in units_by_completion:
         if unit.status == "failure" and incident_start is None:
             incident_start = unit.completed_at
         elif unit.status == "success" and incident_start is not None:
@@ -559,10 +562,13 @@ def compute_metrics(units: list[DeliveryUnit], period_days: int) -> dict[str, An
 
     # 2) Окремі червоні одиниці до найближчого наступного зеленого запуску
     per_failure_recoveries: list[int] = []
-    for idx, unit in enumerate(units):
+    for idx, unit in enumerate(units_by_completion):
         if unit.status != "failure":
             continue
-        next_green = next((u for u in units[idx + 1 :] if u.status == "success"), None)
+        next_green = next(
+            (u for u in units_by_completion[idx + 1 :] if u.status == "success"),
+            None,
+        )
         if next_green is not None:
             per_failure_recoveries.append(
                 int((next_green.completed_at - unit.completed_at).total_seconds())

@@ -299,3 +299,41 @@ def test_render_markdown_handles_unresolved_failures_and_breached_duration() -> 
     assert "**20 хв** | до 10 хв | Перевищено орієнтир (понад 10 хв)" in report
     assert "**100.0%** (без скасованих)" in report
     assert "**14.3%** (чутливість 20.0%)" in report
+
+
+def test_compute_metrics_sorts_by_completed_at_for_recovery() -> None:
+    """[TP-058]
+    Відновлення рахується за хронологією `completed_at`, а не порядком створення.
+    """
+    specs = [
+        (1, "fail111", 401, (10, 0), (10, 10), "failure"),
+        (2, "succ111", 402, (10, 2), (10, 5), "success"),
+        (3, "succ222", 403, (10, 15), (10, 25), "success"),
+    ]
+    failed_first, green_earlier, green_later = [
+        cdm.DeliveryUnit(
+            unit_number=num,
+            commit_sha=sha,
+            full_sha=sha * 5 + "abcde",
+            pr_number=pr,
+            pr_url=None,
+            first_commit_at=datetime(
+                2026, 11, 1, start[0], start[1], tzinfo=timezone.utc
+            ),
+            completed_at=datetime(2026, 11, 1, end[0], end[1], tzinfo=timezone.utc),
+            queue_seconds=5,
+            execution_seconds=60,
+            status=status,
+        )
+        for num, sha, pr, start, end, status in specs
+    ]
+
+    unresolved = cdm.compute_metrics([failed_first, green_earlier], 15)["strict"]
+    assert unresolved["incident_recoveries_s"] == []
+    assert unresolved["per_failure_median_s"] == 0
+
+    resolved = cdm.compute_metrics([failed_first, green_earlier, green_later], 15)[
+        "strict"
+    ]
+    assert resolved["incident_recoveries_s"] == [900]
+    assert resolved["per_failure_median_s"] == 900
