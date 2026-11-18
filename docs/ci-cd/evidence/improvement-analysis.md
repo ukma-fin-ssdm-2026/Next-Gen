@@ -10,8 +10,8 @@ gh api "repos/ukma-fin-ssdm-2026/Next-Gen/actions/runs/<run_id>/jobs?filter=all"
 # відкриття PR, злиття й рецензії
 gh api repos/ukma-fin-ssdm-2026/Next-Gen/pulls/<номер>
 gh api repos/ukma-fin-ssdm-2026/Next-Gen/pulls/<номер>/reviews
-# змінені файли PR
-gh api repos/ukma-fin-ssdm-2026/Next-Gen/pulls/<номер>/files --jq '.[].filename'
+# файли, які злиття справді змінило в main (коміт одиниці з metrics-raw.md)
+git diff --name-only <коміт>^1 <коміт>
 # запуски Deploy API docs під час інциденту
 gh api "repos/ukma-fin-ssdm-2026/Next-Gen/actions/workflows/docs.yml/runs?branch=main&created=2026-10-29..2026-10-30"
 # обов'язкові перевірки гілки main
@@ -49,7 +49,7 @@ gh api repos/ukma-fin-ssdm-2026/Next-Gen/rules/branches/main
 | 21 | [#241](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/241) | ✅ | 3 с | 1 хв 35 с | 1 хв 1 с | так |
 | 22 | [#242](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/242) | ✅ | 4 с | 1 хв 17 с | 4 с | так |
 | 23 | [#244](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/244) | ⚠️ | 2 с | 1 хв 21 с | 3 с |  |
-| 24 | [#243](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/243) | ✅ | 2 с | 1 хв 36 с | 39 с |  |
+| 24 | [#243](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/243) | ✅ | 2 с | 1 хв 36 с | 39 с | так |
 | 25 | [#245](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/245) | ✅ | 3 хв 33 с | 2 хв 20 с | 4 хв 45 с | так |
 | 26 | [#246](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/246) | ✅ | 2 хв 16 с | 2 хв 30 с | 3 хв 15 с |  |
 | 27 | [#247](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/247) | ✅ | 11 хв 31 с | 2 хв 2 с | 12 хв 32 с |  |
@@ -114,7 +114,7 @@ gh api repos/ukma-fin-ssdm-2026/Next-Gen/rules/branches/main
 | [#240](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/240) | 55 с | 2 хв 7 с | 2 хв 43 с | так |
 | [#241](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/241) | 1 хв 4 с | 8 хв 11 с | 8 хв 24 с | так |
 | [#242](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/242) | 6 хв 7 с | 18 с | 2 хв 3 с | так |
-| [#243](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/243) | 11 год 19 хв 38 с | 16 год 30 хв 19 с | 20 год 37 хв 10 с |  |
+| [#243](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/243) | 11 год 19 хв 38 с | 16 год 30 хв 19 с | 20 год 37 хв 10 с | так |
 | [#245](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/245) | 5 с | 22 хв | 22 хв 16 с | так |
 | [#246](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/246) | 10 хв 17 с | 32 хв 9 с | 32 хв 31 с |  |
 | [#247](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/247) | 10 хв 32 с | 26 хв 4 с | 43 хв 5 с |  |
@@ -159,7 +159,9 @@ gh api repos/ukma-fin-ssdm-2026/Next-Gen/rules/branches/main
 
 ## 3. Злиття лише з документацією
 
-«Лише документація» — PR, усі файли якого лежать у `docs/` (крім `docs/api/`, з якого генерується OpenAPI), `Labs/`, `uml/` або мають розширення `.md` чи `.txt`. Таких одиниць **29 із 60**: #221, #224, #233, #234, #237, #238, #239, #240, #241, #242, #245, #248, #265, #266, #267, #269, #270, #272, #276, #273, #279, #277, #280, #287, #292, #293, #294, #295, #296. Кожна з них запускала повний `CI` і `Deploy API docs`: разом 50 хв 36 с виконання з 1 год 42 хв 26 с і 2 год 8 хв 43 с черги з 4 год 21 хв 29 с.
+«Лише документація» — одиниця, коміт якої в `main` змінює лише файли в `docs/` (крім `docs/api/`, з якого генерується OpenAPI), `Labs/`, `uml/` або з розширенням `.md` чи `.txt` (`git diff --name-only <коміт>^1 <коміт>`). Рахуємо за комітом у `main`, а не за списком файлів PR: саме цей коміт запускає конвеєр. Так, [#243](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/243) у PR показує ще `.github/workflows/docs.yml`, але ця зміна вже була в `main` після [#231](https://github.com/ukma-fin-ssdm-2026/Next-Gen/pull/231), і злиття принесло лише `README.md`.
+
+Таких одиниць **30 із 60** (з них 28 із 48 зелених): #221, #224, #233, #234, #237, #238, #239, #240, #241, #242, #243, #245, #248, #265, #266, #267, #269, #270, #272, #276, #273, #279, #277, #280, #287, #292, #293, #294, #295, #296. Кожна з них запускала повний `CI` і `Deploy API docs`: разом 52 хв 12 с виконання з 1 год 42 хв 26 с і 2 год 8 хв 45 с черги з 4 год 21 хв 29 с.
 
 ## 4. Запуски `Deploy API docs` під час інциденту 29–30 жовтня
 
