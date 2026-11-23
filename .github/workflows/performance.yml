@@ -65,36 +65,7 @@ jobs:
           python -m playwright install --with-deps --only-shell chromium
 
       - name: Start isolated PostgreSQL
-        run: |
-          container="catalogue-benchmark-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          printf 'CATALOG_DB_CONTAINER=%s\n' "$container" >> "$GITHUB_ENV"
-
-          POSTGRES_PASSWORD="$(openssl rand -hex 24)"
-          printf '::add-mask::%s\n' "$POSTGRES_PASSWORD"
-          export POSTGRES_PASSWORD
-          docker run --detach --name "$container" --publish 127.0.0.1::5432 \
-            --env POSTGRES_DB=catalogue_benchmark \
-            --env POSTGRES_USER=catalogue_benchmark \
-            --env POSTGRES_PASSWORD postgres:16-alpine
-
-          binding="$(docker port "$container" 5432/tcp)"
-          port="${binding##*:}"
-          pgpass="$RUNNER_TEMP/catalogue-benchmark.pgpass"
-          umask 077
-          printf '127.0.0.1:%s:catalogue_benchmark:catalogue_benchmark:%s\n' \
-            "$port" "$POSTGRES_PASSWORD" > "$pgpass"
-          unset POSTGRES_PASSWORD
-          printf 'PGPASSFILE=%s\n' "$pgpass" >> "$GITHUB_ENV"
-          printf 'DATABASE_URL=postgresql+psycopg2://catalogue_benchmark@127.0.0.1:%s/catalogue_benchmark\n' \
-            "$port" >> "$GITHUB_ENV"
-
-          for attempt in {1..30}; do
-            if docker exec "$container" pg_isready -h 127.0.0.1 -U catalogue_benchmark -d catalogue_benchmark; then
-              exit 0
-            fi
-            sleep 1
-          done
-          exit 1
+        run: bash .github/scripts/start-catalogue-postgres.sh
 
       - name: Create the staging dataset
         run: |
@@ -137,7 +108,7 @@ jobs:
       - name: Remove the staging database
         if: always()
         run: |
-          rm -f -- "$RUNNER_TEMP/catalogue-benchmark.pgpass"
           if [ -n "${CATALOG_DB_CONTAINER:-}" ] && docker container inspect "$CATALOG_DB_CONTAINER" >/dev/null 2>&1; then
-            docker rm --force "$CATALOG_DB_CONTAINER"
+            docker rm --force --volumes "$CATALOG_DB_CONTAINER"
           fi
+          rm -f -- "$RUNNER_TEMP/catalogue-benchmark.secret" "$RUNNER_TEMP/catalogue-benchmark.pgpass"
