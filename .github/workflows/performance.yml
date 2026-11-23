@@ -27,3 +27,92 @@ jobs:
 
       - name: Run NFR performance benchmarks without coverage instrumentation
         run: pytest -q -m performance tests/test_nfr_performance.py tests/test_conversations_api.py -s
+
+  browser-catalogue:
+    name: Browser catalogue acceptance (TP-N03)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: catalogue_benchmark
+          POSTGRES_USER: catalogue_benchmark
+          POSTGRES_PASSWORD: catalogue_benchmark
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U catalogue_benchmark -d catalogue_benchmark"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg2://catalogue_benchmark:catalogue_benchmark@127.0.0.1:5432/catalogue_benchmark
+      CATALOG_STAGING_URL: http://127.0.0.1:8000
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build the production frontend
+        working-directory: frontend
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+
+      - name: Install test dependencies and Chromium
+        run: |
+          python -m pip install --require-hashes --only-binary :all: -r requirements.lock -r requirements-test.lock
+          python -m pip install --only-binary :all: playwright==1.65.2
+          python -m playwright install --with-deps --only-shell chromium
+
+      - name: Create the staging dataset
+        run: |
+          export IMAGE_STORAGE_DIR="$RUNNER_TEMP/catalogue-benchmark-images"
+          printf 'IMAGE_STORAGE_DIR=%s\n' "$IMAGE_STORAGE_DIR" >> "$GITHUB_ENV"
+          python -m alembic upgrade head
+          python - <<'PY'
+          from uuid import uuid4
+
+          from src.db.engine import get_session_factory
+          from src.domain.users import User
+          from src.repositories.postgres_users import PostgresUserRepository
+
+          with get_session_factory()() as session:
+              PostgresUserRepository(session).save(
+                  User(
+                      user_id=uuid4(),
+                      tenant_id=uuid4(),
+                      entra_object_id=uuid4(),
+                      email="perf-seed@ukma.edu.ua",
+                      display_name="Catalogue benchmark",
+                  )
+              )
+              session.commit()
+          PY
+          python -m scripts.seed_listings --owner-email perf-seed@ukma.edu.ua --count 500
+
+      - name: Run browser acceptance against the staging application
+        run: |
+          test -n "$CATALOG_STAGING_URL"
+          echo "Commit: $GITHUB_SHA"
+          echo "Logical CPUs: $(nproc)"
+          free -h
+          python -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000 > "$RUNNER_TEMP/catalogue-api.log" 2>&1 &
+          api_pid=$!
+          trap 'status=$?; kill "$api_pid" 2>/dev/null || true; if [ "$status" -ne 0 ]; then cat "$RUNNER_TEMP/catalogue-api.log"; fi' EXIT
+          curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 1 --retry-max-time 25 --max-time 2 "$CATALOG_STAGING_URL/health/ready"
+          python -m pytest -q -m performance tests/test_catalog_browser_performance.py -s
