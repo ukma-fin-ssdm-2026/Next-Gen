@@ -79,7 +79,8 @@ const INITIAL_FILTERS: ListingFilters = {
   sort: "newest",
 };
 
-const CATALOG_PAGE_SIZE = 24;
+const CATALOG_PAGE_SIZE = 20;
+const SELLER_PAGE_SIZE = 24;
 const LOCAL_PAGE_SIZE = 12;
 const STATS_SAMPLE_SIZE = 100;
 const MAX_PHOTOS = 10;
@@ -1826,7 +1827,7 @@ function SellerPage({ user, authChecked, categoryNames, favorites, busy, onFavor
   const [listingsLoading, setListingsLoading] = useState(true);
   const authed = Boolean(user);
   const isOwn = user?.user_id === userId;
-  const totalPages = Math.max(1, Math.ceil(total / CATALOG_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / SELLER_PAGE_SIZE));
 
   useEffect(() => {
     if (!authed) return;
@@ -1843,7 +1844,7 @@ function SellerPage({ user, authChecked, categoryNames, favorites, busy, onFavor
     if (!authed || state !== "ready") return;
     let cancelled = false;
     setListingsLoading(true);
-    getSellerListings(userId, CATALOG_PAGE_SIZE, (page - 1) * CATALOG_PAGE_SIZE)
+    getSellerListings(userId, SELLER_PAGE_SIZE, (page - 1) * SELLER_PAGE_SIZE)
       .then((result) => { if (!cancelled) { setListings(result.items); setTotal(result.total); } })
       .catch((requestError) => { if (!cancelled) onError(errorText(requestError)); })
       .finally(() => { if (!cancelled) setListingsLoading(false); });
