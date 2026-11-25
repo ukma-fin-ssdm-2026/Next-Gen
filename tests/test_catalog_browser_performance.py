@@ -66,7 +66,7 @@ async def _measure_navigation(page, url: str) -> float:
 
 @pytest.mark.performance
 def test_catalogue_smoke_in_browser() -> None:
-    """Один гість відкриває каталог і бачить перші 20 карток."""
+    """[FR-006] Один гість відкриває каталог і бачить перші 20 карток."""
     base_url = os.getenv("CATALOG_STAGING_URL", "").strip().rstrip("/")
     if not base_url:
         pytest.skip("Set CATALOG_STAGING_URL to the catalogue test environment")
