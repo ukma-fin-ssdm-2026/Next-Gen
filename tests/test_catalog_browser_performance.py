@@ -65,6 +65,27 @@ async def _measure_navigation(page, url: str) -> float:
 
 
 @pytest.mark.performance
+def test_catalogue_smoke_in_browser() -> None:
+    """Один гість відкриває каталог і бачить перші 20 карток."""
+    base_url = os.getenv("CATALOG_STAGING_URL", "").strip().rstrip("/")
+    if not base_url:
+        pytest.skip("Set CATALOG_STAGING_URL to the catalogue test environment")
+
+    from playwright.async_api import async_playwright
+
+    async def run() -> None:
+        async with async_playwright() as playwright:
+            browser = await playwright.chromium.launch()
+            try:
+                page = await browser.new_page(viewport={"width": 1440, "height": 900})
+                await _measure_navigation(page, f"{base_url}/listings")
+            finally:
+                await browser.close()
+
+    asyncio.run(run())
+
+
+@pytest.mark.performance
 def test_perf_001_catalog_renders_first_page_in_browser() -> None:
     """[TP-N03] [PERF-001] 50 одночасних відкриттів каталогу на staging."""
     base_url = os.getenv("CATALOG_STAGING_URL", "").strip().rstrip("/")
