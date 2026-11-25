@@ -26,7 +26,11 @@ from src.domain.listings import (
 from src.domain.users import CurrentUser, User
 from src.repositories.favorites import FavoriteRepository
 from src.repositories.image_storage import ImageStorage, InMemoryImageStorage
-from src.repositories.listings import ListingRepository, get_listing_mutation_lock
+from src.repositories.listings import (
+    ListingRepository,
+    PagedCatalogueRepository,
+    get_listing_mutation_lock,
+)
 
 if TYPE_CHECKING:
     from src.services.category_suggestions import CategorySuggestionService
@@ -81,6 +85,16 @@ class ListingService:
     ) -> tuple[list[Listing], int]:
         """Сторінка каталогу та загальна кількість знайдених оголошень."""
         self._validate_price_range(min_price, max_price)
+        if (
+            category_id is None
+            and seller_id is None
+            and not query
+            and min_price is None
+            and max_price is None
+            and sort_order == ListingSortOrder.NEWEST
+            and isinstance(self._repository, PagedCatalogueRepository)
+        ):
+            return self._repository.newest_public_page(skip, limit)
         items = [item for item in self._repository.list_all() if item.is_public()]
         if seller_id is not None:
             items = [item for item in items if item.user_id == seller_id]

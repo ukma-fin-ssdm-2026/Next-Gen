@@ -1,10 +1,17 @@
 """Репозиторій оголошень. Інтерфейс не залежить від FastAPI."""
 
 from threading import RLock
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 from uuid import UUID
 
 from src.domain.listings import Listing, build_seed_listings
+
+
+@runtime_checkable
+class PagedCatalogueRepository(Protocol):
+    def newest_public_page(self, skip: int, limit: int) -> tuple[list[Listing], int]:
+        """Повертає сторінку активних оголошень та повну кількість збігів."""
+        ...
 
 
 class ListingRepository(Protocol):
