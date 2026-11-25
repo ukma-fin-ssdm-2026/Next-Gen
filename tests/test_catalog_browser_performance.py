@@ -34,6 +34,24 @@ CATALOG_READY_SCRIPT = """
 """
 
 
+CATALOG_PHASES_SCRIPT = """
+() => {
+    const ready = window.__catalogReadyMs;
+    const api = performance.getEntriesByType("resource").find(entry =>
+        entry.initiatorType === "fetch" &&
+        new URL(entry.name).pathname === "/api/v1/listings" &&
+        entry.responseEnd > 0 && entry.responseEnd <= ready
+    );
+    if (!api) return null;
+    return {
+        before_api: api.startTime,
+        api_request: api.responseEnd - api.startTime,
+        after_api: ready - api.responseEnd
+    };
+}
+"""
+
+
 async def _measure_navigation(page, url: str) -> float:
     await page.add_init_script(
         CATALOG_READY_SCRIPT.replace("__EXPECTED_CARDS__", str(CATALOG_PAGE_SIZE))
@@ -98,6 +116,17 @@ def test_perf_001_catalog_renders_first_page_in_browser() -> None:
                     not failures
                 ), f"{len(failures)}/{CONCURRENT_USERS} failed: {failures[0]}"
                 assert len(durations) == CONCURRENT_USERS
+                # Collect diagnostics after every navigation has finished.
+                phases = await asyncio.gather(
+                    *(page.evaluate(CATALOG_PHASES_SCRIPT) for page in pages)
+                )
+                for phase in ("before_api", "api_request", "after_api"):
+                    samples = [sample[phase] for sample in phases if sample]
+                    if samples:
+                        print(
+                            f"[PERF-001] {phase} p95={_p95(samples):.2f} ms "
+                            f"(n={len(samples)}/{CONCURRENT_USERS})"
+                        )
                 return durations
             finally:
                 await browser.close()
