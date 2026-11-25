@@ -112,10 +112,6 @@ def test_perf_001_catalog_renders_first_page_in_browser() -> None:
                     result for result in results if isinstance(result, BaseException)
                 ]
                 durations = [result for result in results if isinstance(result, float)]
-                assert (
-                    not failures
-                ), f"{len(failures)}/{CONCURRENT_USERS} failed: {failures[0]}"
-                assert len(durations) == CONCURRENT_USERS
                 # Collect diagnostics after every navigation has finished.
                 phases = await asyncio.gather(
                     *(page.evaluate(CATALOG_PHASES_SCRIPT) for page in pages)
@@ -127,6 +123,10 @@ def test_perf_001_catalog_renders_first_page_in_browser() -> None:
                             f"[PERF-001] {phase} p95={_p95(samples):.2f} ms "
                             f"(n={len(samples)}/{CONCURRENT_USERS})"
                         )
+                assert (
+                    not failures
+                ), f"{len(failures)}/{CONCURRENT_USERS} failed: {failures[0]}"
+                assert len(durations) == CONCURRENT_USERS
                 return durations
             finally:
                 await browser.close()
