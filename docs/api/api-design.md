@@ -150,11 +150,11 @@
 | `POST` | `/api/v1/category-suggestions/{id}/approve` | Схвалити пропозицію, створити категорію й перенести активні оголошення з «Інше» (Адміністратор, `FR-015`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict, 422, 503 Service Unavailable |
 | `POST` | `/api/v1/category-suggestions/{id}/reject` | Відхилити пропозицію з обов'язковою причиною 5–500 символів (Адміністратор, `FR-015`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict, 422, 503 Service Unavailable |
 | `GET` | `/api/v1/auth/login` | Розпочати Microsoft Entra ID Authorization Code Flow; опційний `next` зберігає внутрішній маршрут для повернення після входу | 307 Temporary Redirect | 422 Unprocessable Entity, 502 Bad Gateway, 503 Service Unavailable |
-| `GET` | `/api/v1/auth/callback` | Перевірити callback та створити локальну сесію | 303 See Other | 400 Bad Request, 401 Unauthorized, 403 Forbidden, 503 Service Unavailable |
+| `GET` | `/api/v1/auth/callback` | Після успішного входу створює сесію та повертає на збережений маршрут. Після блокування перенаправляє на `/?blocked=1`, після помилки входу — на `/?auth_error=<код>` (значення `expired`, `identity` або `failed`) | 303 See Other | 422 Unprocessable Content, 503 Service Unavailable |
 | `GET` | `/api/v1/auth/me` | Отримати поточного користувача | 200 OK | 401 Unauthorized, 403 Forbidden, 503 Service Unavailable |
 | `PATCH` | `/api/v1/auth/me` | Змінити власне ім'я та/або контакти за замовчуванням; передані поля оновлюються, `contact: null` очищає (`FR-014`) | 200 OK | 401 Unauthorized, 403 Forbidden, 422, 503 Service Unavailable |
 | `PUT` | `/api/v1/auth/me/avatar` | Завантажити або замінити аватарку, `multipart/form-data`, поле `file` (JPEG, PNG, WebP, HEIC/HEIF до 10 МБ; нормалізується до WebP, метадані видаляються) (`FR-014`) | 200 OK | 401 Unauthorized, 403 Forbidden, 422, 503 Service Unavailable |
-| `DELETE` | `/api/v1/auth/me/avatar` | Видалити аватарку (`FR-014`) | 200 OK | 401 Unauthorized, 403 Forbidden, 503 Service Unavailable |
+| `DELETE` | `/api/v1/auth/me/avatar` | Видалити аватарку (`FR-014`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 503 Service Unavailable |
 | `GET` | `/api/v1/users/{user_id}` | Публічний профіль для автентифікованих: лише `user_id`, `display_name`, `avatar_url`; без email, ролі й контактів (`FR-014`, `SEC-002`) | 200 OK | 401 Unauthorized, 403 Forbidden, 404 Not Found, 422, 503 Service Unavailable |
 | `PUT` | `/api/v1/users/{seller_id}/review` | Виставити або змінити власну оцінку | 201 Created, 200 OK | 401, 403, 404, 422, 429, 503 |
 | `DELETE` | `/api/v1/users/{seller_id}/review` | Видалити власну оцінку | 204 No Content | 401, 403, 404, 422, 429, 503 |
@@ -223,3 +223,4 @@
 > - **Доповнення (Богдан Солонина, REL-02):** Claude (Anthropic) допоміг описати коди відповіді `GET /uploads/{storage_key}`; звірено з кодом `get_uploaded_image` і тестами `tests/reliability/test_image_read_reliability.py`.
 > - **Доповнення (Богдан Солонина, REL-03):** Claude (Anthropic) допоміг описати відповідь `503 Service Unavailable` при недоступній БД. Перелік ендпоінтів із `503` звірено зі згенерованим `openapi-generated.yaml`, де `503` додається автоматично лише операціям, що відкривають сесію БД.
 > - **Доповнення (Євгеній Остапенко, ADR-005 / чат API):** ШІ-асистент допоміг описати розділ `2.12` та 6 ендпоінтів чату в розділі `3`. Статус-коди та схеми звірено з `src/api/routers/conversations.py`, `src/api/schemas/conversations.py` та згенерованим `openapi-generated.yaml`.
+> - Codex звірив контракт callback і видалення аватарки з маршрутами FastAPI та згенерованою схемою.
