@@ -1830,8 +1830,7 @@ paths:
         description: Одноразовий state потоку OIDC
       responses:
         '303':
-          description: Redirect to the frontend after login, refusal, or an expired
-            flow
+          description: Redirect after login, refusal, or an expired flow
           content:
             application/json:
               schema: {}

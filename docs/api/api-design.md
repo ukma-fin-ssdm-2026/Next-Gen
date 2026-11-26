@@ -223,4 +223,4 @@
 > - **Доповнення (Богдан Солонина, REL-02):** Claude (Anthropic) допоміг описати коди відповіді `GET /uploads/{storage_key}`; звірено з кодом `get_uploaded_image` і тестами `tests/reliability/test_image_read_reliability.py`.
 > - **Доповнення (Богдан Солонина, REL-03):** Claude (Anthropic) допоміг описати відповідь `503 Service Unavailable` при недоступній БД. Перелік ендпоінтів із `503` звірено зі згенерованим `openapi-generated.yaml`, де `503` додається автоматично лише операціям, що відкривають сесію БД.
 > - **Доповнення (Євгеній Остапенко, ADR-005 / чат API):** ШІ-асистент допоміг описати розділ `2.12` та 6 ендпоінтів чату в розділі `3`. Статус-коди та схеми звірено з `src/api/routers/conversations.py`, `src/api/schemas/conversations.py` та згенерованим `openapi-generated.yaml`.
-> - Codex звірив контракт callback і видалення аватарки з маршрутами FastAPI та згенерованою схемою.
+> - **Доповнення (Євгеній Остапенко, FR-001, FR-013, FR-014):** OpenAI Codex допоміг уточнити відповіді callback і видалення аватарки. Статуси звірено з `src/api/routers/auth.py` та повторно згенерованим OpenAPI.
