@@ -4,11 +4,6 @@ title Baraholka NaUKMA - Data Model
 hide methods
 hide stereotypes
 
-legend right
-  Жовтим позначено заплановані сутності
-  (ADR-005); реалізація триває.
-endlegend
-
 entity "User" as user {
   * user_id : UUID <<PK>>
   --
@@ -136,7 +131,7 @@ entity "SellerReview" as review {
   * updated_at : datetime
 }
 
-entity "Conversation" as conversation <<planned>> #FFF4D6;line:D9A441 {
+entity "Conversation" as conversation {
   * conversation_id : UUID <<PK>>
   --
   * user_low_id : UUID <<FK>>
@@ -144,17 +139,37 @@ entity "Conversation" as conversation <<planned>> #FFF4D6;line:D9A441 {
   * created_at : datetime
   * last_message_at : datetime
   low_last_read_at : datetime <<nullable>>
+  low_last_read_message_id : UUID <<nullable>>
   high_last_read_at : datetime <<nullable>>
+  high_last_read_message_id : UUID <<nullable>>
 }
 
-entity "Message" as message <<planned>> #FFF4D6;line:D9A441 {
+entity "Message" as message {
   * message_id : UUID <<PK>>
   --
   * conversation_id : UUID <<FK>>
   * sender_id : UUID <<FK>>
   listing_id : UUID <<FK, nullable>>
+  reply_to_id : UUID <<FK, nullable>>
   * body : text <<personal data>>
   * created_at : datetime
+}
+
+entity "MessageReport" as message_report {
+  * report_id : UUID <<PK>>
+  --
+  * message_id : UUID <<logical reference>>
+  * conversation_id : UUID <<logical reference>>
+  * reporter_id : UUID <<FK>>
+  * reported_user_id : UUID <<FK>>
+  * body_snapshot : text <<personal data>>
+  * reason : enum
+  * details : text <<personal data>>
+  * status : enum
+  * created_at : datetime
+  resolved_by : UUID <<FK, nullable>>
+  resolved_at : datetime <<nullable>>
+  * resolution_note : text <<personal data>>
 }
 
 user ||--o{ listing : creates
@@ -183,9 +198,13 @@ user |o--o{ review : hides
 listing |o--o{ review : context
 user ||--o{ conversation : "participates (low)"
 user ||--o{ conversation : "participates (high)"
-conversation ||--|{ message : contains
+conversation ||--o{ message : contains
 user ||--o{ message : sends
 listing |o--o{ message : mentioned in
+message |o--o{ message : replies to
+user ||--o{ message_report : submits
+user ||--o{ message_report : is reported
+user |o--o{ message_report : resolves
 
 note right of user
   role: USER | ADMIN
@@ -247,8 +266,20 @@ note right of message
   body: 1-1000 chars, immutable
   listing_id: optional context,
   ON DELETE SET NULL
-  INDEX (conversation_id, created_at)
+  reply_to_id: ON DELETE SET NULL
+  INDEX (conversation_id, created_at, message_id)
+  INDEX (sender_id, created_at)
   ADR-005
 end note
 
+note right of message_report
+  message_id and conversation_id: no FK
+  UNIQUE (message_id, reporter_id)
+  INDEX (status)
+  Snapshot available to admins via report API (SEC-003)
+end note
+
+' Нотатка «Використання ШІ»
+' Доповнення (Євгеній Остапенко, SEC-003): Codex (OpenAI) допоміг додати MessageReport і уточнити модель чату.
+' Поля, зовнішні ключі та індекси звірено з src/db/models.py.
 @enduml
