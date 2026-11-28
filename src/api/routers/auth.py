@@ -204,7 +204,7 @@ def login(
     summary="Завершити Microsoft Entra ID callback",
     status_code=status.HTTP_303_SEE_OTHER,
     responses={
-        403: {"model": ErrorResponse, "description": "Local user is blocked"},
+        303: {"description": "Redirect after login, refusal, or an expired flow"},
         503: {"model": ErrorResponse, "description": "Entra ID not configured"},
     },
 )

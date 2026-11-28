@@ -66,7 +66,7 @@ async def _measure_navigation(page, url: str) -> float:
 
 @pytest.mark.performance
 def test_catalogue_smoke_in_browser() -> None:
-    """[FR-006] Один гість відкриває каталог і бачить перші 20 карток."""
+    """[FR-006] Перевіряє дві сторінки API та перші 20 карток у браузері."""
     base_url = os.getenv("CATALOG_STAGING_URL", "").strip().rstrip("/")
     if not base_url:
         pytest.skip("Set CATALOG_STAGING_URL to the catalogue test environment")
@@ -75,6 +75,35 @@ def test_catalogue_smoke_in_browser() -> None:
 
     async def run() -> None:
         async with async_playwright() as playwright:
+            request = await playwright.request.new_context()
+            try:
+                readiness = await request.get(f"{base_url}/health/ready")
+                assert readiness.ok and (await readiness.json())["database"] == "ok"
+
+                pages = []
+                for offset in (0, CATALOG_PAGE_SIZE):
+                    response = await request.get(
+                        f"{base_url}/api/v1/listings",
+                        params={
+                            "limit": CATALOG_PAGE_SIZE,
+                            "skip": offset,
+                            "sort": "newest",
+                        },
+                    )
+                    assert response.ok
+                    assert response.headers.get("x-total-count") == str(
+                        CATALOG_PAGE_SIZE + 1
+                    )
+                    pages.append(await response.json())
+
+                first_page, second_page = pages
+                assert len(first_page) == CATALOG_PAGE_SIZE
+                assert len(second_page) == 1
+                listing_ids = {item["id"] for item in first_page + second_page}
+                assert len(listing_ids) == CATALOG_PAGE_SIZE + 1
+            finally:
+                await request.dispose()
+
             browser = await playwright.chromium.launch()
             try:
                 page = await browser.new_page(viewport={"width": 1440, "height": 900})

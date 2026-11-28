@@ -92,9 +92,9 @@ jobs:
               )
               session.commit()
           PY
-          python -m scripts.seed_listings --owner-email perf-seed@ukma.edu.ua --count 20
+          python -m scripts.seed_listings --owner-email perf-seed@ukma.edu.ua --count 21
 
-      - name: Check that a guest sees 20 catalogue cards
+      - name: Check PostgreSQL pagination and the first catalogue page
         run: |
           test -n "$CATALOG_STAGING_URL"
           echo "Commit: $GITHUB_SHA"
