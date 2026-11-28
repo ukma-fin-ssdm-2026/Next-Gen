@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.db.converters import (
@@ -11,7 +11,7 @@ from src.db.converters import (
     listing_row_to_domain,
 )
 from src.db.models import ListingImageRow, ListingRow
-from src.domain.listings import Listing
+from src.domain.listings import Listing, ListingStatus
 
 
 class PostgresListingRepository:
@@ -28,6 +28,23 @@ class PostgresListingRepository:
         stmt = select(ListingRow).order_by(ListingRow.created_at.desc())
         rows = self._session.execute(stmt).scalars().all()
         return [listing_row_to_domain(r) for r in rows]
+
+    def newest_public_page(self, skip: int, limit: int) -> tuple[list[Listing], int]:
+        active = ListingRow.status == ListingStatus.ACTIVE.value
+        stmt = (
+            select(ListingRow, func.count().over())
+            .where(active)
+            .order_by(ListingRow.created_at.desc(), ListingRow.listing_id)
+            .offset(skip)
+            .limit(limit)
+        )
+        rows = self._session.execute(stmt).all()
+        if rows:
+            return [listing_row_to_domain(row) for row, _ in rows], rows[0][1]
+        total = self._session.scalar(
+            select(func.count()).select_from(ListingRow).where(active)
+        )
+        return [], total
 
     def list_by_owner(self, user_id: UUID) -> list[Listing]:
         stmt = (

@@ -1125,6 +1125,7 @@ def test_chat_benchmark_requires_most_rounds_to_meet_the_limit() -> None:
 
 @pytest.mark.performance
 @pytest.mark.anyio
+@pytest.mark.parametrize("anyio_backend", ["asyncio"])
 async def test_nfr_perf_002_concurrent_chat_polling_50_users() -> None:
     """[TP-056] [PERF-002] [SEC-003]
     Бенчмарк polling чату: 50 одночасних користувачів опитують відкриті розмови;

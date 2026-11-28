@@ -27,3 +27,117 @@ jobs:
 
       - name: Run NFR performance benchmarks without coverage instrumentation
         run: pytest -q -m performance tests/test_nfr_performance.py tests/test_conversations_api.py -s
+
+  browser-catalogue:
+    name: Browser catalogue smoke (one guest)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CATALOG_STAGING_URL: http://127.0.0.1:8000
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build the production frontend
+        working-directory: frontend
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+
+      - name: Install test dependencies and Chromium
+        run: |
+          python -m pip install --require-hashes --only-binary :all: -r requirements.lock -r requirements-test.lock
+          python -m pip install --only-binary :all: playwright==1.65.2
+          python -m playwright install --with-deps --only-shell chromium
+
+      - name: Start isolated PostgreSQL
+        run: bash .github/scripts/start-catalogue-postgres.sh
+
+      - name: Create the staging dataset
+        run: |
+          export IMAGE_STORAGE_DIR="$RUNNER_TEMP/catalogue-benchmark-images"
+          printf 'IMAGE_STORAGE_DIR=%s\n' "$IMAGE_STORAGE_DIR" >> "$GITHUB_ENV"
+          python -m alembic upgrade head
+          python - <<'PY'
+          from uuid import uuid4
+
+          from src.db.engine import get_session_factory
+          from src.domain.users import User
+          from src.repositories.postgres_users import PostgresUserRepository
+
+          with get_session_factory()() as session:
+              PostgresUserRepository(session).save(
+                  User(
+                      user_id=uuid4(),
+                      tenant_id=uuid4(),
+                      entra_object_id=uuid4(),
+                      email="perf-seed@ukma.edu.ua",
+                      display_name="Catalogue benchmark",
+                  )
+              )
+              session.commit()
+          PY
+          python -m scripts.seed_listings --owner-email perf-seed@ukma.edu.ua --count 21
+
+      - name: Check PostgreSQL pagination and the first catalogue page
+        run: |
+          test -n "$CATALOG_STAGING_URL"
+          echo "Commit: $GITHUB_SHA"
+          echo "Logical CPUs: $(nproc)"
+          free -h
+          python -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000 > "$RUNNER_TEMP/catalogue-api.log" 2>&1 &
+          api_pid=$!
+          trap 'status=$?; kill "$api_pid" 2>/dev/null || true; if [ "$status" -ne 0 ]; then cat "$RUNNER_TEMP/catalogue-api.log"; fi' EXIT
+          curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 1 --retry-max-time 25 --max-time 2 "$CATALOG_STAGING_URL/health/ready"
+          python -m pytest -q tests/test_catalog_browser_performance.py::test_catalogue_smoke_in_browser
+
+      - name: Remove the staging database
+        if: always()
+        run: |
+          if [ -n "${CATALOG_DB_CONTAINER:-}" ] && docker container inspect "$CATALOG_DB_CONTAINER" >/dev/null 2>&1; then
+            docker rm --force --volumes "$CATALOG_DB_CONTAINER"
+          fi
+          rm -f -- "$RUNNER_TEMP/catalogue-benchmark.secret" "$RUNNER_TEMP/catalogue-benchmark.pgpass"
+
+  browser-acceptance:
+    name: Browser catalogue acceptance (TP-N03)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CATALOG_STAGING_URL: ${{ vars.CATALOG_STAGING_URL }}
+    steps:
+      - name: Require the dedicated staging URL
+        run: |
+          if [ -z "$CATALOG_STAGING_URL" ]; then
+            echo "::error::Configure the CATALOG_STAGING_URL repository variable for the dedicated staging deployment."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies and Chromium
+        run: |
+          python -m pip install --require-hashes --only-binary :all: -r requirements.lock -r requirements-test.lock
+          python -m pip install --only-binary :all: playwright==1.65.2
+          python -m playwright install --with-deps --only-shell chromium
+      - name: Measure 50 simultaneous guest navigations
+        run: python -m pytest -q -s tests/test_catalog_browser_performance.py::test_perf_001_catalog_renders_first_page_in_browser

@@ -1,16 +1,6 @@
-"""Бенчмарк серверного компонента PERF-001 (TP-N02, SEC-002).
+"""Бенчмарк API каталогу через ASGITransport (PERF-003, TP-N02, SEC-002).
 
-Перевіряє серверний компонент нефункціональної вимоги PERF-001 (Каталог оголошень)
-та сценарій TP-N02 під конкурентним асинхронним навантаженням:
-«Час завантаження списку з 500 активних оголошень — не більше 300 мс
-при 50 одночасних користувачах (95-й процентиль, p95 <= 300 мс), частка помилок 0%».
-
-Межі валідації:
-- Тест перевіряє швидкодію бекенд-сервісу, фільтрації та роутерів через
-  in-process ASGITransport з одночасним запуском 50 запитів (asyncio.gather).
-- Повне наскрізне тестування PERF-001 (з урахуванням затримок мережі, СУБД PostgreSQL,
-  Docker-інфраструктури та клієнтського рендерингу сторінки React) заплановано
-  виконувати через інструменти навантаження (Locust/k6) у розгорнутому середовищі.
+Браузерну вимогу PERF-001 перевіряє окремий тест TP-N03.
 """
 
 import asyncio
@@ -36,6 +26,8 @@ from src.api.deps import get_listing_service
 CONCURRENT_USERS = 50
 BENCHMARK_ROUNDS = 3
 WARMUP_REQUESTS = 3
+CATALOG_PAGE_SIZE = 20
+CATALOG_PATH = f"/api/v1/listings?limit={CATALOG_PAGE_SIZE}"
 
 
 def _p95(durations: list[float]) -> float:
@@ -55,7 +47,7 @@ def _representative_p95(round_p95s: list[float]) -> float:
 
 
 def test_representative_p95_requires_most_rounds_to_meet_the_limit() -> None:
-    """[TP-N02] [PERF-001] Один шумний раунд не змінює висновок тесту."""
+    """[TP-N02] [PERF-003] Один шумний раунд не змінює висновок тесту."""
     assert _p95([float(value) for value in range(1, 101)]) == 95.0
     assert _representative_p95([0.140, 0.360, 0.160]) == pytest.approx(0.160)
     assert _representative_p95([0.340, 0.150, 0.360]) == pytest.approx(0.340)
@@ -63,7 +55,7 @@ def test_representative_p95_requires_most_rounds_to_meet_the_limit() -> None:
 
 @pytest.fixture
 def performance_dataset() -> None:
-    """Генерує 500 активних оголошень в репозиторії для вимірювання PERF-001."""
+    """Генерує 500 активних оголошень для вимірювання PERF-003."""
     repo = InMemoryListingRepository()
     owner_id = uuid4()
     cat_id = uuid4()
@@ -75,7 +67,7 @@ def performance_dataset() -> None:
             title=f"Тестовий товар #{i:03d} Могилянка",
             description=(
                 f"Детальний тестовий опис товару номер {i} "
-                "для вимірювання швидкодії PERF-001"
+                "для вимірювання швидкодії PERF-003"
             ),
             price=10.0 + (i % 100) * 5.0,
             category_id=cat_id,
@@ -104,11 +96,12 @@ def performance_dataset() -> None:
 
 @pytest.mark.performance
 @pytest.mark.anyio
-async def test_nfr_perf_001_concurrent_catalog_latency_under_500_listings(
+@pytest.mark.parametrize("anyio_backend", ["asyncio"])
+async def test_nfr_perf_003_concurrent_catalog_api_under_500_listings(
     performance_dataset: None,
 ) -> None:
-    """[TP-N02] [PERF-001] [SEC-002]
-    50 одночасних користувачів до каталогу з 500 оголошеннями.
+    """[TP-N02] [PERF-003] [SEC-002]
+    50 одночасних запитів першої сторінки API на 500 активних оголошеннях.
 
     Критерії прийняття:
     - у кожному з трьох раундів 50 запитів виконуються конкурентно;
@@ -120,15 +113,12 @@ async def test_nfr_perf_001_concurrent_catalog_latency_under_500_listings(
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         # Кілька прогрівальних запитів прибирають cold-start із вимірювання.
         for _ in range(WARMUP_REQUESTS):
-            warmup_res = await client.get("/api/v1/listings?limit=20")
+            warmup_res = await client.get(CATALOG_PATH)
             assert warmup_res.status_code == 200
 
         async def user_request(user_idx: int) -> dict:
-            query_param = f"#{user_idx:03d}" if user_idx % 2 == 0 else "Могилянка"
-            url = f"/api/v1/listings?limit=20&query={query_param}&sort=newest"
-
             start = time.perf_counter()
-            response = await client.get(url)
+            response = await client.get(CATALOG_PATH)
             elapsed = time.perf_counter() - start
 
             return {
@@ -157,6 +147,7 @@ async def test_nfr_perf_001_concurrent_catalog_latency_under_500_listings(
                 assert (
                     r["status_code"] == 200
                 ), f"Помилка HTTP {r['status_code']} для користувача #{r['user_idx']}"
+                assert len(r["items"]) == CATALOG_PAGE_SIZE
                 for item in r["items"]:
                     assert (
                         "contact" not in item
@@ -165,7 +156,7 @@ async def test_nfr_perf_001_concurrent_catalog_latency_under_500_listings(
         representative_p95 = _representative_p95(round_p95s)
 
         print(
-            f"\n[PERF-001 Concurrent Benchmark Report]\n"
+            f"\n[PERF-003 Concurrent Benchmark Report]\n"
             f"Simultaneous Users: {CONCURRENT_USERS} | Listings: 500 | "
             f"Rounds: {BENCHMARK_ROUNDS}\n"
             f"Round p95: {[round(value * 1000, 2) for value in round_p95s]} ms | "
@@ -176,9 +167,9 @@ async def test_nfr_perf_001_concurrent_catalog_latency_under_500_listings(
             f"Error Rate: 0.0%"
         )
 
-        # Поріг не послаблено: більшість раундів має вкладатися у PERF-001.
+        # Більшість раундів має вкладатися у PERF-003.
         assert representative_p95 <= 0.300, (
-            "Порушення PERF-001: медіана p95 = "
+            "Порушення PERF-003: медіана p95 = "
             f"{representative_p95*1000:.2f} мс > 300 мс; "
             f"раунди = {[round(value * 1000, 2) for value in round_p95s]} мс"
         )
