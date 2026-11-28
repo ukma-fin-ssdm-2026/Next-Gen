@@ -29,7 +29,7 @@
 | REL-001  | Відновлення без втрати даних, RTO ≤5хв              | Data Access Layer (ORM), PostgreSQL Database | Хаос-експеримент (збій сервера) |
 | SEC-001  | Лише tenant НаУКМА та @ukma.edu.ua | Microsoft Entra ID, Auth Service, User.tenant_id/entra_object_id/email | Негативні тести tenant, issuer, audience, expiry, state/nonce і domain |
 | SEC-002  | Приховування контактів від неавторизованих          | API Router, Listing Service, Auth Service, Data Access Layer (ORM), Listing.contact | Unit-тест доступу без токена |
-| SEC-003  | Конфіденційність розмов, захист від IDOR (`404` для неучасників) та відсутність контактів і `no-store` | API Router (`conversations`), Auth Service (`require_current_user`), Conversation Service, Data Access Layer (ORM) | TP-053, TP-055 |
+| SEC-003  | Конфіденційність історії розмови, однаковий `404` для стороннього та неіснуючого ID, знімок оскарженого повідомлення лише через API модерації, `no-store` | API чату й скарг (`conversations`, `message_reports`), `require_current_user`, `require_moderator`, `ConversationService`, `MessageReportService`, PostgreSQL | TP-053, TP-055, TM-15, TM-16 |
 
 ## Сценарії атрибутів якості
 
@@ -56,3 +56,4 @@
 > - **Що перевірено / відкинуто вручну:** Прив'язки і сценарії перевірено і підтверджено мною; звірено назви компонентів з components.puml та deployment.puml; підтверджено з Architecture Lead, що PERF-001 стосується всього ланцюжка обробки запиту; Data Access Layer додано в усі рядки після зауваження викладача; сценарії звірено з довідником про сценарії атрибутів якості.
 > - **Доповнення (Артем Солодкий, 02.11.2026):** OpenAI Codex допоміг додати архітектурну простежуваність FR-016–FR-018 після проміжного оцінювання. Компоненти, сутності та тест-кейси вручну звірено з `requirements.md`, `rtm.md`, сервісами, SQLAlchemy-моделями й тест-планом.
 > - **Доповнення (Євгеній Остапенко, ADR-005 / чат API):** ШІ-асистент допоміг додати архітектурну простежуваність `FR-021`, `FR-022`, `PERF-002`, `SEC-003` та сценарій якості `QAS-PERF-002`. Звірено з `src/api/routers/conversations.py`, `tests/test_conversations.py` і `tests/test_conversations_api.py`.
+> - **Доповнення (Євгеній Остапенко, SEC-003):** Codex (OpenAI) допоміг пов'язати правила доступу до скарг за SEC-003 із серверними компонентами, загрозами й TP-055. Посилання звірено з роутерами та тестами чату.
