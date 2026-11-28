@@ -1,9 +1,5 @@
 @startuml
 skinparam componentStyle uml2
-legend right
-  Жовтим позначено заплановані компоненти
-  (ADR-005); реалізація триває.
-endlegend
 
 title Component Diagram - Baraholka NaUKMA (Monolithic Client-Server)
 
@@ -25,7 +21,8 @@ package "Server Tier (FastAPI Monolith)" {
     component "Feedback Service" as FeedbackService <<Service>>
     component "Activity Log Service" as ActivityLogService <<Service>>
     component "Seller Review Service" as ReviewService <<Service>>
-    component "Conversation Service" as ConversationService <<Service, planned>> #FFF4D6;line:D9A441
+    component "Conversation Service" as ConversationService <<Service>>
+    component "Message Report Service" as MessageReportService <<Service>>
     
     component "Data Access Layer\n(ORM)" as DAL <<Repository>>
 }
@@ -50,7 +47,15 @@ Router --> ComplaintService
 Router --> FeedbackService
 Router --> ActivityLogService
 Router --> ReviewService : "Rating, moderation, listing detail"
-Router --> ConversationService
+Router --> ConversationService : Conversation API
+Router --> MessageReportService : Message report API
+note right on link
+  POST /conversations/{conversation_id}/messages/{message_id}/report
+  Серверна сесія та перевірка участі в розмові
+  GET /admin/message-reports
+  POST /admin/message-reports/{report_id}/resolve
+  Серверна сесія та require_moderator
+end note
 
 AuthService --> DAL
 AuthService ..> Entra : "OIDC Authorization Code\nHTTPS"
@@ -65,8 +70,18 @@ FeedbackService --> ActivityLogService : "Record Submit/Resolution"
 ActivityLogService --> DAL
 ReviewService --> DAL : "Reviews and activity events"
 ConversationService --> DAL
+MessageReportService --> DAL : Reports, conversations, users
+note bottom of MessageReportService
+  Адміністратору доступний знімок
+  оскарженого повідомлення через API скарг.
+  Історія розмови доступна її учасникам.
+  SEC-003 / ADR-005
+end note
 ConversationService --> ActivityLogService : "Record CONVERSATION_STARTED"
 
 DAL ..> DB : "TCP/IP\n(SQL)"
 
+' Нотатка «Використання ШІ»
+' Доповнення (Євгеній Остапенко, SEC-003): Codex (OpenAI) допоміг показати API скарг і сервіс модерації.
+' Потік звірено з src/api/routers/message_reports.py, src/api/deps.py та src/services/message_reports.py.
 @enduml

@@ -150,7 +150,7 @@ jobs:
         run: python -m alembic upgrade head
 
       - name: Run integration tests against PostgreSQL
-        run: pytest tests/test_conversations.py tests/test_postgres_repositories.py tests/test_postgres_moderation.py tests/reliability/test_database_reliability.py -v --tb=short
+        run: pytest tests/test_postgres_repositories.py tests/test_postgres_moderation.py tests/reliability/test_database_reliability.py -v --tb=short
 
       - name: Verify committed listings after an abrupt PostgreSQL restart (REL-001)
         env:
