@@ -4792,7 +4792,7 @@ components:
           maxLength: 100
           minLength: 3
           title: Title
-          description: Назва оголошення
+          description: Назва оголошення. Крайні пробіли видаляються до перевірки довжини.
           examples:
           - Худі з логотипом НаУКМА
         description:
@@ -4840,7 +4840,7 @@ components:
           maxLength: 200
           minLength: 3
           title: Contact
-          description: Контактні дані (пошта або Telegram)
+          description: Контакт продавця. Крайні пробіли видаляються до перевірки довжини.
           examples:
           - '@student_ukma'
         image_urls:
@@ -5196,6 +5196,8 @@ components:
           - type: string
             maxLength: 100
             minLength: 3
+            description: Назва оголошення. Крайні пробіли видаляються до перевірки
+              довжини.
           - type: 'null'
           title: Title
         description:
@@ -5216,6 +5218,8 @@ components:
           - type: string
             maxLength: 200
             minLength: 3
+            description: Контакт продавця. Крайні пробіли видаляються до перевірки
+              довжини.
           - type: 'null'
           title: Contact
         condition:

@@ -1,10 +1,16 @@
 """Pydantic-схеми ресурсу Listing. Валідація входу на межі API."""
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 from src.domain.listings import MAX_LISTING_PRICE, ListingCondition
 
@@ -103,7 +109,24 @@ class ListingBase(BaseModel):
     )
 
 
+ListingTitleInput = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=3, max_length=100),
+    Field(
+        description="Назва оголошення. Крайні пробіли видаляються до перевірки довжини."
+    ),
+]
+ListingContactInput = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=3, max_length=200),
+    Field(
+        description="Контакт продавця. Крайні пробіли видаляються до перевірки довжини."
+    ),
+]
+
+
 class ListingCreate(ListingBase):
+    title: ListingTitleInput = Field(examples=["Худі з логотипом НаУКМА"])
     category_id: Optional[UUID] = Field(  # type: ignore[assignment]
         None,
         description=(
@@ -123,13 +146,7 @@ class ListingCreate(ListingBase):
         description="Необов'язковий опис товару; може бути порожнім",
         examples=["Худі в ідеальному стані, розмір M."],
     )
-    contact: str = Field(
-        ...,
-        min_length=3,
-        max_length=200,
-        description="Контактні дані (пошта або Telegram)",
-        examples=["@student_ukma"],
-    )
+    contact: ListingContactInput = Field(examples=["@student_ukma"])
     image_urls: list[str] = Field(
         ...,
         min_length=1,
@@ -149,10 +166,10 @@ class ListingCreate(ListingBase):
 
 
 class ListingUpdate(BaseModel):
-    title: Optional[str] = Field(None, min_length=3, max_length=100)
+    title: Optional[ListingTitleInput] = None
     description: Optional[str] = Field(None, max_length=2000)
     price: Optional[float] = Field(None, ge=0, le=MAX_LISTING_PRICE)
-    contact: Optional[str] = Field(None, min_length=3, max_length=200)
+    contact: Optional[ListingContactInput] = None
     condition: Optional[ListingCondition] = Field(None)
     image_urls: Optional[list[str]] = Field(None, min_length=1, max_length=10)
 
