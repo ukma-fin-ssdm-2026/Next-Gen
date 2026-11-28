@@ -547,3 +547,34 @@ def test_catalog_returns_total_count_header(
     assert len(page.json()) == min(2, total - 2)
     assert page.headers["X-Total-Count"] == str(total)
     assert total >= 3
+
+
+@pytest.mark.parametrize("field,value", [("title", "   "), ("contact", "  ab  ")])
+def test_listing_text_length_after_trim(
+    client, login_as, listing_payload, field, value
+):
+    """[TP-002] [TP-008] [FR-002] [FR-003] Validate trimmed input on both writes."""
+    login_as(user_id=SEED_OWNER_ID)
+    for response in (
+        client.post("/api/v1/listings", json={**listing_payload, field: value}),
+        client.patch(f"/api/v1/listings/{SEED_LISTING_ID}", json={field: value}),
+    ):
+        assert response.status_code == 422
+        assert response.json()["detail"][0]["loc"] == ["body", field]
+
+
+def test_listing_stores_trimmed_text(client, login_as, listing_payload):
+    """[TP-002] [TP-008] [FR-002] [FR-003] Preserve internal spaces on both writes."""
+    login_as(user_id=SEED_OWNER_ID)
+    created = client.post(
+        "/api/v1/listings",
+        json={**listing_payload, "title": "  Book  set  ", "contact": "  @owner  "},
+    )
+    assert created.status_code == 201
+    assert created.json()["title"] == "Book  set"
+    url = f"/api/v1/listings/{created.json()['id']}"
+    assert client.get(url + "/contact").json()["contact"] == "@owner"
+    updated = client.patch(url, json={"title": "  New  set  ", "contact": "  @buyer  "})
+    assert updated.status_code == 200
+    assert updated.json()["title"] == "New  set"
+    assert client.get(url + "/contact").json()["contact"] == "@buyer"
